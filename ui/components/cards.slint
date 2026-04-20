@@ -1,0 +1,163 @@
+import { LucideIcon } from "common.slint";
+
+export component SongCard inherits Rectangle {
+    in property <string> title;
+    in property <string> artist;
+    in property <image> artwork;
+    in property <bool> has-artwork: artwork.width > 0;
+    callback clicked;
+
+    width: 172px;
+    VerticalLayout {
+        spacing: 12px;
+        Rectangle {
+            height: self.width;
+            border-radius: 12px;
+            clip: true;
+            background: #111111;
+
+            // Placeholder icon (shown when no artwork)
+            if !root.has-artwork : Rectangle {
+                width: 100%; height: 100%;
+                background: @linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
+                Image {
+                    source: @image-url("../icons/music.svg");
+                    width: 40px; height: 40px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    colorize: #333333;
+                }
+            }
+
+            // Actual artwork
+            if root.has-artwork : Image {
+                source: root.artwork;
+                width: 100%; height: 100%;
+                image-fit: cover;
+                opacity: root.has-artwork ? 1.0 : 0.0;
+                animate opacity { duration: 200ms; easing: ease-in-out; }
+            }
+
+            // Hover overlay
+            Rectangle {
+                width: 100%; height: 100%;
+                background: touch.has-hover ? #ffffff08 : #00000000;
+            }
+        }
+        Text { text: root.title; color: #ffffff; font-size: 14px; font-weight: 600; overflow: elide; }
+        Text { text: root.artist; color: #aaaaaa; font-size: 13px; overflow: elide; }
+    }
+
+    touch := TouchArea { clicked => { root.clicked(); } }
+}
+
+export component ArtistCard inherits Rectangle {
+    in property <string> name;
+    in property <int> song-count;
+    in property <image> artwork;
+    in property <bool> has-artwork: artwork.width > 0;
+    callback clicked;
+
+    width: 172px;
+    VerticalLayout {
+        spacing: 12px;
+        Rectangle {
+            height: self.width;
+            border-radius: self.width / 2;
+            clip: true;
+            background: #111111;
+
+            if !root.has-artwork : Rectangle {
+                width: 100%; height: 100%;
+                background: @linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
+                Image {
+                    source: @image-url("../icons/users.svg");
+                    width: 40px; height: 40px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    colorize: #333333;
+                }
+            }
+
+            if root.has-artwork : Image {
+                source: root.artwork;
+                width: 100%; height: 100%;
+                image-fit: cover;
+                opacity: root.has-artwork ? 1.0 : 0.0;
+                animate opacity { duration: 200ms; easing: ease-in-out; }
+            }
+
+            Rectangle {
+                width: 100%; height: 100%;
+                background: touch.has-hover ? #ffffff08 : #00000000;
+            }
+        }
+        Text { text: root.name; color: #ffffff; font-size: 14px; font-weight: 600; horizontal-alignment: center; overflow: elide; }
+        Text { text: "\{root.song-count} songs"; color: #666666; font-size: 12px; horizontal-alignment: center; }
+    }
+
+    touch := TouchArea { clicked => { root.clicked(); } }
+}
+
+export component AlbumCard inherits Rectangle {
+    in property <string> title;
+    in property <string> artist;
+    in property <image> artwork;
+    in property <bool> has-artwork: artwork.width > 0;
+    callback clicked;
+
+    width: 172px;
+    VerticalLayout {
+        spacing: 12px;
+        Rectangle {
+            height: self.width;
+            border-radius: 12px;
+            clip: true;
+            background: #111111;
+
+            if !root.has-artwork : Rectangle {
+                width: 100%; height: 100%;
+                background: @linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
+                Image {
+                    source: @image-url("../icons/disc-3.svg");
+                    width: 40px; height: 40px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    colorize: #333333;
+                }
+            }
+
+            if root.has-artwork : Image {
+                source: root.artwork;
+                width: 100%; height: 100%;
+                image-fit: cover;
+                opacity: root.has-artwork ? 1.0 : 0.0;
+                animate opacity { duration: 200ms; easing: ease-in-out; }
+            }
+
+            Rectangle {
+                width: 100%; height: 100%;
+                background: touch.has-hover ? #ffffff08 : #00000000;
+            }
+        }
+        Text { text: root.title; color: #ffffff; font-size: 14px; font-weight: 600; horizontal-alignment: center; overflow: elide; }
+        Text { text: root.artist; color: #aaaaaa; font-size: 13px; horizontal-alignment: center; overflow: elide; }
+    }
+
+    touch := TouchArea { clicked => { root.clicked(); } }
+}
+
+export component QueueItemCard inherits Rectangle {
+    in property <string> title;
+    in property <string> artist;
+
+    height: 56px;
+    background: #141414;
+    border-radius: 8px;
+
+    VerticalLayout {
+        padding: 12px;
+        Text { text: root.title; color: #ffffff; font-size: 14px; font-weight: 600; overflow: elide; }
+        Text { text: root.artist; color: #888888; font-size: 12px; overflow: elide; }
+    }
+}

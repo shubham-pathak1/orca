@@ -1,0 +1,30 @@
+import { AppState } from "../global.slint";
+import { ArtistCard, AlbumCard } from "../components/cards.slint";
+
+export component GridViews inherits Rectangle {
+                            if (AppState.active-nav-index == 1) : VerticalLayout {
+                                for row in AppState.artist-rows : HorizontalLayout {
+                                    spacing: 16px; padding: 8px; padding-bottom: 40px;
+                                    for artist in row.artists : ArtistCard {
+                                        name: artist.name;
+                                        song-count: artist.song_count;
+                                        artwork: artist.artwork;
+                                        clicked => { AppState.filter-by-artist(artist.name); }
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                }
+                            }
+                            if (AppState.active-nav-index == 2) : VerticalLayout {
+                                for row in AppState.album-rows : HorizontalLayout {
+                                    spacing: 16px; padding: 8px; padding-bottom: 40px;
+                                    for album in row.albums : AlbumCard {
+                                        title: album.title;
+                                        artist: album.artist;
+                                        artwork: album.artwork;
+                                        clicked => { AppState.filter-by-album(album.title, album.artist); }
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                }
+                            }
+
+}

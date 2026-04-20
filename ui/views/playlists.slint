@@ -1,0 +1,101 @@
+import { AppState } from "../global.slint";
+
+export component PlaylistsView inherits VerticalLayout {
+    spacing: 20px;
+    padding: 8px;
+
+    // ── Create Playlist Bar ──
+    Rectangle {
+        height: 52px;
+        border-radius: 14px;
+        background: #0e0e0e;
+        border-width: 1px;
+        border-color: #1e1e1e;
+        HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 8px;
+            spacing: 12px;
+            Rectangle {
+                width: 32px;
+                height: 32px;
+                border-radius: 16px;
+                background: #ffffff18;
+                Text { text: "+"; color: #ffffff; font-size: 18px; font-weight: 700; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+            }
+            create-playlist-input := TextInput {
+                vertical-alignment: center;
+                text: "";
+                color: #f0f0f0;
+                font-size: 14px;
+                single-line: true;
+            }
+            if create-playlist-input.text == "" : Text {
+                text: "Create a new playlist...";
+                color: #555555;
+                font-size: 14px;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Rectangle {
+                width: 100px;
+                height: 36px;
+                border-radius: 10px;
+                background: create-btn-touch.has-hover ? #ffffff22 : #ffffff12;
+                border-width: 1px;
+                border-color: #ffffff20;
+                Text { text: "Create"; color: #ffffff; font-size: 13px; font-weight: 600; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+                create-btn-touch := TouchArea {
+                    clicked => {
+                        AppState.create-playlist(create-playlist-input.text);
+                        create-playlist-input.text = "";
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Playlist Grid ──
+    if AppState.playlist-rows.length == 0 : VerticalLayout {
+        vertical-stretch: 1;
+        alignment: center;
+        Text { text: "No playlists yet"; color: #555555; font-size: 18px; font-weight: 600; horizontal-alignment: center; }
+        Text { text: "Create one above to get started"; color: #3a3a3a; font-size: 13px; horizontal-alignment: center; }
+    }
+
+    for p in AppState.playlist-rows : Rectangle {
+        height: 72px;
+        border-radius: 12px;
+        background: p-row-touch.has-hover ? #ffffff0a : #ffffff05;
+        border-width: 1px;
+        border-color: p-row-touch.has-hover ? #ffffff18 : #ffffff0a;
+        p_row_touch := TouchArea { clicked => { AppState.filter-by-playlist(p.id); } }
+        HorizontalLayout {
+            padding-left: 12px; padding-right: 12px; spacing: 14px;
+            Rectangle {
+                width: 48px; height: 48px; border-radius: 10px; clip: true; background: #161616;
+                Image { source: p.cover; width: 100%; height: 100%; image-fit: cover; }
+            }
+            VerticalLayout {
+                spacing: 4px; alignment: center;
+                rename-input := TextInput { text: p.name; color: #f2f2f2; font-size: 14px; font-weight: 600; single-line: true; }
+                Text { text: "\{p.song_count} songs"; color: #777777; font-size: 12px; }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            HorizontalLayout {
+                spacing: 8px; alignment: center;
+                Rectangle { width: 80px; height: 32px; border-radius: 8px; background: rename-touch.has-hover ? #ffffff18 : #ffffff0c;
+                    Text { text: "Rename"; color: #d0d0d0; font-size: 12px; font-weight: 500; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+                    rename-touch := TouchArea { clicked => { AppState.rename-playlist(p.id, rename-input.text); } }
+                }
+                Rectangle { width: 84px; height: 32px; border-radius: 8px; background: cover-touch.has-hover ? #ffffff18 : #ffffff0c;
+                    Text { text: "Set Cover"; color: #d0d0d0; font-size: 12px; font-weight: 500; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+                    cover-touch := TouchArea { clicked => { AppState.change-playlist-cover(p.id); } }
+                }
+                Rectangle { width: 32px; height: 32px; border-radius: 8px; background: del-touch.has-hover ? #ff4d4d30 : #ffffff0c;
+                    Text { text: "×"; color: del-touch.has-hover ? #ff8888 : #888888; font-size: 18px; font-weight: 700; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+                    del-touch := TouchArea { clicked => { AppState.delete-playlist(p.id); } }
+                }
+            }
+        }
+    }
+    Rectangle { vertical-stretch: 1; }
+}

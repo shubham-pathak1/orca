@@ -1,0 +1,112 @@
+import { AppState } from "../global.slint";
+import { LucideIcon } from "../components/common.slint";
+
+export component SettingsView inherits VerticalLayout {
+    spacing: 16px; padding: 8px; alignment: start;
+    Rectangle {
+        vertical-stretch: 0; border-radius: 14px; background: #0e0e0e; border-width: 1px; border-color: #1a1a1a;
+        VerticalLayout { padding: 20px; spacing: 16px;
+            Text { text: "Appearance"; color: #ffffff; font-size: 15px; font-weight: 700; letter-spacing: 0.4px; }
+            Rectangle { height: 1px; background: #1a1a1a; }
+            // Row: Background Blur
+            HorizontalLayout {
+                spacing: 12px; height: 44px;
+                VerticalLayout { spacing: 2px; alignment: center;
+                    Text { text: "Background Blur"; color: #e8e8e8; font-size: 14px; font-weight: 500; }
+                    Text { text: "Blurred album art as the app background"; color: #666666; font-size: 12px; }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Rectangle { 
+                    y: (parent.height - self.height) / 2;
+                    width: 44px; height: 24px; border-radius: 12px; background: AppState.blur-enabled ? #ffffff : #333333;
+                    Rectangle { x: AppState.blur-enabled ? parent.width - self.width - 3px : 3px; y: 3px; width: 18px; height: 18px; border-radius: 9px; background: AppState.blur-enabled ? #000000 : #ffffff; }
+                    TouchArea { clicked => { AppState.set-blur-enabled(!AppState.blur-enabled); } }
+                }
+            }
+
+            // Row: Monochrome Mode
+            HorizontalLayout {
+                spacing: 12px; height: 44px;
+                VerticalLayout { spacing: 2px; alignment: center;
+                    Text { text: "Noir Mode"; color: #e8e8e8; font-size: 14px; font-weight: 500; }
+                    Text { text: "Complete monochrome experience (Ctrl+Shift+M)"; color: #666666; font-size: 12px; }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Rectangle { 
+                    y: (parent.height - self.height) / 2;
+                    width: 44px; height: 24px; border-radius: 12px; background: AppState.monochrome-mode ? #ffffff : #333333;
+                    Rectangle { x: AppState.monochrome-mode ? parent.width - self.width - 3px : 3px; y: 3px; width: 18px; height: 18px; border-radius: 9px; background: AppState.monochrome-mode ? #000000 : #ffffff; }
+                    TouchArea { clicked => { AppState.set-monochrome-mode(!AppState.monochrome-mode); } }
+                }
+            }
+
+            // Row: Compact Library
+            HorizontalLayout {
+                spacing: 12px; height: 44px;
+                VerticalLayout { spacing: 2px; alignment: center;
+                    Text { text: "Compact Library"; color: #e8e8e8; font-size: 14px; font-weight: 500; }
+                    Text { text: "Text-first list view instead of album art grid"; color: #666666; font-size: 12px; }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Rectangle { 
+                    y: (parent.height - self.height) / 2;
+                    width: 44px; height: 24px; border-radius: 12px; background: AppState.compact-library-mode ? #ffffff : #333333;
+                    Rectangle { x: AppState.compact-library-mode ? parent.width - self.width - 3px : 3px; y: 3px; width: 18px; height: 18px; border-radius: 9px; background: AppState.compact-library-mode ? #000000 : #ffffff; }
+                    TouchArea { clicked => { AppState.set-compact-library-mode(!AppState.compact-library-mode); } }
+                }
+            }
+        }
+    }
+    Rectangle {
+        vertical-stretch: 0; border-radius: 14px; background: #0e0e0e; border-width: 1px; border-color: #1a1a1a;
+        VerticalLayout { padding: 20px; spacing: 16px;
+            HorizontalLayout {
+                Text { text: "Library Folders"; color: #ffffff; font-size: 15px; font-weight: 700; letter-spacing: 0.4px; }
+                Rectangle { horizontal-stretch: 1; }
+                Rectangle { width: 60px; height: 26px; border-radius: 8px; background: folders-toggle-touch.has-hover ? #ffffff14 : #ffffff08;
+                    Text { text: AppState.settings-folders-expanded ? "Hide" : "Show"; color: #b0b0b0; font-size: 12px; font-weight: 500; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+                    folders-toggle-touch := TouchArea { clicked => { AppState.settings-folders-expanded = !AppState.settings-folders-expanded; } }
+                }
+            }
+            Rectangle { height: 1px; background: #1a1a1a; }
+            Rectangle {
+                height: 44px; border-radius: 10px; background: add-folder-touch.has-hover ? #ffffff10 : #ffffff06; border-width: 1px; border-color: #ffffff12;
+                HorizontalLayout { padding-left: 14px; spacing: 10px;
+                    Rectangle { width: 22px; height: 22px; border-radius: 11px; background: #66a8ff18;
+                        Text { text: "+"; color: #66a8ff; font-size: 14px; font-weight: 700; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                    Text { text: "Add music folder"; color: #c8c8c8; font-size: 13px; font-weight: 500; vertical-alignment: center; }
+                }
+                add-folder-touch := TouchArea { clicked => { AppState.add-folder(); } }
+            }
+            if AppState.settings-folders-expanded : VerticalLayout {
+                spacing: 6px;
+                if AppState.scan-roots.length == 0 : Text { text: "No scan folders configured yet."; color: #555555; font-size: 13px; }
+                for scan-root in AppState.scan-roots : Rectangle {
+                    height: 44px; border-radius: 10px; background: folder-row-touch.has-hover ? #ffffff0a : #ffffff05;
+                    folder-row-touch := TouchArea { }
+                    HorizontalLayout {
+                        padding-left: 14px; padding-right: 10px; spacing: 10px;
+                        LucideIcon { icon: AppState.icon-folder-plus; icon-color: #666666; width: 18px; height: 18px; y: (parent.height - self.height) / 2; }
+                        Text { text: scan-root; color: #c8c8c8; font-size: 13px; overflow: elide; vertical-alignment: center; }
+                        Rectangle { horizontal-stretch: 1; }
+                        Rectangle { width: 28px; height: 28px; border-radius: 8px; background: remove-touch.has-hover ? #ff4d4d28 : #00000000;
+                            Text { text: "×"; color: remove-touch.has-hover ? #ff8888 : #666666; font-size: 16px; font-weight: 700; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+                            remove-touch := TouchArea { clicked => { AppState.remove-scan-root(scan-root); } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Rectangle {
+        vertical-stretch: 0; border-radius: 14px; background: #0e0e0e; border-width: 1px; border-color: #1a1a1a;
+        VerticalLayout { padding: 20px; spacing: 8px;
+            Text { text: "About"; color: #ffffff; font-size: 15px; font-weight: 700; letter-spacing: 0.4px; horizontal-alignment: center; }
+            Rectangle { height: 1px; background: #1a1a1a; }
+            HorizontalLayout { spacing: 8px; Text { text: "Orca"; color: #c0c0c0; font-size: 13px; font-weight: 600; vertical-alignment: center; } Text { text: "v0.1.0"; color: #555555; font-size: 12px; vertical-alignment: center; } }
+            Text { text: "Built with Rust + Slint"; color: #444444; font-size: 12px; }
+        }
+    }
+    Rectangle { vertical-stretch: 1; }
+}

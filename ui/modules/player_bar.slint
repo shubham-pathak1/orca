@@ -1,0 +1,80 @@
+import { AppState } from "../global.slint";
+import { IconButton, LucideIcon } from "../components/common.slint";
+
+export component PlayerBar inherits Rectangle {
+    width: 320px;
+    clip: true;
+    Image { source: AppState.now-artwork-blurred; width: 100%; height: 100%; image-fit: cover; opacity: AppState.blur-enabled ? 0.42 : 0.0; }
+    Rectangle { background: AppState.blur-enabled ? #00000088 : #000000de; }
+    VerticalLayout {
+        padding: 20px; spacing: 12px; alignment: start;
+        VerticalLayout {
+            spacing: 10px;
+            Rectangle { height: 248px; border-radius: 16px; clip: true; background: #111111;
+                Image { source: AppState.now-artwork; width: 100%; height: 100%; image-fit: cover; }
+                TouchArea { clicked => { AppState.full-player-visible = true; } }
+            }
+            Text { text: AppState.now-title; color: #ffffff; font-size: 20px; font-weight: 700; horizontal-alignment: center; overflow: elide; }
+            Text { text: AppState.now-artist; color: #a3a3a3; font-size: 14px; horizontal-alignment: center; overflow: elide; }
+            if (AppState.now-playing-quality != "") : Text {
+                text: AppState.now-playing-quality;
+                color: #666666;
+                font-size: 11px;
+                font-weight: 500;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+        }
+        Rectangle { height: 8px; }
+        VerticalLayout {
+            spacing: 4px;
+            Rectangle { height: 12px;
+                Rectangle { height: 4px; background: #ffffff10; border-radius: 2px;
+                    Rectangle { x: 0; width: parent.width * AppState.progress-slider-value; background: #ffffff; border-radius: 2px; 
+                        Rectangle {
+                            x: parent.width - 4px;
+                            y: -2px;
+                            width: 8px;
+                            height: 8px;
+                            border-radius: 4px;
+                            background: #ffffff;
+                        }
+                    }
+                }
+                s_touch := TouchArea {
+                    clicked => { AppState.seek-to-ratio(self.mouse-x / self.width); }
+                }
+            }
+            Text { text: AppState.progress-text; color: #555555; font-size: 12px; horizontal-alignment: center; }
+        }
+        HorizontalLayout {
+            alignment: center; spacing: 16px;
+            VerticalLayout { alignment: center; IconButton { icon: AppState.icon-skip-back; clicked => { AppState.previous-song(); } } }
+            Rectangle {
+                width: 64px; height: 64px; border-radius: 32px; background: #ffffff;
+                LucideIcon { icon: AppState.is-playing ? AppState.icon-pause : AppState.icon-play; icon-color: #000000; width: 28px; height: 28px;
+                    x: (parent.width - self.width) / 2 + (AppState.is-playing ? 0px : 2px);
+                    y: (parent.height - self.height) / 2 + (AppState.is-playing ? 0px : -1px);
+                }
+                TouchArea { clicked => { AppState.toggle-play-pause(); } }
+            }
+            VerticalLayout { alignment: center; IconButton { icon: AppState.icon-skip-forward; clicked => { AppState.next-song(); } } }
+        }
+        
+
+        // Extra controls to satisfy backend
+        HorizontalLayout {
+            alignment: center; spacing: 12px;
+            IconButton { 
+                icon: AppState.icon-shuffle; 
+                icon-color: AppState.shuffle-enabled ? #ffffff : #555555;
+                clicked => { AppState.toggle-shuffle(); } 
+            }
+            IconButton { 
+                icon: AppState.icon-repeat; 
+                icon-color: AppState.repeat-mode != 0 ? #ffffff : #555555;
+                clicked => { AppState.cycle-repeat(); } 
+            }
+        }
+    }
+}

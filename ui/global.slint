@@ -1,0 +1,160 @@
+export struct SongRow {
+    title: string,
+    artist: string,
+    album: string,
+    duration: string,
+    artwork: image,
+    is_playing: bool,
+    is_selected: bool,
+    master_idx: int,
+}
+
+export struct SongRowData {
+    songs: [SongRow],
+}
+
+export struct ArtistRow {
+    name: string,
+    song_count: int,
+    artwork: image,
+}
+
+export struct ArtistRowData {
+    artists: [ArtistRow],
+}
+
+export struct AlbumRow {
+    title: string,
+    artist: string,
+    song_count: int,
+    artwork: image,
+}
+
+export struct AlbumRowData {
+    albums: [AlbumRow],
+}
+
+export struct PlaylistRow {
+    id: int,
+    name: string,
+    song_count: int,
+    cover: image,
+}
+
+export struct QueueRow {
+    title: string,
+    artist: string,
+}
+
+export global AppState {
+    in property <[SongRowData]> song-rows;
+    in property <[ArtistRowData]> artist-rows;
+    in property <[AlbumRowData]> album-rows;
+    in property <[PlaylistRow]> playlist-rows;
+    in property <[QueueRow]> queue-items;
+    in property <image> branding-logo: @image-url("../public/public/orca_logo.png");
+    
+    in_out property <string> now-title: "No track selected";
+    in_out property <string> now-artist: "";
+    in_out property <string> now-playing-quality: "";
+    in_out property <image> now-artwork: @image-url("icons/music.svg");
+    in_out property <image> now-artwork-blurred: @image-url("icons/music.svg");
+    
+    // Icons
+    in property <image> icon-play: @image-url("icons/play.svg");
+    in property <image> icon-pause: @image-url("icons/pause.svg");
+    in property <image> icon-skip-back: @image-url("icons/skip-back.svg");
+    in property <image> icon-skip-forward: @image-url("icons/skip-forward.svg");
+    in property <image> icon-music: @image-url("icons/music.svg");
+    in property <image> icon-list-music: @image-url("icons/list-music.svg");
+    in property <image> icon-users: @image-url("icons/users.svg");
+    in property <image> icon-disc-3: @image-url("icons/disc-3.svg");
+    in property <image> icon-folder-plus: @image-url("icons/folder-plus.svg");
+    in property <image> icon-refresh-cw: @image-url("icons/refresh-cw.svg");
+    in property <image> icon-search: @image-url("icons/search.svg");
+    in property <image> icon-settings: @image-url("icons/settings.svg");
+    in property <image> icon-x: @image-url("icons/x.svg");
+    in property <image> icon-maximize: @image-url("icons/maximize-2.svg");
+    in property <image> icon_minimize: @image-url("icons/minimize-2.svg");
+    in property <image> icon-shuffle: @image-url("icons/shuffle.svg");
+    in property <image> icon-repeat: @image-url("icons/repeat.svg");
+    in property <image> icon-volume: @image-url("icons/volume-2.svg");
+    in property <image> icon-chevron-left: @image-url("icons/chevron-left.svg");
+
+    in_out property <bool> is-playing: false;
+    in_out property <string> progress-text: "00:00 / 00:00";
+    in_out property <string> progress-current: "00:00";
+    in_out property <string> progress-total: "00:00";
+    in_out property <string> status-text: "Ready";
+    in_out property <string> search-text: "";
+    in_out property <bool> search-focused: false;
+    in_out property <int> selected-index: -1;
+    in_out property <int> active-nav-index: 0;
+
+    in_out property <float> progress-slider-value: 0.0;
+    in_out property <bool> queue-visible: false;
+    in_out property <bool> full-player-visible: false;
+    in_out property <bool> full-player-lyrics-visible: false;
+    in_out property <bool> blur-enabled: true;
+    in_out property <bool> compact-library-mode: false;
+    in_out property <int> sort-mode: 0;
+    in_out property <string> sort-mode-label: "Sort: Title";
+    in_out property <bool> sort-menu-open: false;
+    in property <[string]> scan-roots;
+    in_out property <bool> settings-folders-expanded: true;
+    in_out property <string> lyrics-text: "";
+    in property <[string]> lyric-lines;
+    in_out property <bool> monochrome-mode: false;
+    in_out property <int> active-lyrics-index: -1;
+    in_out property <int> processed-thumbnails: 0;
+    in_out property <int> total-thumbnails: 0;
+    in_out property <length> viewport-y-manual: 0px;
+
+    in_out property <length> viewport-y-manual-songs: 0px;
+
+    in_out property <length> song-list-visible-height;
+    in_out property <length> grid-visible-height;
+    
+    // Sync properties for backend
+    in_out property <bool> shuffle-enabled: false;
+    in_out property <int> repeat-mode: 0;
+    in_out property <bool> eq-enabled: false;
+    in_out property <string> eq-toggle-label: "EQ: Off";
+    in_out property <string> eq-summary-label: "Flat";
+
+    callback scan-saved-roots();
+    callback apply-search(text: string);
+    callback clear-filter();
+    callback filter-by-artist(artist: string);
+    callback filter-by-album(title: string, artist: string);
+    callback play-song(index: int);
+    callback toggle-play-pause();
+    callback previous-song();
+    callback next-song();
+    callback seek-to-ratio(ratio: float);
+    callback add-folder();
+    
+    // Sync callbacks for backend
+    callback toggle-shuffle();
+    callback cycle-repeat();
+    callback toggle-eq();
+    callback set-eq-preset(int);
+    callback enqueue-selected();
+    callback clear-queue();
+    callback enqueue-song(int);
+    callback song-grid-viewport-changed(viewport-y: float, visible-height: float);
+    callback toggle-fullscreen();
+    callback set-blur-enabled(enabled: bool);
+    callback set-compact-library-mode(enabled: bool);
+    callback set-monochrome-mode(enabled: bool);
+    callback set-sort-mode(mode: int);
+    callback remove-scan-root(root: string);
+    callback create-playlist(name: string);
+    callback add-wheel-velocity(delta: float);
+    callback change-playlist-cover(playlist-id: int);
+    callback rename-playlist(playlist-id: int, new-name: string);
+    callback delete-playlist(playlist-id: int);
+    callback filter-by-playlist(playlist-id: int);
+
+
+}

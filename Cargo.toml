@@ -1,0 +1,26 @@
+[package]
+name = "orca"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+slint-build = "1.15"
+
+[dependencies]
+dirs = "6.0.0"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "avif"] }
+rand = "0.8"
+rusqlite = { version = "0.31", features = ["bundled"] }
+serde_json = "1.0"
+rfd = "0.14"
+slint = { version = "1.15", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-skia"] }
+tray-icon = "0.14"
+global-hotkey = "0.5"
+orca-core = { path = "crates/orca-core" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"

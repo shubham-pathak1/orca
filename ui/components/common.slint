@@ -1,0 +1,123 @@
+export component LucideIcon inherits Rectangle {
+    in property <image> icon;
+    in property <color> icon-color: #a3a3a3;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    Image {
+        source: root.icon;
+        width: 100%;
+        height: 100%;
+        colorize: root.icon-color;
+    }
+}
+
+export component SidebarItem inherits Rectangle {
+    in property <image> icon;
+    in property <string> text;
+    in property <bool> active: false;
+    callback clicked;
+
+    height: 48px;
+    border-radius: 8px;
+    background: active ? #1a1a1a : touch.has-hover ? #121212 : #00000000;
+
+    HorizontalLayout {
+        padding-left: 16px;
+        spacing: 12px;
+        alignment: start;
+        LucideIcon {
+            icon: root.icon;
+            icon-color: active ? #ffffff : #a3a3a3;
+            y: (parent.height - self.height) / 2;
+        }
+        Text {
+            text: root.text;
+            color: active ? #ffffff : #d1d1d1;
+            font-size: 14px;
+            font-weight: active ? 600 : 400;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <color> icon-color: #a3a3a3;
+    callback clicked();
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: touch.has-hover ? #ffffff10 : #00000000;
+
+    LucideIcon {
+        icon: root.icon;
+        icon-color: root.icon-color;
+        width: 20px;
+        height: 20px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+export component SearchBar inherits Rectangle {
+    in-out property <string> text;
+    out property <bool> has-focus: input.has-focus;
+    callback edited(string);
+    callback focus-changed(bool);
+
+    changed has-focus => { root.focus-changed(self.has-focus); }
+
+    horizontal-stretch: 1;
+    background: input.has-focus ? #151515 : #111111;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: input.has-focus ? #3a3a3a : (bar-touch.has-hover ? #282828 : #1a1a1a);
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        Rectangle {
+            width: 20px;
+            LucideIcon {
+                icon: @image-url("../icons/search.svg");
+                icon-color: input.has-focus ? #bbbbbb : #666666;
+                width: 20px;
+                height: 20px;
+                y: (parent.height - self.height) / 2;
+            }
+        }
+        Rectangle { width: 10px; }
+        input := TextInput {
+            vertical-alignment: center;
+            text <=> root.text;
+            color: #f0f0f0;
+            font-size: 14px;
+            single-line: true;
+            edited => { root.edited(self.text); }
+        }
+    }
+
+    if !input.has-focus && input.text == "" : Text {
+        x: 46px;
+        text: "Search library...";
+        color: #444444;
+        font-size: 14px;
+        vertical-alignment: center;
+    }
+
+    callback focus-input();
+    focus-input => { input.focus(); }
+
+    bar-touch := TouchArea {
+        clicked => { root.focus-input(); }
+    }
+}

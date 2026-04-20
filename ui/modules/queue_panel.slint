@@ -1,0 +1,29 @@
+import { ScrollView } from "std-widgets.slint";
+import { AppState } from "../global.slint";
+import { QueueItemCard } from "../components/cards.slint";
+import { IconButton } from "../components/common.slint";
+
+export component QueuePanel inherits Rectangle {
+    width: 400px;
+    background: #0d0d0dfa;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: #1a1a1a;
+    VerticalLayout {
+        padding: 20px; spacing: 16px;
+        HorizontalLayout {
+            Text { text: "Queue (" + AppState.queue-items.length + ")"; color: #ffffff; font-size: 18px; font-weight: 700; }
+            Rectangle { horizontal-stretch: 1; }
+            IconButton { icon: AppState.icon-x; clicked => { AppState.queue-visible = false; } }
+        }
+        ScrollView {
+            VerticalLayout {
+                spacing: 8px;
+                for item in AppState.queue-items : QueueItemCard {
+                    title: item.title;
+                    artist: item.artist;
+                }
+            }
+        }
+    }
+}

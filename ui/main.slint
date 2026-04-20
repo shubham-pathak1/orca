@@ -1,0 +1,96 @@
+import { AppState, SongRow, SongRowData, ArtistRow, ArtistRowData, AlbumRow, AlbumRowData, PlaylistRow, QueueRow } from "global.slint";
+export { AppState, SongRow, SongRowData, ArtistRow, ArtistRowData, AlbumRow, AlbumRowData, PlaylistRow, QueueRow }
+
+import { ScrollView } from "std-widgets.slint";
+import { Sidebar } from "modules/sidebar.slint";
+import { PlayerBar } from "modules/player_bar.slint";
+import { QueuePanel } from "modules/queue_panel.slint";
+import { Header } from "modules/header.slint";
+import { FullPlayerOverlay } from "modules/full_player.slint";
+import { SongListView } from "views/song_list.slint";
+import { GridViews } from "views/grids.slint";
+import { PlaylistsView } from "views/playlists.slint";
+import { SettingsView } from "views/settings.slint";
+import "fonts/Geist-Variable.ttf";
+
+export component MainWindow inherits Window {
+    title: "Orca";
+    icon: @image-url("../public/public/orca_logo.png");
+    preferred-width: 1280px;
+    preferred-height: 820px;
+    min-width: 1040px;
+    min-height: 700px;
+    no-frame: false;
+    background: #080808;
+    default-font-family: "Geist, Microsoft YaHei, Noto Sans SC, sans-serif";
+
+    forward-focus: focus-scope;
+
+    focus-scope := FocusScope {
+        HorizontalLayout {
+            Sidebar {}
+
+            Rectangle {
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    padding: 24px; spacing: 24px;
+                    
+                    header-ref := Header {}
+
+                    // ── Content Area ──
+                    Rectangle {
+                        horizontal-stretch: 1; vertical-stretch: 1;
+
+                        // ── Songs View ──
+                        if (AppState.active-nav-index == 0) : SongListView {}
+
+                        // ── Library Views (Artists, Albums, Playlists, Settings) ──
+                        if (AppState.active-nav-index != 0) : Rectangle {
+                            TouchArea {
+                                scroll-event(event) => {
+                                    AppState.add-wheel-velocity(event.delta-y / 1px);
+                                    return accept;
+                                }
+                            }
+                            ScrollView {
+                                viewport-y <=> AppState.viewport-y-manual;
+                                horizontal-stretch: 1; vertical-stretch: 1;
+                                changed viewport-y => { AppState.song-grid-viewport-changed(self.viewport-y / 1px, self.height / 1px); }
+                                changed visible-height => {
+                                    AppState.song-grid-viewport-changed(self.viewport-y / 1px, self.height / 1px);
+                                    AppState.grid-visible-height = self.visible-height;
+                                }
+                                
+                                VerticalLayout {
+                                    if (AppState.active-nav-index == 1 || AppState.active-nav-index == 2) : GridViews {}
+                                    if (AppState.active-nav-index == 3) : PlaylistsView {}
+                                    if (AppState.active-nav-index == 4) : SettingsView {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if AppState.queue-visible : QueuePanel {}
+
+            PlayerBar {}
+        }
+
+        if AppState.full-player-visible : FullPlayerOverlay {}
+
+        key-pressed(event) => {
+            if (event.modifiers.control && (event.text == "k" || event.text == "K")) {
+                AppState.full-player-visible = false;
+                AppState.active-nav-index = 0;
+                header-ref.focus-search-bar();
+                return accept;
+            }
+            // Header focus check currently requires a way to reach the search bar ID
+            if AppState.search-focused { return reject; }
+            if event.text == Key.F11 { AppState.toggle-fullscreen(); return accept; }
+            if event.text == " " { AppState.toggle-play-pause(); return accept; }
+            return reject;
+        }
+    }
+}

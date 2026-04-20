@@ -1,0 +1,27 @@
+# Rust
+/target
+Cargo.lock
+
+# Slint
+# The Slint compiler outputs to the target directory by default.
+
+# Windows
+*.pdb
+*.exe
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# Local Caches
+thumbs-*
+orca.db
+orca_settings.json
+audio_prefs.json
+lyrics_cache/
+
+# User specifically requested cleanup
+temp_logo.png
+public/public/
+tests/

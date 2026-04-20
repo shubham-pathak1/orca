@@ -1,0 +1,145 @@
+import { AppState } from "../global.slint";
+import { IconButton, SearchBar } from "../components/common.slint";
+
+export component Header inherits HorizontalLayout {
+    height: 48px; spacing: 16px;
+    
+    callback focus-search-bar();
+    focus-search-bar => { search-bar.focus-input(); }
+
+    search-bar := SearchBar {
+        horizontal-stretch: 3;
+        visible: AppState.active-nav-index == 0;
+        text <=> AppState.search-text;
+        edited(t) => { AppState.apply-search(t); }
+    }
+
+    Rectangle {
+        horizontal-stretch: 1;
+        if (AppState.active-nav-index != 0) : Text {
+            text: AppState.active-nav-index == 1 ? "Artists" : (AppState.active-nav-index == 2 ? "Albums" : (AppState.active-nav-index == 3 ? "Playlists" : "Settings"));
+            color: #ffffff; font-size: 24px; font-weight: 700; vertical-alignment: center; horizontal-alignment: center;
+        }
+    }
+
+    // Sort Dropdown (only for Songs view)
+    if (AppState.active-nav-index == 0) : VerticalLayout {
+        alignment: center;
+        width: 200px;
+        height: AppState.sort-menu-open ? 214px : 36px;
+        spacing: 6px;
+        Rectangle {
+            height: 36px;
+            border-radius: 10px;
+            border-width: 1px;
+            border-color: #2a2a2a;
+            background: #111111;
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 10px;
+                spacing: 8px;
+                Text {
+                    text: AppState.sort-mode-label;
+                    color: #e1e1e1;
+                    font-size: 12px;
+                    overflow: elide;
+                    vertical-alignment: center;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Text {
+                    text: AppState.sort-menu-open ? "^" : "v";
+                    color: #666666;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                }
+            }
+            TouchArea { clicked => { AppState.sort-menu-open = !AppState.sort-menu-open; } }
+        }
+
+        if AppState.sort-menu-open : Rectangle {
+            border-radius: 10px;
+            border-width: 1px;
+            border-color: #2a2a2a;
+            background: #0f0f0f;
+            VerticalLayout {
+                padding-top: 4px;
+                padding-bottom: 4px;
+                spacing: 2px;
+
+                Rectangle {
+                    height: 32px;
+                    background: AppState.sort-mode == 0 ? #ffffff10 : (sort_title_touch.has-hover ? #ffffff08 : #00000000);
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        Text { text: "Title"; color: #e5e5e5; font-size: 12px; vertical-alignment: center; }
+                    }
+                    sort_title_touch := TouchArea { clicked => { AppState.set-sort-mode(0); AppState.sort-menu-open = false; } }
+                }
+
+                Rectangle {
+                    height: 32px;
+                    background: AppState.sort-mode == 1 ? #ffffff10 : (sort_artist_touch.has-hover ? #ffffff08 : #00000000);
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        Text { text: "Artist"; color: #e5e5e5; font-size: 12px; vertical-alignment: center; }
+                    }
+                    sort_artist_touch := TouchArea { clicked => { AppState.set-sort-mode(1); AppState.sort-menu-open = false; } }
+                }
+
+                Rectangle {
+                    height: 32px;
+                    background: AppState.sort-mode == 2 ? #ffffff10 : (sort_album_touch.has-hover ? #ffffff08 : #00000000);
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        Text { text: "Album"; color: #e5e5e5; font-size: 12px; vertical-alignment: center; }
+                    }
+                    sort_album_touch := TouchArea { clicked => { AppState.set-sort-mode(2); AppState.sort-menu-open = false; } }
+                }
+
+                Rectangle {
+                    height: 32px;
+                    background: AppState.sort-mode == 3 ? #ffffff10 : (sort_year_touch.has-hover ? #ffffff08 : #00000000);
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        Text { text: "Year"; color: #e5e5e5; font-size: 12px; vertical-alignment: center; }
+                    }
+                    sort_year_touch := TouchArea { clicked => { AppState.set-sort-mode(3); AppState.sort-menu-open = false; } }
+                }
+
+                Rectangle {
+                    height: 32px;
+                    background: AppState.sort-mode == 4 ? #ffffff10 : (sort_track_touch.has-hover ? #ffffff08 : #00000000);
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        Text { text: "Track"; color: #e5e5e5; font-size: 12px; vertical-alignment: center; }
+                    }
+                    sort_track_touch := TouchArea { clicked => { AppState.set-sort-mode(4); AppState.sort-menu-open = false; } }
+                }
+            }
+        }
+    }
+
+    Rectangle { horizontal-stretch: 1; }
+
+    Rectangle {
+        width: 36px; height: 36px;
+        IconButton { icon: AppState.icon-list-music; clicked => { AppState.queue-visible = !AppState.queue-visible; } }
+        if AppState.queue-items.length > 0 : Rectangle {
+            x: parent.width - 14px;
+            y: -2px;
+            width: 16px;
+            height: 16px;
+            border-radius: 8px;
+            background: #ffffff;
+            Text {
+                text: AppState.queue-items.length;
+                color: #000000;
+                font-size: 9px;
+                font-weight: 700;
+                width: 100%; height: 100%;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
