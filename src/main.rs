@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use slint::ComponentHandle;
+use std::cell::RefCell;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -233,7 +234,17 @@ fn build_placeholder_song_entries(songs: Vec<LocalSong>) -> Vec<SongEntry> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (window, state) = features::bootstrap::bootstrap_app()?;
+    let (state_core, artwork_migrated) = features::bootstrap::bootstrap_app_core()?;
+    let window_handle = Rc::new(RefCell::new(Some(MainWindow::new()?)));
+    
+    {
+        let win_opt = window_handle.borrow();
+        let win = win_opt.as_ref().unwrap();
+        features::bootstrap::setup_window_ui(win, state_core.clone(), artwork_migrated)?;
+        let _ = win.show();
+    }
+    
+    let state = state_core;
 
     // ── Setup Tray & Hotkeys ──
     let tray_menu = Menu::new();
@@ -287,15 +298,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         s.hotkey_manager = Some(hotkey_manager);
     }
 
-    // Override Close Button - Decide: Hide to Tray
-    {
-        let inner_window = window.window();
+    // Initial window close override
+    if let Some(win) = window_handle.borrow().as_ref() {
+        let inner_window = win.window();
         inner_window.on_close_requested(move || {
-            let _ = slint::invoke_from_event_loop(move || {
-                // We'll handle this via a signal or direct call if we had access to window
-            });
-            // Actually, Slint's hide/show is better handled in tick
-            // For now, let's just use it to signal a hide
             slint::CloseRequestResponse::HideWindow
         });
     }
@@ -303,60 +309,98 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting UI tick timer...");
     let timer = Timer::default();
     {
-        let weak = window.as_weak();
+        let window_handle_clone = window_handle.clone();
+        let state_clone = state.clone();
         timer.start(
             TimerMode::Repeated,
             Duration::from_millis(UI_TICK_INTERVAL_MS),
             move || {
-                if let Some(window) = weak.upgrade() {
-                    state.borrow_mut().tick(&window);
-                    
-                    // ── Poll Tray & Hotkey Events ──
-                    if let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
-                        if event.state == global_hotkey::HotKeyState::Pressed {
-                            let id = event.id;
-                            if id == id_show_hide {
-                                let is_visible = window.window().is_visible();
-                                if is_visible {
-                                    let _ = window.hide();
-                                } else {
-                                    let _ = window.show();
-                                }
-                            } else if id == id_monochrome {
-                                let mut s = state.borrow_mut();
-                                let new_val = !s.monochrome_mode;
-                                s.set_monochrome_mode(new_val, &window);
-                            } else if id == id_prev {
-                                state.borrow_mut().play_previous_manual(&window);
-                            } else if id == id_next {
-                                state.borrow_mut().play_next_manual(&window);
-                            }
-                        }
+                {
+                    let win_ref = window_handle_clone.borrow();
+                    if let Some(window) = win_ref.as_ref() {
+                        state_clone.borrow_mut().tick(window);
                     }
+                }
 
-                    if let Ok(event) = TrayIconEvent::receiver().try_recv() {
-                        match event {
-                            TrayIconEvent::Click { button, button_state, .. } => {
-                                if button == tray_icon::MouseButton::Left && button_state == tray_icon::MouseButtonState::Up {
-                                    if window.window().is_visible() {
-                                        window.window().hide().unwrap();
-                                    } else {
-                                        window.window().show().unwrap();
+                // ── Poll Tray & Hotkey Events ──
+                if let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
+                    if event.state == global_hotkey::HotKeyState::Pressed {
+                        let id = event.id;
+                        if id == id_show_hide {
+                            let mut win_opt = window_handle_clone.borrow_mut();
+                            if let Some(window) = win_opt.take() {
+                                state_clone.borrow_mut().dehydrate();
+                                let _ = window.hide();
+                                println!("Deep Sleep activated.");
+                            } else {
+                                if let Ok(new_win) = MainWindow::new() {
+                                    if features::bootstrap::setup_window_ui(&new_win, state_clone.clone(), artwork_migrated).is_ok() {
+                                        state_clone.borrow_mut().hydrate(&new_win);
+                                        let _ = new_win.show();
+                                        *win_opt = Some(new_win);
+                                        println!("System Restored.");
                                     }
                                 }
                             }
-                            _ => {}
+                        } else if id == id_monochrome {
+                            let win_ref = window_handle_clone.borrow();
+                            if let Some(window) = win_ref.as_ref() {
+                                let mut s = state_clone.borrow_mut();
+                                let new_val = !s.monochrome_mode;
+                                s.set_monochrome_mode(new_val, &window);
+                            }
+                        } else if id == id_prev {
+                            let win_ref = window_handle_clone.borrow();
+                            if let Some(window) = win_ref.as_ref() {
+                                state_clone.borrow_mut().play_previous_manual(&window);
+                            }
+                        } else if id == id_next {
+                            let win_ref = window_handle_clone.borrow();
+                            if let Some(window) = win_ref.as_ref() {
+                                state_clone.borrow_mut().play_next_manual(&window);
+                            }
                         }
                     }
+                }
 
-                    if let Ok(event) = MenuEvent::receiver().try_recv() {
-                        if event.id == quit_item.id() {
-                            std::process::exit(0);
-                        } else if event.id == show_hide_item.id() {
-                            if window.window().is_visible() {
-                                window.window().hide().unwrap();
-                            } else {
-                                window.window().show().unwrap();
+                if let Ok(event) = TrayIconEvent::receiver().try_recv() {
+                    match event {
+                        TrayIconEvent::Click { button, button_state, .. } => {
+                            if button == tray_icon::MouseButton::Left && button_state == tray_icon::MouseButtonState::Up {
+                                let mut win_opt = window_handle_clone.borrow_mut();
+                                if let Some(window) = win_opt.take() {
+                                    state_clone.borrow_mut().dehydrate();
+                                    let _ = window.hide();
+                                } else {
+                                    if let Ok(new_win) = MainWindow::new() {
+                                        if features::bootstrap::setup_window_ui(&new_win, state_clone.clone(), artwork_migrated).is_ok() {
+                                            state_clone.borrow_mut().hydrate(&new_win);
+                                            let _ = new_win.show();
+                                            *win_opt = Some(new_win);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                if let Ok(event) = MenuEvent::receiver().try_recv() {
+                    if event.id == quit_item.id() {
+                        std::process::exit(0);
+                    } else if event.id == show_hide_item.id() {
+                        let mut win_opt = window_handle_clone.borrow_mut();
+                        if let Some(window) = win_opt.take() {
+                            state_clone.borrow_mut().dehydrate();
+                            let _ = window.hide();
+                        } else {
+                            if let Ok(new_win) = MainWindow::new() {
+                                if features::bootstrap::setup_window_ui(&new_win, state_clone.clone(), artwork_migrated).is_ok() {
+                                    state_clone.borrow_mut().hydrate(&new_win);
+                                    let _ = new_win.show();
+                                    *win_opt = Some(new_win);
+                                }
                             }
                         }
                     }
@@ -365,6 +409,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    window.run()?;
+    slint::run_event_loop_until_quit()?;
     Ok(())
 }

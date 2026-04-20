@@ -8,7 +8,7 @@ use crate::features::app_utils::{get_app_data_dir, get_artwork_dir, load_songs_f
 use crate::{AppController, AudioCommand, AudioEvent, MainWindow, SETTING_VOLUME};
 use orca_core::{audio_engine, db};
 
-pub(crate) fn bootstrap_app() -> Result<(MainWindow, Rc<RefCell<AppController>>), Box<dyn std::error::Error>> {
+pub(crate) fn bootstrap_app_core() -> Result<(Rc<RefCell<AppController>>, usize), Box<dyn std::error::Error>> {
     println!("Starting Orca Desktop!");
     slint::BackendSelector::new()
         .backend_name("winit".into())
@@ -46,17 +46,6 @@ pub(crate) fn bootstrap_app() -> Result<(MainWindow, Rc<RefCell<AppController>>)
         state.volume = initial_volume;
     }
 
-    println!("Building MainWindow...");
-    let window = MainWindow::new()?;
-    
-    // Load branding logo
-    let logo_path = "C:/Users/shubh/.gemini/antigravity/brain/1a6d71aa-d457-4053-ac94-9c278b649d2b/orca_premium_logo_png_1776150779681.png";
-    if let Ok(logo_img) = slint::Image::load_from_path(std::path::Path::new(logo_path)) {
-        window.global::<AppState>().set_branding_logo(logo_img);
-    }
-
-    window.global::<AppState>().set_status_text("Loading library...".into());
-    println!("Setting up AppController...");
     let state = Rc::new(RefCell::new(AppController::new(
         conn,
         artwork_dir,
@@ -64,10 +53,26 @@ pub(crate) fn bootstrap_app() -> Result<(MainWindow, Rc<RefCell<AppController>>)
         audio_tx,
         playback_state,
         event_rx,
-        window.as_weak(),
+        slint::Weak::default(),
         visualizer_data,
     )));
     println!("AppController instantiated.");
+
+    Ok((state, migrated_artwork))
+}
+
+pub(crate) fn setup_window_ui(
+    window: &MainWindow,
+    state: Rc<RefCell<AppController>>,
+    migrated_artwork: usize,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Load branding logo
+    let logo_path = concat!(env!("CARGO_MANIFEST_DIR"), "/public/orca_logo.png");
+    if let Ok(logo_img) = slint::Image::load_from_path(std::path::Path::new(logo_path)) {
+        window.global::<AppState>().set_branding_logo(logo_img);
+    }
+
+    window.global::<AppState>().set_status_text("Loading library...".into());
 
     {
         let mut app_state = state.borrow_mut();
@@ -84,6 +89,5 @@ pub(crate) fn bootstrap_app() -> Result<(MainWindow, Rc<RefCell<AppController>>)
     println!("Wiring callbacks...");
     crate::features::callbacks::wire_callbacks(&window, state.clone());
     println!("Callbacks wired.");
-
-    Ok((window, state))
+    Ok(())
 }

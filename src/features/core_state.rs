@@ -537,4 +537,46 @@ impl AppController {
             Duration::from_secs(2),
         );
     }
+
+    pub(crate) fn dehydrate(&mut self) {
+        println!("Deep Sleep: Dehydrating UI state...");
+        // 1. Purge heavy image caches
+        self.blur_cache.clear();
+        self.blur_cache_order.clear();
+        self.now_art_cache.clear();
+        self.now_art_cache_order.clear();
+        self.thumbnail_cache.clear();
+        self.thumbnail_order.clear();
+        self.thumbnail_inflight.clear();
+        
+        // 2. Clear Slint handles in global song list
+        for entry in self.songs.iter_mut() {
+            entry.artwork_image = slint::Image::default();
+        }
+
+        // 3. Wipe models to release Slint-resident memory
+        self.song_model.set_vec(Vec::new());
+        self.artist_model.set_vec(Vec::new());
+        self.album_model.set_vec(Vec::new());
+        self.playlist_model.set_vec(Vec::new());
+        
+        // Clear child models
+        self.song_row_models.clear();
+        
+        println!("Deep Sleep: UI state purged. Sleep well, Orca.");
+    }
+
+    pub(crate) fn hydrate(&mut self, window: &MainWindow) {
+        println!("Wake Up: Hydrating UI state...");
+        // 1. Re-initialize everything using the core logic
+        self.initialize_ui(window);
+        
+        // 2. Explicitly update now-playing to restore artwork/lyrics
+        self.update_now_playing(window);
+        
+        // 3. Resume thumbnail backgrounding
+        self.schedule_thumbnail_warmup();
+        
+        self.set_temporary_status("System Restored 🐋✨", window, Duration::from_secs(2));
+    }
 }
