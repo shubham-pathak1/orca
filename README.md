@@ -1,11 +1,13 @@
-# Orca 🐋
+<p align="center">
+  <img src="public/orca_logo.png" width="160" alt="Orca Logo">
+</p>
+
+# Orca
 
 > [!NOTE]
-> Orca is currently in active development. Alpha 0.1.0 will be released shortly.
+> Orca is currently in active development. (Alpha 0.1.0)
 
 Orca is a desktop music player for local files, built with Rust and the Slint UI framework. It is focused on high-quality audio playback and a clean layout.
-
-<img src="public/orca_logo.png" width="120" alt="Orca Logo">
 
 ## Screenshots
 
@@ -17,6 +19,17 @@ Orca is a desktop music player for local files, built with Rust and the Slint UI
 ### Main Player
 ![Main Player](public/main_player.png)
 
+## Phantom Mode
+
+To minimize resource usage, Orca can be hidden to the system tray using `Ctrl + Shift + B`.
+
+- **Resource Optimization**: When hidden, the application processes audio at less than 1% CPU.
+- **Memory Management**: The UI is destroyed and purged from RAM, resulting in a less than 15MB footprint.
+- **Responsiveness**: The UI is re-hydrated from the background state when the window is toggled back.
+
+### Resource Usage Comparison (Active vs. Hidden)
+![Active Resources](public/resources_active.png)
+![Phantom Resources](public/resources_phantom.png)
 
 ## Features
 
@@ -36,14 +49,12 @@ Orca provides several global and application-level shortcuts for ease of use:
 - **Visuals**: `F11` (Toggle Fullscreen), `Ctrl + Shift + M` (Toggle Monochrome mode)
 - **System**: `Ctrl + Shift + B` (Show/Hide window globally)
 
-## Supported Formats
-
 Orca supports a variety of standard and high-fidelity audio formats:
 
-- **Lossless**: FLAC, WAV, ALAC (m4a)
-- **Compressed**: MP3, AAC (m4a)
+- **Lossless**: FLAC, WAV, ALAC (m4a), AIFF, AIF
+- **Compressed**: MP3, AAC (m4a), OGG, Opus
 
-## Made With 🛠️
+## Made With
 
 Orca is built using several powerful open-source projects:
 
