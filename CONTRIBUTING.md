@@ -28,4 +28,4 @@ Orca aims to be a polite and helpful ecosystem. When contributing:
 
 If you have questions about the codebase or the project goals, don't hesitate to open an issue or reach out. No question is too small.
 
-Happy coding! 🐋✨
+Happy coding! 🐋

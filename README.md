@@ -1,8 +1,22 @@
 # Orca 🐋
 
+> [!NOTE]
+> Orca is currently in active development. Alpha 0.1.0 will be released shortly.
+
 Orca is a desktop music player for local files, built with Rust and the Slint UI framework. It is focused on high-quality audio playback and a clean layout.
 
-![Orca Logo](public/public/orca_logo.png)
+<img src="public/orca_logo.png" width="120" alt="Orca Logo">
+
+## Screenshots
+
+*Orca in action:*
+
+### Main Library
+![Main Screen](public/main_screen.png)
+
+### Main Player
+![Main Player](public/main_player.png)
+
 
 ## Features
 
@@ -24,16 +38,26 @@ Orca provides several global and application-level shortcuts for ease of use:
 
 ## Supported Formats
 
-Orca supports the following audio formats:
+Orca supports a variety of standard and high-fidelity audio formats:
 
 - **Lossless**: FLAC, WAV, ALAC (m4a)
 - **Compressed**: MP3, AAC (m4a)
+
+## Made With 🛠️
+
+Orca is built using several powerful open-source projects:
+
+- [Rust](https://github.com/rust-lang/rust) - The system language ensuring performance and safety.
+- [Slint](https://github.com/slint-ui/slint) - The toolkit powering our modern UI.
+- [Lofty](https://github.com/Serial-ATA/lofty-rs) - Metadata extraction and tagging.
+- [Rodio](https://github.com/RustAudio/rodio) - Core audio engine for seamless playback.
+- [Symphonia](https://github.com/pdeljanov/Symphonia) - Advanced media decoding support.
 
 ## Getting Started
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/)
+- [Rust](https://rustup.rs/) (latest stable)
 - C++ compiler (for dependencies)
 
 ### Usage
@@ -44,7 +68,7 @@ Orca supports the following audio formats:
    cd orca
    ```
 
-2. Run the app:
+2. Run the application:
    ```bash
    cargo run --release
    ```
