@@ -77,7 +77,8 @@ pub fn scan_music_folder(folder_path: &Path, artwork_dir: &Path) -> Result<Vec<L
         };
         let ext_str = ext.to_string_lossy().to_lowercase();
         let is_audio =
-            ext_str == "mp3" || ext_str == "flac" || ext_str == "m4a" || ext_str == "wav";
+            ext_str == "mp3" || ext_str == "flac" || ext_str == "m4a" || ext_str == "wav" ||
+            ext_str == "ogg" || ext_str == "opus" || ext_str == "aiff" || ext_str == "aif";
         if !is_audio {
             continue;
         }
