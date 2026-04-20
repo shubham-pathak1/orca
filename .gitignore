@@ -23,5 +23,4 @@ lyrics_cache/
 
 # User specifically requested cleanup
 temp_logo.png
-public/public/
 tests/

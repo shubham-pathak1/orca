@@ -246,7 +246,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ]);
 
     // Icon loading for Official Orca Branding
-    let icon_path = concat!(env!("CARGO_MANIFEST_DIR"), "/public/public/orca_logo.png");
+    let icon_path = concat!(env!("CARGO_MANIFEST_DIR"), "/public/orca_logo.png");
     let icon = if let Ok(img) = image::open(icon_path) {
         let rgba = img.to_rgba8();
         let (width, height) = rgba.dimensions();
