@@ -11,7 +11,10 @@ import { SongListView } from "views/song_list.slint";
 import { GridViews } from "views/grids.slint";
 import { PlaylistsView } from "views/playlists.slint";
 import { SettingsView } from "views/settings.slint";
-import "fonts/Geist-Variable.ttf";
+import "fonts/GothamLight.ttf";
+import "fonts/GothamBook.ttf";
+import "fonts/GothamMedium.ttf";
+import "fonts/GothamBold.ttf";
 
 export component MainWindow inherits Window {
     title: "Orca";
@@ -20,61 +23,120 @@ export component MainWindow inherits Window {
     preferred-height: 820px;
     min-width: 1040px;
     min-height: 700px;
-    no-frame: false;
+    no-frame: true; // FRAMELESS EVOLUTION
     background: #080808;
-    default-font-family: "Geist, Microsoft YaHei, Noto Sans SC, sans-serif";
+    default-font-family: "Gotham, system-ui, sans-serif";
 
     forward-focus: focus-scope;
 
     focus-scope := FocusScope {
-        HorizontalLayout {
-            Sidebar {}
-
-            Rectangle {
-                horizontal-stretch: 1;
-                VerticalLayout {
-                    padding: 24px; spacing: 24px;
+        VerticalLayout {
+            // ── Custom Title Bar (Frameless Support) ──
+            if (!AppState.is-fullscreen) : Rectangle {
+                height: 32px;
+                HorizontalLayout {
+                    padding-left: 14px; padding-right: 0px;
                     
-                    header-ref := Header {}
-
-                    // ── Content Area ──
-                    Rectangle {
-                        horizontal-stretch: 1; vertical-stretch: 1;
-
-                        // ── Songs View ──
-                        if (AppState.active-nav-index == 0) : SongListView {}
-
-                        // ── Library Views (Artists, Albums, Playlists, Settings) ──
-                        if (AppState.active-nav-index != 0) : Rectangle {
-                            TouchArea {
-                                scroll-event(event) => {
-                                    AppState.add-wheel-velocity(event.delta-y / 1px);
-                                    return accept;
-                                }
+                    // Draggable Area (Main Handle)
+                    TouchArea {
+                        horizontal-stretch: 1;
+                        pointer-event(event) => {
+                            if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                                AppState.drag-window();
                             }
-                            ScrollView {
-                                viewport-y <=> AppState.viewport-y-manual;
-                                horizontal-stretch: 1; vertical-stretch: 1;
-                                changed viewport-y => { AppState.song-grid-viewport-changed(self.viewport-y / 1px, self.height / 1px); }
-                                changed visible-height => {
-                                    AppState.song-grid-viewport-changed(self.viewport-y / 1px, self.height / 1px);
-                                    AppState.grid-visible-height = self.visible-height;
-                                }
-                                
-                                VerticalLayout {
-                                    if (AppState.active-nav-index == 1 || AppState.active-nav-index == 2) : GridViews {}
-                                    if (AppState.active-nav-index == 3) : PlaylistsView {}
-                                    if (AppState.active-nav-index == 4) : SettingsView {}
-                                }
+                        }
+                    }
+
+                    // Window Controls
+                    HorizontalLayout {
+                        spacing: 0px;
+                        Rectangle {
+                            width: 48px; height: 32px; background: min_t.has-hover ? #ffffff10 : #00000000;
+                            // Minimize Stroke
+                            Rectangle {
+                                width: 10px; height: 1px; background: #ffffff;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                opacity: min_t.has-hover ? 1.0 : 0.6;
                             }
+                            min_t := TouchArea { clicked => { AppState.minimize-window(); } }
+                        }
+                        Rectangle {
+                            width: 48px; height: 32px; background: max_t.has-hover ? #ffffff10 : #00000000;
+                            // Maximize Square
+                            Rectangle {
+                                width: 9px; height: 9px; 
+                                border-width: 1px; border-color: #ffffff;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                opacity: max_t.has-hover ? 1.0 : 0.6;
+                            }
+                            max_t := TouchArea { clicked => { AppState.maximize-window(); } }
+                        }
+                        Rectangle {
+                            width: 48px; height: 32px; background: close_t.has-hover ? #e81123 : #00000000;
+                            Image {
+                                source: AppState.icon-x;
+                                width: 14px; height: 14px;
+                                colorize: #ffffff;
+                                opacity: close_t.has-hover ? 1.0 : 0.6;
+                                vertical-alignment: center; horizontal-alignment: center;
+                            }
+                            close_t := TouchArea { clicked => { AppState.close-window(); } }
                         }
                     }
                 }
             }
 
-            if AppState.queue-visible : QueuePanel {}
-
-            PlayerBar {}
+            HorizontalLayout {
+                Sidebar {}
+    
+                Rectangle {
+                    horizontal-stretch: 1;
+                    VerticalLayout {
+                        padding: 24px; spacing: 24px;
+                        
+                        header-ref := Header {}
+    
+                        // ── Content Area ──
+                        Rectangle {
+                            horizontal-stretch: 1; vertical-stretch: 1;
+    
+                            // ── Songs View ──
+                            if (AppState.active-nav-index == 0) : SongListView {}
+    
+                            // ── Library Views (Artists, Albums, Playlists, Settings) ──
+                            if (AppState.active-nav-index != 0) : Rectangle {
+                                TouchArea {
+                                    scroll-event(event) => {
+                                        AppState.add-wheel-velocity(event.delta-y / 1px);
+                                        return accept;
+                                    }
+                                }
+                                ScrollView {
+                                    viewport-y <=> AppState.viewport-y-manual;
+                                    horizontal-stretch: 1; vertical-stretch: 1;
+                                    changed viewport-y => { AppState.song-grid-viewport-changed(self.viewport-y / 1px, self.height / 1px); }
+                                    changed visible-height => {
+                                        AppState.song-grid-viewport-changed(self.viewport-y / 1px, self.height / 1px);
+                                        AppState.grid-visible-height = self.visible-height;
+                                    }
+                                    
+                                    VerticalLayout {
+                                        if (AppState.active-nav-index == 1 || AppState.active-nav-index == 2) : GridViews {}
+                                        if (AppState.active-nav-index == 3) : PlaylistsView {}
+                                        if (AppState.active-nav-index == 4) : SettingsView {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+    
+                if AppState.queue-visible : QueuePanel {}
+    
+                PlayerBar {}
+            }
         }
 
         if AppState.full-player-visible : FullPlayerOverlay {}

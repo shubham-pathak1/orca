@@ -109,11 +109,10 @@ export global AppState {
     in_out property <int> processed-thumbnails: 0;
     in_out property <int> total-thumbnails: 0;
     in_out property <length> viewport-y-manual: 0px;
-
     in_out property <length> viewport-y-manual-songs: 0px;
-
-    in_out property <length> song-list-visible-height;
-    in_out property <length> grid-visible-height;
+    in_out property <length> song-list-visible-height: 0px;
+    in_out property <length> grid-visible-height: 0px;
+    in_out property <bool> is-fullscreen: false;
     
     // Sync properties for backend
     in_out property <bool> shuffle-enabled: false;
@@ -155,6 +154,10 @@ export global AppState {
     callback rename-playlist(playlist-id: int, new-name: string);
     callback delete-playlist(playlist-id: int);
     callback filter-by-playlist(playlist-id: int);
+    callback jump-to-letter(letter: string);
 
-
+    callback drag-window();
+    callback minimize-window();
+    callback maximize-window();
+    callback close-window();
 }

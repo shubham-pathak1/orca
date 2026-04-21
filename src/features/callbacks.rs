@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use slint::ComponentHandle;
+use i_slint_backend_winit::WinitWindowAccessor;
 
 use crate::{AppController, MainWindow};
 
@@ -339,7 +340,9 @@ pub fn wire_callbacks(window: &MainWindow, state: Rc<RefCell<AppController>>) {
         move || {
             if let Some(window) = weak.upgrade() {
                 let current = window.window().is_fullscreen();
-                window.window().set_fullscreen(!current);
+                let next = !current;
+                window.window().set_fullscreen(next);
+                window.global::<AppState>().set_is_fullscreen(next);
             }
         }
     });
@@ -348,6 +351,54 @@ pub fn wire_callbacks(window: &MainWindow, state: Rc<RefCell<AppController>>) {
         let state = state.clone();
         move |delta| {
             state.borrow_mut().scroller.add_velocity(delta * 200.0); // Scalar for velocity
+        }
+    });
+
+    window.global::<AppState>().on_jump_to_letter({
+        let weak = weak.clone();
+        let state = state.clone();
+        move |letter| {
+            if let Some(window) = weak.upgrade() {
+                state.borrow_mut().jump_to_letter(letter.to_string(), &window);
+            }
+        }
+    });
+
+    // ── Window Management ──
+    window.global::<AppState>().on_drag_window({
+        let weak = weak.clone();
+        move || {
+            if let Some(window) = weak.upgrade() {
+                let _ = window.window().with_winit_window(|w| w.drag_window());
+            }
+        }
+    });
+
+    window.global::<AppState>().on_minimize_window({
+        let weak = weak.clone();
+        move || {
+            if let Some(window) = weak.upgrade() {
+                window.window().set_minimized(true);
+            }
+        }
+    });
+
+    window.global::<AppState>().on_maximize_window({
+        let weak = weak.clone();
+        move || {
+            if let Some(window) = weak.upgrade() {
+                let is_max = window.window().is_maximized();
+                window.window().set_maximized(!is_max);
+            }
+        }
+    });
+
+    window.global::<AppState>().on_close_window({
+        let weak = weak.clone();
+        move || {
+            if let Some(window) = weak.upgrade() {
+                window.hide().unwrap();
+            }
         }
     });
 }
