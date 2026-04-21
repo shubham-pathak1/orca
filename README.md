@@ -28,7 +28,9 @@ To minimize resource usage, Orca can be hidden to the system tray using `Ctrl + 
 - **Responsiveness**: The UI is re-hydrated from the background state when the window is toggled back.
 
 ### Resource Usage Comparison (Active vs. Hidden)
+### Active Window
 ![Active Resources](public/resources_active.png)
+### Hidden Window
 ![Phantom Resources](public/resources_phantom.png)
 
 ## Features
