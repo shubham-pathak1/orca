@@ -582,6 +582,40 @@ impl AppController {
         );
     }
 
+    pub(crate) fn jump_to_letter(&mut self, letter: String, window: &MainWindow) {
+        if self.filtered_indices.is_empty() {
+            return;
+        }
+
+        let letter_upper = letter.to_uppercase();
+        let mut target_index: Option<usize> = None;
+
+        for (row_idx, &master_idx) in self.filtered_indices.iter().enumerate() {
+            let song = &self.songs[master_idx].song;
+            let title = song.title.trim().to_uppercase();
+            
+            if letter == "#" {
+                if !title.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false) {
+                    target_index = Some(row_idx);
+                    break;
+                }
+            } else if title.starts_with(&letter_upper) {
+                target_index = Some(row_idx);
+                break;
+            }
+        }
+
+        if let Some(idx) = target_index {
+            // Row height is 36px in SongListView
+            let target_y = -(idx as f32 * 36.0);
+            self.scroller.stop();
+            window.global::<AppState>().set_viewport_y_manual_songs(target_y.into());
+            
+            // Trigger viewport update for thumbnail hydration
+            self.update_song_grid_viewport(target_y, window.global::<AppState>().get_song_list_visible_height(), window);
+        }
+    }
+
     pub(crate) fn scan_saved_roots(&mut self, window: &MainWindow) {
         if self.scan_in_progress {
             self.set_status("Library scan already in progress...", window);

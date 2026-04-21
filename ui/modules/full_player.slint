@@ -61,217 +61,194 @@ export component FullPlayerOverlay inherits Rectangle {
             Text { text: "Now Playing"; color: #ffffff; font-size: 14px; font-weight: 600; opacity: 0.6; vertical-alignment: center; }
             Rectangle { horizontal-stretch: 1; }
         }
-
         // --- Main Switcher Section ---
         Rectangle {
             vertical-stretch: 1; width: 100%;
             
-            // Mode 1: Centered Main View
-            if (!AppState.full-player-lyrics-visible) : HorizontalLayout {
-                width: 100%; alignment: center; 
+            // DYNAMIC LAYOUT ENGINE
+            // We calculate the positions manually to ensure 100% responsiveness and zero-jitter transitions.
+            property <length> art-width: 600px; // Optimized for long song titles
+            property <length> lyrics-width: root.width - art-width - 180px; 
+            
+            // X-Coordinates for Animated Symmetry
+            property <length> art-center-x: (parent.width - art-width) / 2;
+            property <length> art-billboard-x: 60px;
+            property <length> target-art-x: AppState.full-player-lyrics-visible ? art-billboard-x : art-center-x;
+            
+            animate target-art-x { duration: 550ms; easing: cubic-bezier(0.16, 1, 0.3, 1); }
+
+            // Fixed Vertical Anchor (The Skyline Floor)
+            property <length> skyline-y: 32px;
+
+            VerticalLayout {
+                x: parent.target-art-x;
+                y: skyline-y;
+                width: art-width; spacing: 20px; // Tightened from 24px
+                
+                // Artwork Billboard (380x380)
+                HorizontalLayout {
+                    alignment: start; 
+                    padding-left: (art-width - 380px) / 2;
+                    Rectangle {
+                        width: 380px; height: 380px; border-radius: 14px;
+                        clip: true; background: #22222260;
+                        Image { source: AppState.now-artwork; width: 100%; height: 100%; image-fit: cover; }
+                        
+                        // Subtle Inner Glow
+                        Rectangle { width: 100%; height: 100%; border-width: 1px; border-color: #ffffff0a; border-radius: 14px; }
+                    }
+                }
+
+                // Metadata Stack (Centered and Symmetrical)
                 VerticalLayout {
-                    width: 420px; spacing: 32px; alignment: center;
+                    spacing: 6px; width: art-width;
+                    Text { 
+                        text: AppState.now-title; color: #ffffff; font-size: 32px; font-weight: 800; 
+                        horizontal-alignment: center; overflow: elide;
+                    }
+                    HorizontalLayout {
+                        spacing: 12px; alignment: center;
+                        Text { 
+                            text: AppState.now-artist; color: #ffffff; opacity: 0.7; font-size: 17px; font-weight: 600; 
+                            horizontal-alignment: center; letter-spacing: 0.3px; 
+                        }
+                        
+                        if (AppState.now-playing-quality != "") : Text { 
+                            text: AppState.now-playing-quality; color: #ffffff; opacity: 0.55; font-size: 11px; font-weight: 800; vertical-alignment: center; 
+                        }
+                    }
+                }
+
+                // Seekbar (Symmetrical)
+                VerticalLayout {
+                    width: 500px; spacing: 8px; x: (art-width - 500px) / 2;
+                    Rectangle {
+                        height: 24px;
+                        Rectangle { 
+                            y: 10px; height: 5px; background: #ffffff12; border-radius: 2.5px;
+                            Rectangle { x: 0; width: parent.width * AppState.progress-slider-value; background: #ffffff; border-radius: 2.5px; }
+                        }
+                        TouchArea { clicked => { AppState.seek-to-ratio(self.mouse-x / self.width); } }
+                    }
+                    HorizontalLayout {
+                        Text { text: AppState.progress-current; color: #ffffff; opacity: 0.45; font-size: 11px; font-weight: 700; }
+                        Rectangle { horizontal-stretch: 1; }
+                        Text { text: AppState.progress-total; color: #ffffff; opacity: 0.45; font-size: 11px; font-weight: 700; }
+                    }
+                }
+
+                // Controls (Centered Gutter)
+                HorizontalLayout {
+                    spacing: 34px; height: 80px; alignment: center;
+                    width: art-width;
                     
-                    // Art (Standardized 380px)
-                    HorizontalLayout {
-                        alignment: center;
-                        Rectangle {
-                            width: 380px; height: 380px; border-radius: 12px;
-                            clip: true; background: #22222260;
-                            Image { source: AppState.now-artwork; width: 100%; height: 100%; image-fit: cover; }
-                        }
+                    // Shuffle with glow
+                    Rectangle {
+                        width: 32px; height: 32px; y: (parent.height - self.height) / 2;
+                        background: #00000020; border-radius: 16px;
+                        IconButton { width: 100%; height: 100%; icon: AppState.icon-shuffle; clicked => { AppState.toggle-shuffle(); } }
                     }
 
-                    // Metadata
-                    VerticalLayout {
-                        spacing: 8px; width: 100%;
-                        HorizontalLayout {
-                            spacing: 12px; alignment: center;
-                            Text { text: AppState.now-title; color: #ffffff; font-size: 32px; font-weight: 800; horizontal-alignment: center; overflow: elide; }
-                            
-                            // RESTORED: Info Tag in Main View
-                            if (AppState.now-playing-quality != "") : Rectangle {
-                                y: (parent.height - self.height) / 2;
-                                background: #ffffff20; border-radius: 4px;
-                                HorizontalLayout { padding: 4px; padding-left: 8px; padding-right: 8px; Text { text: AppState.now-playing-quality; color: #ffffff; font-size: 10px; font-weight: 800; } }
-                            }
-                        }
-                        Text { text: AppState.now-artist; color: #ffffff; opacity: 0.6; font-size: 18px; font-weight: 600; horizontal-alignment: center; overflow: elide; }
+                    // Prev with glow
+                    Rectangle {
+                        width: 52px; height: 52px; y: (parent.height - self.height) / 2;
+                        background: #00000015; border-radius: 26px;
+                        IconButton { width: 100%; height: 100%; icon: AppState.icon-skip-back; clicked => { AppState.previous-song(); } }
                     }
 
-                    // Seekbar
-                    HorizontalLayout {
-                        alignment: center;
-                        VerticalLayout {
-                            width: 380px; spacing: 10px; // Standardized width
-                            Rectangle {
-                                height: 24px;
-                                Rectangle { 
-                                    y: 10px; height: 5px; background: #ffffff15; border-radius: 2.5px;
-                                    Rectangle { x: 0; width: parent.width * AppState.progress-slider-value; background: #ffffff; border-radius: 2.5px; }
-                                }
-                                TouchArea { clicked => { AppState.seek-to-ratio(self.mouse-x / self.width); } }
-                            }
-                            HorizontalLayout {
-                                Text { text: AppState.progress-current; color: #ffffff; opacity: 0.4; font-size: 12px; font-weight: 700; }
-                                Rectangle { horizontal-stretch: 1; }
-                                Text { text: AppState.progress-total; color: #ffffff; opacity: 0.4; font-size: 12px; font-weight: 700; }
-                            }
-                        }
+                    // Play/Pause
+                    Rectangle {
+                        width: 72px; height: 72px; border-radius: 36px; background: #ffffff;
+                        LucideIcon { icon: AppState.is-playing ? AppState.icon-pause : AppState.icon-play; icon-color: #000000; width: 32px; height: 32px; x: (parent.width - self.width) / 2 + (AppState.is-playing ? 0px : 3px); y: (parent.height - self.height) / 2; }
+                        TouchArea { clicked => { AppState.toggle-play-pause(); } }
                     }
 
-                    // Controls
-                    HorizontalLayout {
-                        spacing: 32px; height: 80px; alignment: center;
-                        IconButton { width: 32px; height: 32px; icon: AppState.icon-shuffle; clicked => { AppState.toggle-shuffle(); } }
-                        IconButton { width: 52px; height: 52px; icon: AppState.icon-skip-back; clicked => { AppState.previous-song(); } }
-                        Rectangle {
-                            width: 72px; height: 72px; border-radius: 36px; background: #ffffff;
-                            LucideIcon { icon: AppState.is-playing ? AppState.icon-pause : AppState.icon-play; icon-color: #000000; width: 32px; height: 32px; x: (parent.width - self.width) / 2 + (AppState.is-playing ? 0px : 3px); y: (parent.height - self.height) / 2; }
-                            TouchArea { clicked => { AppState.toggle-play-pause(); } }
-                        }
-                        IconButton { width: 52px; height: 52px; icon: AppState.icon-skip-forward; clicked => { AppState.next-song(); } }
-                        IconButton { width: 32px; height: 32px; icon: AppState.icon-repeat; clicked => { AppState.cycle-repeat(); } }
+                    // Next with glow
+                    Rectangle {
+                        width: 52px; height: 52px; y: (parent.height - self.height) / 2;
+                        background: #00000015; border-radius: 26px;
+                        IconButton { width: 100%; height: 100%; icon: AppState.icon-skip-forward; clicked => { AppState.next-song(); } }
+                    }
+
+                    // Repeat with glow
+                    Rectangle {
+                        width: 32px; height: 32px; y: (parent.height - self.height) / 2;
+                        background: #00000020; border-radius: 16px;
+                        IconButton { width: 100%; height: 100%; icon: AppState.icon-repeat; clicked => { AppState.cycle-repeat(); } }
                     }
                 }
             }
 
-            // Mode 2: Billboard Lyrics Mode
-            if (AppState.full-player-lyrics-visible) : HorizontalLayout {
-                spacing: 80px; padding-left: 40px; padding-right: 40px; width: 100%; alignment: center;
-                
-                // Billboard Left
-                VerticalLayout {
-                    width: 380px; spacing: 24px; alignment: center;
-                    Rectangle {
-                        width: 380px; height: 380px; border-radius: 12px;
-                        clip: true; background: #11111180;
-                        Image { source: AppState.now-artwork; width: 100%; height: 100%; image-fit: cover; }
-                    }
-                    VerticalLayout {
-                        spacing: 4px;
-                        HorizontalLayout {
-                            spacing: 12px;
-                            Text { text: AppState.now-title; color: #ffffff; font-size: 26px; font-weight: 800; overflow: elide; horizontal-stretch: 1; }
-                            if (AppState.now-playing-quality != "") : Rectangle {
-                                background: #ffffff20; border-radius: 4px;
-                                HorizontalLayout { padding: 4px; padding-left: 8px; padding-right: 8px; Text { text: AppState.now-playing-quality; color: #ffffff; font-size: 10px; font-weight: 800; } }
-                            }
-                        }
-                        Text { text: AppState.now-artist; color: #ffffff; opacity: 0.6; font-size: 16px; font-weight: 500; }
-                    }
-                    VerticalLayout {
-                        spacing: 8px;
-                        Rectangle {
-                            height: 24px;
-                            Rectangle { y: 10px; height: 4px; background: #ffffff15; border-radius: 2px; Rectangle { x:0; width: parent.width * AppState.progress-slider-value; background: #ffffff; border-radius: 2px; } }
-                            TouchArea { clicked => { AppState.seek-to-ratio(self.mouse-x / self.width); } }
-                        }
-                        HorizontalLayout {
-                            Text { text: AppState.progress-current; color: #ffffff; opacity: 0.4; font-size: 11px; }
-                            Rectangle { horizontal-stretch: 1; }
-                            Text { text: AppState.progress-total; color: #ffffff; opacity: 0.4; font-size: 11px; }
-                        }
-                    }
-                    HorizontalLayout {
-                        spacing: 24px; alignment: center;
-                        IconButton { icon: AppState.icon-shuffle; clicked => { AppState.toggle-shuffle(); } }
-                        IconButton { icon: AppState.icon-skip-back; clicked => { AppState.previous-song(); } }
-                        Rectangle {
-                            width: 56px; height: 56px; border-radius: 28px; background: #ffffff;
-                            LucideIcon { icon: AppState.is-playing ? AppState.icon-pause : AppState.icon-play; icon-color: #000000; width: 24px; height: 24px; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
-                            TouchArea { clicked => { AppState.toggle-play-pause(); } }
-                        }
-                        IconButton { icon: AppState.icon-skip-forward; clicked => { AppState.next-song(); } }
-                        IconButton { icon: AppState.icon-repeat; clicked => { AppState.cycle-repeat(); } }
-                    }
-                }
+            // --- Lyrics Layer ---
+            if (AppState.full-player-lyrics-visible) : Rectangle {
+                x: art-width + 100px;
+                y: skyline-y;
+                width: lyrics-width;
+                height: parent.height - skyline-y - 40px;
+                opacity: 0.0;
+                clip: true;
 
-                // Billboard Right (Lyrics Viewport)
-                Rectangle {
-                    horizontal-stretch: 1;
-                    clip: true; // PURE ISOLATION
-                    
-                    lyrics-scroll := ScrollView {
-                        width: 100%; height: 100%;
-                        vertical-scrollbar-policy: always-off;
-                        viewport-y <=> root.lyrics-target-y;
+                animate opacity { duration: 800ms; easing: ease-out; }
 
-                        property <int> local-active-index: root.active-index;
-                        changed local-active-index => {
-                            if (!root.manual-scroll-active) {
-                                // High-Speed high-fidelity sync
-                                root.lyrics-target-y = -(self.local-active-index * 76) * 1px;
-                            } else {
-                                // On song change or next line, snap back immediately to keep in sync
-                                root.manual-scroll-active = false;
-                                root.lyrics-target-y = -(self.local-active-index * 76) * 1px;
-                            }
-                        }
-                        
-                        property <bool> local-lyrics-visible: AppState.full-player-lyrics-visible;
-                        changed local-lyrics-visible => {
-                            // RESET manual scroll when showing/hiding lyrics
+                lyrics-scroll := ScrollView {
+                    width: 100%; height: 100%;
+                    vertical-scrollbar-policy: always-off;
+                    viewport-y <=> root.lyrics-target-y;
+
+                    property <int> local-active-index: root.active-index;
+                    changed local-active-index => {
+                        if (!root.manual-scroll-active) {
+                            root.lyrics-target-y = -(self.local-active-index * 76) * 1px;
+                        } else {
                             root.manual-scroll-active = false;
-                            root.lyrics-target-y = -(root.active-index * 76) * 1px;
+                            root.lyrics-target-y = -(self.local-active-index * 76) * 1px;
                         }
+                    }
+                    
+                    animate viewport-y { duration: 1200ms; easing: cubic-bezier(0.16, 1, 0.3, 1); }
+                    
+                    VerticalLayout {
+                        padding-right: 40px; // SAFE GUTTER FOR WRAPPING
+                        padding-bottom: parent.height / 2;
+                        spacing: 0px; 
                         
-                        animate viewport-y { duration: 1200ms; easing: cubic-bezier(0.16, 1, 0.3, 1); }
-                        
-                        VerticalLayout {
-                            // MIRROR SYMMETRY: Center the lyrics bundle just like the ART bundle
-                            alignment: center;
-                            Rectangle {
-                                // This rectangle represents theArt-Side bundle height (Art + Meta + Controls)
-                                // Standard bundle height is Art(380) + Spacing(24) + Meta(44) + Spacing(24) + Seek(24) + Spacing(24) + Controls(80) = ~600px
-                                // We want the Viewport's LINE-0 to match ART-TOP.
-                                height: 600px;
-                                VerticalLayout {
-                                    y: 0; // Anchored to the top of the bundle (Art Top)
-                                    padding-bottom: parent.height / 2;
-                                    spacing: 0px; 
-                                    
-                                    if AppState.lyric-lines.length > 0 : VerticalLayout {
-                                        for line[idx] in AppState.lyric-lines : Rectangle {
-                                            height: 76px;
-                                            Text {
-                                                text: line; wrap: word-wrap;
-                                                color: (idx == AppState.active-lyrics-index) ? #ffffff : #ffffff33;
-                                                font-size: 32px;
-                                                font-weight: (idx == AppState.active-lyrics-index) ? 800 : 700;
-                                                horizontal-alignment: left; width: parent.width; vertical-alignment: center;
-                                                animate color { duration: 550ms; }
-                                            }
-                                        }
-                                    }
-                                    if AppState.lyric-lines.length == 0 : VerticalLayout {
-                                        padding-top: 40px;
-                                        Text { 
-                                            text: AppState.lyrics-text; color: #ffffff; font-size: 32px; 
-                                            font-weight: 700; wrap: word-wrap; horizontal-alignment: left; 
-                                        }
-                                    }
+                        if AppState.lyric-lines.length > 0 : VerticalLayout {
+                            for line[idx] in AppState.lyric-lines : Rectangle {
+                                height: 76px;
+                                Text {
+                                    text: line; wrap: word-wrap;
+                                    color: (idx == AppState.active-lyrics-index) ? #ffffff : #ffffff33;
+                                    font-size: 32px;
+                                    font-weight: (idx == AppState.active-lyrics-index) ? 800 : 700;
+                                    horizontal-alignment: left; width: parent.width; vertical-alignment: center;
+                                    animate color { duration: 550ms; }
                                 }
                             }
                         }
-                    }
-                    
-                    // Manual Scroll Detection
-                    TouchArea {
-                        width: 100%; height: 100%;
-                        scroll-event(evt) => {
-                            root.manual-scroll-active = true;
-                            // Update viewport-y manually but don't fight the binding
-                            root.lyrics-target-y += evt.delta-y;
-                            return EventResult.reject; // Allow ScrollView to still move
-                        }
-                        pointer-event(evt) => {
-                            if (evt.kind == PointerEventKind.down) {
-                                root.manual-scroll-active = true;
+                        if (AppState.lyric-lines.length == 0) : VerticalLayout {
+                            padding-top: 40px;
+                            Text { 
+                                text: AppState.lyrics-text; color: #ffffff; font-size: 32px; 
+                                font-weight: 700; wrap: word-wrap; horizontal-alignment: left; 
                             }
                         }
                     }
                 }
+                
+                // Manual Scroll Detection
+                TouchArea {
+                    width: 100%; height: 100%;
+                    scroll-event(evt) => {
+                        root.manual-scroll-active = true;
+                        root.lyrics-target-y += evt.delta-y;
+                        return EventResult.reject; 
+                    }
+                    pointer-event(evt) => {
+                        if (evt.kind == PointerEventKind.down) { root.manual-scroll-active = true; }
+                    }
+                }
+                
+                init => { self.opacity = 1.0; }
             }
         }
 

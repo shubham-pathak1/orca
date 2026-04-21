@@ -261,4 +261,81 @@ impl AppController {
         self.persist_preferences();
         self.set_status(format!("EQ preset: {}", preset_name), window);
     }
+
+    // ── HEADLESS CONTROLS (Tray / Hotkeys when window is hidden) ──
+
+    pub(crate) fn toggle_play_pause_headless(&mut self) {
+        let playback = self.playback_state.lock().map(|s| s.clone()).unwrap_or_default();
+
+        if playback.is_playing {
+            let _ = self.audio_tx.send(crate::AudioCommand::Pause);
+            return;
+        }
+
+        if let Some(song_idx) = self.current_song_index {
+            if playback.current_path.is_some() {
+                let _ = self.audio_tx.send(crate::AudioCommand::Resume);
+            } else {
+                self.play_song_index_headless(song_idx);
+            }
+        }
+    }
+
+    pub(crate) fn play_next_headless(&mut self) {
+        if let Some(next_idx) = self.get_next_song_index() {
+            self.play_song_index_headless(next_idx);
+            
+            // Pop queue if we used it
+            if self.queue.front() == Some(&next_idx) {
+                self.queue.pop_front();
+            }
+        }
+    }
+
+    pub(crate) fn play_previous_headless(&mut self) {
+        if self.shuffle_enabled {
+            if let Some(song_idx) = self.get_random_candidate() {
+                self.play_song_index_headless(song_idx);
+            }
+            return;
+        }
+
+        if let Some(current_idx) = self.current_song_index {
+            if current_idx > 0 {
+                self.play_song_index_headless(current_idx - 1);
+            } else if self.repeat_mode == RepeatMode::All && !self.songs.is_empty() {
+                self.play_song_index_headless(self.songs.len() - 1);
+            }
+        }
+    }
+
+    fn play_song_index_headless(&mut self, song_idx: usize) {
+        if let Some(entry) = self.songs.get(song_idx) {
+            let path = entry.song.path.clone();
+            
+            if let Ok(mut playback) = self.playback_state.lock() {
+                playback.current_path = Some(path.clone());
+                playback.is_playing = true;
+                playback.position_ms = 0;
+                playback.duration_ms = entry.song.duration as u64;
+            }
+
+            let _ = self.audio_tx.send(orca_core::audio_engine::AudioCommand::Play(path));
+            self.current_song_index = Some(song_idx);
+            self.last_crossfade_triggered_path = None;
+            self.persist_preferences();
+        }
+    }
+
+    fn get_random_candidate(&self) -> Option<usize> {
+        if self.filtered_indices.is_empty() { return None; }
+        let mut candidates = self.filtered_indices.clone();
+        if candidates.len() > 1 {
+            if let Some(current_idx) = self.current_song_index {
+                candidates.retain(|idx| *idx != current_idx);
+            }
+        }
+        let mut rng = rand::thread_rng();
+        candidates.choose(&mut rng).copied()
+    }
 }

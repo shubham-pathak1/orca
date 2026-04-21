@@ -2,74 +2,96 @@ import { AppState } from "../global.slint";
 import { ListView } from "std-widgets.slint";
 
 export component SongListView inherits Rectangle {
-                            TouchArea {
-                                scroll-event(event) => {
-                                    AppState.add-wheel-velocity(event.delta-y / 1px);
-                                    return accept;
+    HorizontalLayout {
+        spacing: 0px; // FIX THE GAP
+        VerticalLayout {
+            horizontal-stretch: 1;
+            VerticalLayout {
+                spacing: 0px;
+                Rectangle {
+                    height: 36px;
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 12px;
+                        spacing: 12px;
+                        Rectangle { width: 26px; } // Spacer for image align
+                        Text { text: "Title"; color: #888888; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; width: 36%; vertical-alignment: center; overflow: elide; }
+                        Text { text: "Artist"; color: #888888; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; width: 24%; vertical-alignment: center; overflow: elide; }
+                        Text { text: "Album"; color: #888888; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; width: 22%; vertical-alignment: center; overflow: elide; }
+                        Text { text: "Duration"; color: #888888; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; width: 60px; horizontal-alignment: right; vertical-alignment: center; overflow: elide; }
+                    }
+                    Rectangle { y: parent.height - 1px; height: 1px; background: #ffffff08; }
+                }
+                song_list_view := ListView {
+                    vertical-scrollbar-policy: always-off; // SYSTEM SCROLLER BE GONE
+                    viewport-y <=> AppState.viewport-y-manual-songs;
+                    changed viewport-y => {
+                        AppState.song-grid-viewport-changed(self.viewport-y / 1px, self.height / 1px);
+                    }
+                    changed visible-height => {
+                        AppState.song-grid-viewport-changed(self.viewport-y / 1px, self.height / 1px);
+                        AppState.song-list-visible-height = self.visible-height;
+                    }
+                    for row in AppState.song-rows : Rectangle {
+                        height: 36px;
+                        border-radius: 6px;
+                        background: row.songs[0].is_playing ? #ffffff10 : (song_touch.has-hover ? #ffffff08 : #00000000);
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 12px;
+                            spacing: 12px;
+                            
+                            // ── Thumbnail ──
+                            Rectangle {
+                                width: 28px; height: 28px; y: (parent.height - self.height) / 2;
+                                border-radius: 4px;
+                                clip: true;
+                                background: #1a1a1a;
+                                Image {
+                                    source: row.songs[0].artwork;
+                                    width: 100%; height: 100%;
+                                    image-fit: cover;
                                 }
                             }
-                            VerticalLayout {
-                                spacing: 0px;
-                                Rectangle {
-                                    height: 36px;
-                                    HorizontalLayout {
-                                        padding-left: 8px;
-                                        padding-right: 12px;
-                                        spacing: 12px;
-                                        Rectangle { width: 26px; } // Spacer for image align
-                                        Text { text: "Title"; color: #888888; font-size: 12px; font-weight: 600; letter-spacing: 0.5px; width: 36%; vertical-alignment: center; overflow: elide; }
-                                        Text { text: "Artist"; color: #888888; font-size: 12px; font-weight: 600; letter-spacing: 0.5px; width: 24%; vertical-alignment: center; overflow: elide; }
-                                        Text { text: "Album"; color: #888888; font-size: 12px; font-weight: 600; letter-spacing: 0.5px; width: 22%; vertical-alignment: center; overflow: elide; }
-                                        Text { text: "Duration"; color: #888888; font-size: 12px; font-weight: 600; letter-spacing: 0.5px; width: 60px; horizontal-alignment: right; vertical-alignment: center; overflow: elide; }
-                                    }
-                                    Rectangle { y: parent.height - 1px; height: 1px; background: #1a1a1a; }
-                                }
-                                song_list_view := ListView {
-                                    viewport-y: AppState.viewport-y-manual-songs;
-                                    changed viewport-y => {
-                                        AppState.viewport-y-manual-songs = self.viewport-y;
-                                        AppState.song-grid-viewport-changed(self.viewport-y / 1px, self.height / 1px);
-                                    }
-                                    changed visible-height => {
-                                        AppState.song-grid-viewport-changed(self.viewport-y / 1px, self.height / 1px);
-                                        AppState.song-list-visible-height = self.visible-height;
-                                    }
-                                    for row in AppState.song-rows : Rectangle {
-                                        height: 36px;
-                                        border-radius: 6px;
-                                        background: row.songs[0].is_playing ? #ffffff10 : (song_touch.has-hover ? #ffffff08 : #00000000);
-                                        HorizontalLayout {
-                                            padding-left: 8px;
-                                            padding-right: 12px;
-                                            spacing: 12px;
-                                            
-                                            // ── Thumbnail ──
-                                            Rectangle {
-                                                width: 28px; height: 28px;
-                                                border-radius: 4px;
-                                                clip: true;
-                                                background: #1a1a1a;
-                                                Image {
-                                                    source: row.songs[0].artwork;
-                                                    width: 100%; height: 100%;
-                                                    image-fit: cover;
-                                                }
-                                            }
 
-                                            Text { text: row.songs[0].title; color: row.songs[0].is_playing ? #ffffff : #e8e8e8; font-size: 13px; font-weight: row.songs[0].is_playing ? 600 : 400; overflow: elide; width: 36%; vertical-alignment: center; }
-                                            Text { text: row.songs[0].artist; color: row.songs[0].is_playing ? #cccccc : #999999; font-size: 13px; overflow: elide; width: 24%; vertical-alignment: center; }
-                                            Text { text: row.songs[0].album; color: row.songs[0].is_playing ? #aaaaaa : #777777; font-size: 13px; overflow: elide; width: 22%; vertical-alignment: center; }
-                                            Text { text: row.songs[0].duration; color: row.songs[0].is_playing ? #aaaaaa : #777777; font-size: 12px; width: 60px; horizontal-alignment: right; vertical-alignment: center; overflow: elide; }
-                                        }
-                                        song_touch := TouchArea {
-                                            clicked => { AppState.play-song(row.songs[0].master_idx); }
-                                            pointer-event(event) => {
-                                                if (event.button == PointerEventButton.right && event.kind == PointerEventKind.up) {
-                                                    AppState.enqueue-song(row.songs[0].master_idx);
-                                                }
-                                            }
-                                        }
-                                    }
+                            Text { text: row.songs[0].title; color: row.songs[0].is_playing ? #ffffff : #e8e8e8; font-size: 13px; font-weight: row.songs[0].is_playing ? 600 : 400; overflow: elide; width: 36%; vertical-alignment: center; }
+                            Text { text: row.songs[0].artist; color: row.songs[0].is_playing ? #cccccc : #999999; font-size: 13px; overflow: elide; width: 24%; vertical-alignment: center; }
+                            Text { text: row.songs[0].album; color: row.songs[0].is_playing ? #aaaaaa : #777777; font-size: 13px; overflow: elide; width: 22%; vertical-alignment: center; }
+                            Text { text: row.songs[0].duration; color: row.songs[0].is_playing ? #aaaaaa : #777777; font-size: 12px; width: 60px; horizontal-alignment: right; vertical-alignment: center; overflow: elide; }
+                        }
+                        song_touch := TouchArea {
+                            clicked => { AppState.play-song(row.songs[0].master_idx); }
+                            pointer-event(event) => {
+                                if (event.button == PointerEventButton.right && event.kind == PointerEventKind.up) {
+                                    AppState.enqueue-song(row.songs[0].master_idx);
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Alphabet Index Navigation ---
+        Rectangle {
+            width: 28px; background: #00000010;
+            VerticalLayout {
+                padding-top: 12px; padding-bottom: 12px;
+                alignment: space-between;
+                for char in ["#", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"] : Rectangle {
+                    height: 14px;
+                    Text {
+                        text: char; font-size: 10px; font-weight: 800;
+                        color: t-area.has-hover ? #ffffff : #ffffff40;
+                        horizontal-alignment: center; vertical-alignment: center;
+                        animate color { duration: 150ms; }
+                    }
+                    t-area := TouchArea {
+                        clicked => { AppState.jump-to-letter(char); }
+                    }
+                }
+            }
+        }
+    }
 }
+
