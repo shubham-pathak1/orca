@@ -130,7 +130,12 @@ impl AppController {
                         window.global::<AppState>().set_now_playing_quality(parts.join(" | ").into());
                     }
 
-                    if let Some(artwork_key) = artwork_path.as_ref() {
+                        self.now_art_cache.clear();
+                        self.now_art_cache_order.clear();
+                        self.blur_cache.clear();
+                        self.blur_cache_order.clear();
+
+                        if let Some(artwork_key) = artwork_path.as_ref() {
                         let cached_now = self.now_art_cache.get(artwork_key).cloned();
                         let cached_blur = self.blur_cache.get(artwork_key).cloned();
 

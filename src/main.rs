@@ -46,8 +46,8 @@ pub(crate) const THUMBNAIL_APPLY_PER_TICK: usize = 32;
 pub(crate) const THUMB_WORKER_COUNT: usize = 4;
 #[allow(dead_code)]
 pub(crate) const BLUR_ART_SIZE: u32 = 240;
-pub(crate) const NOW_ART_CACHE_LIMIT: usize = 2;
-pub(crate) const BLUR_CACHE_LIMIT: usize = 2;
+pub(crate) const NOW_ART_CACHE_LIMIT: usize = 1;
+pub(crate) const BLUR_CACHE_LIMIT: usize = 1;
 const GRID_MODEL_LIMIT: usize = 2000;
 const UI_TICK_INTERVAL_MS: u64 = 16;
 const ARTWORK_TASK_QUEUE_CAPACITY: usize = 96;
