@@ -161,3 +161,50 @@ export component QueueItemCard inherits Rectangle {
         Text { text: root.artist; color: #888888; font-size: 12px; overflow: elide; }
     }
 }
+
+export component PlaylistCard inherits Rectangle {
+    in property <string> name;
+    in property <int> song-count;
+    in property <image> cover;
+    in property <bool> has-cover: cover.width > 0;
+    callback clicked;
+
+    width: 172px;
+    VerticalLayout {
+        spacing: 12px;
+        Rectangle {
+            height: self.width;
+            border-radius: 12px;
+            clip: true;
+            background: #111111;
+
+            if !root.has-cover : Rectangle {
+                width: 100%; height: 100%;
+                background: @linear-gradient(135deg, #222222 0%, #111111 100%);
+                Image {
+                    source: @image-url("../icons/list-music.svg");
+                    width: 48px; height: 48px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    colorize: #444444;
+                }
+            }
+
+            if root.has-cover : Image {
+                source: root.cover;
+                width: 100%; height: 100%;
+                image-fit: ImageFit.cover;
+            }
+
+            Rectangle {
+                width: 100%; height: 100%;
+                background: touch.has-hover ? #ffffff08 : #00000000;
+                animate background { duration: 150ms; }
+            }
+        }
+        Text { text: root.name; color: #ffffff; font-size: 14px; font-weight: 600; horizontal-alignment: center; overflow: elide; }
+        Text { text: "\{root.song-count} songs"; color: #666666; font-size: 12px; horizontal-alignment: center; }
+    }
+
+    touch := TouchArea { clicked => { root.clicked(); } }
+}

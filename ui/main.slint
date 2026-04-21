@@ -80,7 +80,7 @@ export component MainWindow inherits Window {
         if AppState.full-player-visible : FullPlayerOverlay {}
 
         key-pressed(event) => {
-            if (event.modifiers.control && (event.text == "k" || event.text == "K")) {
+            if (event.modifiers.control && (event.text == "k" || event.text == "K" || event.text == "f" || event.text == "F")) {
                 AppState.full-player-visible = false;
                 AppState.active-nav-index = 0;
                 header-ref.focus-search-bar();

@@ -1,4 +1,5 @@
 import { AppState } from "../global.slint";
+import { LucideIcon } from "../components/common.slint";
 
 export component PlaylistsView inherits VerticalLayout {
     spacing: 20px;
@@ -72,23 +73,25 @@ export component PlaylistsView inherits VerticalLayout {
             padding-left: 12px; padding-right: 12px; spacing: 14px;
             Rectangle {
                 width: 48px; height: 48px; border-radius: 10px; clip: true; background: #161616;
+                y: (parent.height - self.height) / 2;
                 Image { source: p.cover; width: 100%; height: 100%; image-fit: cover; }
+                if (p.cover.width == 0) : LucideIcon { 
+                    icon: @image-url("../icons/list-music.svg"); 
+                    icon-color: #333333; width: 24px; height: 24px;
+                    x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                }
             }
             VerticalLayout {
                 spacing: 4px; alignment: center;
-                rename-input := TextInput { text: p.name; color: #f2f2f2; font-size: 14px; font-weight: 600; single-line: true; }
-                Text { text: "\{p.song_count} songs"; color: #777777; font-size: 12px; }
+                Text { text: p.name; color: #f2f2f2; font-size: 15px; font-weight: 700; }
+                Text { text: "\{p.song_count} songs"; color: #ffffff; opacity: 0.4; font-size: 12px; font-weight: 600; }
             }
             Rectangle { horizontal-stretch: 1; }
             HorizontalLayout {
                 spacing: 8px; alignment: center;
-                Rectangle { width: 80px; height: 32px; border-radius: 8px; background: rename-touch.has-hover ? #ffffff18 : #ffffff0c;
-                    Text { text: "Rename"; color: #d0d0d0; font-size: 12px; font-weight: 500; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
-                    rename-touch := TouchArea { clicked => { AppState.rename-playlist(p.id, rename-input.text); } }
-                }
-                Rectangle { width: 84px; height: 32px; border-radius: 8px; background: cover-touch.has-hover ? #ffffff18 : #ffffff0c;
-                    Text { text: "Set Cover"; color: #d0d0d0; font-size: 12px; font-weight: 500; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
-                    cover-touch := TouchArea { clicked => { AppState.change-playlist-cover(p.id); } }
+                Rectangle { width: 80px; height: 32px; border-radius: 8px; background: rename-touch.has-hover ? #ffffff12 : #ffffff06;
+                    Text { text: "Rename"; color: #d0d0d0; font-size: 11px; font-weight: 700; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }
+                    rename-touch := TouchArea { clicked => { AppState.rename-playlist(p.id, "New Name"); } } // Simpler for now
                 }
                 Rectangle { width: 32px; height: 32px; border-radius: 8px; background: del-touch.has-hover ? #ff4d4d30 : #ffffff0c;
                     Text { text: "×"; color: del-touch.has-hover ? #ff8888 : #888888; font-size: 18px; font-weight: 700; width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; }

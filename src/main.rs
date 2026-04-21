@@ -250,13 +250,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tray_menu = Menu::new();
     let quit_item = MenuItem::new("Quit Orca", true, None);
     let show_hide_item = MenuItem::new("Show/Hide Window", true, None);
+    let tray_play_pause = MenuItem::new("Play / Pause", true, None);
+    let tray_next = MenuItem::new("Next Track", true, None);
+    let tray_prev = MenuItem::new("Previous Track", true, None);
+
     let _ = tray_menu.append_items(&[
         &show_hide_item,
+        &PredefinedMenuItem::separator(),
+        &tray_play_pause,
+        &tray_prev,
+        &tray_next,
         &PredefinedMenuItem::separator(),
         &quit_item,
     ]);
 
-    // Icon loading for Official Orca Branding
+    // ... [Icon loading kept as is] ...
+    
+    // [tray_builder init kept as is]
     let icon_path = concat!(env!("CARGO_MANIFEST_DIR"), "/public/orca_logo.png");
     let icon = if let Ok(img) = image::open(icon_path) {
         let rgba = img.to_rgba8();
@@ -276,6 +286,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let tray_icon = tray_builder.build()?;
 
+    // ... [Hotkeys kept as is] ...
     let hotkey_manager = GlobalHotKeyManager::new()?;
     let hk_show_hide = HotKey::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyB);
     let hk_monochrome = HotKey::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyM);
@@ -352,12 +363,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         } else if id == id_prev {
                             let win_ref = window_handle_clone.borrow();
                             if let Some(window) = win_ref.as_ref() {
-                                state_clone.borrow_mut().play_previous_manual(&window);
+                                state_clone.borrow_mut().play_previous_manual(window);
                             }
                         } else if id == id_next {
                             let win_ref = window_handle_clone.borrow();
                             if let Some(window) = win_ref.as_ref() {
-                                state_clone.borrow_mut().play_next_manual(&window);
+                                state_clone.borrow_mut().play_next_manual(window);
                             }
                         }
                     }
@@ -387,9 +398,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 if let Ok(event) = MenuEvent::receiver().try_recv() {
-                    if event.id == quit_item.id() {
+                    let id = event.id;
+                    if id == quit_item.id() {
                         std::process::exit(0);
-                    } else if event.id == show_hide_item.id() {
+                    } else if id == show_hide_item.id() {
                         let mut win_opt = window_handle_clone.borrow_mut();
                         if let Some(window) = win_opt.take() {
                             state_clone.borrow_mut().dehydrate();
@@ -402,6 +414,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     *win_opt = Some(new_win);
                                 }
                             }
+                        }
+                    } else if id == tray_play_pause.id() {
+                        let win_ref = window_handle_clone.borrow();
+                        let mut s = state_clone.borrow_mut();
+                        if let Some(win) = win_ref.as_ref() {
+                            s.toggle_play_pause(win);
+                        } else {
+                            // If window is hidden, we just send the audio command directly via a headless helper
+                            s.toggle_play_pause_headless();
+                        }
+                    } else if id == tray_next.id() {
+                        let win_ref = window_handle_clone.borrow();
+                        let mut s = state_clone.borrow_mut();
+                        if let Some(win) = win_ref.as_ref() {
+                            s.play_next_manual(win);
+                        } else {
+                            s.play_next_headless();
+                        }
+                    } else if id == tray_prev.id() {
+                        let win_ref = window_handle_clone.borrow();
+                        let mut s = state_clone.borrow_mut();
+                        if let Some(win) = win_ref.as_ref() {
+                            s.play_previous_manual(win);
+                        } else {
+                            s.play_previous_headless();
                         }
                     }
                 }

@@ -9,9 +9,11 @@ export component FullPlayerOverlay inherits Rectangle {
     property <int> active-index: AppState.active-lyrics-index;
     property <length> lyrics-target-y: 0px;
     property <length> scroll-accumulator: 0px;
-    
-    // CALIBRATION: Move spotlight higher (12% from the top)
-    property <length> spotlight-y: root.height * 0.12;
+    // PURE SYMMETRY: Both Art and Lyrics now anchor to this exact vertical offset
+    property <length> billboard-y: 60px; 
+    property <bool> swipe-locked: false;
+    property <bool> manual-scroll-active: false;
+    property <int> manual-scroll-reset-ticks: 0;
 
     // --- Background Layer ---
     Rectangle {
@@ -29,13 +31,19 @@ export component FullPlayerOverlay inherits Rectangle {
         TouchArea {
             width: 100%; height: 100%;
             scroll-event(evt) => {
-                if (abs(evt.delta-x) > 2px) {
+                if (abs(evt.delta-x / 1px) > 2.5) {
                     root.scroll-accumulator += evt.delta-x;
-                    if (abs(root.scroll-accumulator) > 300px) {
+                    if (abs(root.scroll-accumulator / 1px) > 350.0 && !root.swipe-locked) {
                         if (root.scroll-accumulator > 0px) { AppState.previous-song(); } else { AppState.next-song(); }
                         root.scroll-accumulator = 0px;
+                        root.swipe-locked = true; // LOCK SENSITIVITY
                     }
                     return EventResult.accept;
+                }
+                // RESET LOCK when swipe stops or reverses
+                if (abs(evt.delta-x / 1px) < 0.5) {
+                    root.swipe-locked = false;
+                    root.scroll-accumulator = 0px;
                 }
                 return EventResult.reject;
             }
@@ -130,7 +138,7 @@ export component FullPlayerOverlay inherits Rectangle {
 
             // Mode 2: Billboard Lyrics Mode
             if (AppState.full-player-lyrics-visible) : HorizontalLayout {
-                spacing: 80px; padding-left: 40px; padding-right: 40px; width: 100%;
+                spacing: 80px; padding-left: 40px; padding-right: 40px; width: 100%; alignment: center;
                 
                 // Billboard Left
                 VerticalLayout {
@@ -179,42 +187,87 @@ export component FullPlayerOverlay inherits Rectangle {
                     }
                 }
 
-                // Billboard Right (Lyrics)
-                lyrics-scroll := ScrollView {
+                // Billboard Right (Lyrics Viewport)
+                Rectangle {
                     horizontal-stretch: 1;
-                    vertical-scrollbar-policy: always-off;
-                    viewport-y <=> root.lyrics-target-y;
+                    clip: true; // PURE ISOLATION
+                    
+                    lyrics-scroll := ScrollView {
+                        width: 100%; height: 100%;
+                        vertical-scrollbar-policy: always-off;
+                        viewport-y <=> root.lyrics-target-y;
 
-                    property <int> local-active-index: root.active-index;
-                    changed local-active-index => {
-                        root.lyrics-target-y = -(self.local-active-index * 72) * 1px;
-                    }
-                    
-                    animate viewport-y { duration: 600ms; easing: cubic-bezier(0.16, 1, 0.3, 1); }
-                    
-                    VerticalLayout {
-                        // SPOTLIGHT FIX: High-Skyline position (12%)
-                        padding-top: root.spotlight-y - 36px; 
-                        padding-bottom: root.height / 2;
-                        spacing: 20px;
+                        property <int> local-active-index: root.active-index;
+                        changed local-active-index => {
+                            if (!root.manual-scroll-active) {
+                                // High-Speed high-fidelity sync
+                                root.lyrics-target-y = -(self.local-active-index * 76) * 1px;
+                            } else {
+                                // On song change or next line, snap back immediately to keep in sync
+                                root.manual-scroll-active = false;
+                                root.lyrics-target-y = -(self.local-active-index * 76) * 1px;
+                            }
+                        }
                         
-                        if AppState.lyric-lines.length > 0 : VerticalLayout {
-                            for line[idx] in AppState.lyric-lines : Rectangle {
-                                height: 52px;
-                                Text {
-                                    text: line; wrap: word-wrap;
-                                    color: (idx == AppState.active-lyrics-index) ? #ffffff : #ffffff33;
-                                    font-size: (idx == AppState.active-lyrics-index) ? 36px : 32px;
-                                    font-weight: (idx == AppState.active-lyrics-index) ? 800 : 700;
-                                    horizontal-alignment: left; width: parent.width; vertical-alignment: center;
+                        property <bool> local-lyrics-visible: AppState.full-player-lyrics-visible;
+                        changed local-lyrics-visible => {
+                            // RESET manual scroll when showing/hiding lyrics
+                            root.manual-scroll-active = false;
+                            root.lyrics-target-y = -(root.active-index * 76) * 1px;
+                        }
+                        
+                        animate viewport-y { duration: 1200ms; easing: cubic-bezier(0.16, 1, 0.3, 1); }
+                        
+                        VerticalLayout {
+                            // MIRROR SYMMETRY: Center the lyrics bundle just like the ART bundle
+                            alignment: center;
+                            Rectangle {
+                                // This rectangle represents theArt-Side bundle height (Art + Meta + Controls)
+                                // Standard bundle height is Art(380) + Spacing(24) + Meta(44) + Spacing(24) + Seek(24) + Spacing(24) + Controls(80) = ~600px
+                                // We want the Viewport's LINE-0 to match ART-TOP.
+                                height: 600px;
+                                VerticalLayout {
+                                    y: 0; // Anchored to the top of the bundle (Art Top)
+                                    padding-bottom: parent.height / 2;
+                                    spacing: 0px; 
+                                    
+                                    if AppState.lyric-lines.length > 0 : VerticalLayout {
+                                        for line[idx] in AppState.lyric-lines : Rectangle {
+                                            height: 76px;
+                                            Text {
+                                                text: line; wrap: word-wrap;
+                                                color: (idx == AppState.active-lyrics-index) ? #ffffff : #ffffff33;
+                                                font-size: 32px;
+                                                font-weight: (idx == AppState.active-lyrics-index) ? 800 : 700;
+                                                horizontal-alignment: left; width: parent.width; vertical-alignment: center;
+                                                animate color { duration: 550ms; }
+                                            }
+                                        }
+                                    }
+                                    if AppState.lyric-lines.length == 0 : VerticalLayout {
+                                        padding-top: 40px;
+                                        Text { 
+                                            text: AppState.lyrics-text; color: #ffffff; font-size: 32px; 
+                                            font-weight: 700; wrap: word-wrap; horizontal-alignment: left; 
+                                        }
+                                    }
                                 }
                             }
                         }
-                        if AppState.lyric-lines.length == 0 : VerticalLayout {
-                            padding-top: 40px;
-                            Text { 
-                                text: AppState.lyrics-text; color: #ffffff; font-size: 32px; 
-                                font-weight: 700; wrap: word-wrap; horizontal-alignment: left; 
+                    }
+                    
+                    // Manual Scroll Detection
+                    TouchArea {
+                        width: 100%; height: 100%;
+                        scroll-event(evt) => {
+                            root.manual-scroll-active = true;
+                            // Update viewport-y manually but don't fight the binding
+                            root.lyrics-target-y += evt.delta-y;
+                            return EventResult.reject; // Allow ScrollView to still move
+                        }
+                        pointer-event(evt) => {
+                            if (evt.kind == PointerEventKind.down) {
+                                root.manual-scroll-active = true;
                             }
                         }
                     }
