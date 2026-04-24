@@ -82,6 +82,15 @@ Orca is built using several powerful open-source projects:
    ```
 
 2. Run the application:
+
+   **For development/testing:**
+   ```bash
+   cargo run
+   ```
+   > [!WARNING]
+   > Development builds (`cargo run`) are unoptimized. Scanning large music libraries will be significantly slower.
+   
+   **For optimized performance (Recommended):**
    ```bash
    cargo run --release
    ```
