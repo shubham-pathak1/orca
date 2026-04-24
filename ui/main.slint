@@ -148,11 +148,12 @@ export component MainWindow inherits Window {
                 header-ref.focus-search-bar();
                 return accept;
             }
-            // Header focus check currently requires a way to reach the search bar ID
             if AppState.search-focused { return reject; }
             if event.text == Key.F11 { AppState.toggle-fullscreen(); return accept; }
             if event.text == " " { AppState.toggle-play-pause(); return accept; }
             return reject;
         }
     }
+
+    init => { focus-scope.focus(); }
 }
