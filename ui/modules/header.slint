@@ -12,6 +12,7 @@ export component Header inherits HorizontalLayout {
         visible: AppState.active-nav-index == 0;
         text <=> AppState.search-text;
         edited(t) => { AppState.apply-search(t); }
+        focus-changed(focused) => { AppState.search-focused = focused; }
     }
 
     Rectangle {

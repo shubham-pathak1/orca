@@ -62,6 +62,16 @@ pub fn wire_callbacks(window: &MainWindow, state: Rc<RefCell<AppController>>) {
         }
     });
 
+    window.global::<AppState>().on_seek_to_lyric_index({
+        let state = state.clone();
+        let weak = weak.clone();
+        move |index| {
+            if let Some(window) = weak.upgrade() {
+                state.borrow_mut().seek_to_lyric_index(index as usize);
+            }
+        }
+    });
+
     window.global::<AppState>().on_toggle_shuffle({
         let weak = weak.clone();
         let state = state.clone();

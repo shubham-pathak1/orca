@@ -223,6 +223,18 @@ impl AppController {
         }
     }
 
+    pub(crate) fn seek_to_lyric_index(&mut self, index: usize) {
+        if let Some((timestamp_ms, _)) = self.parsed_lyrics.get(index) {
+            let _ = self
+                .audio_tx
+                .send(crate::AudioCommand::Seek(std::time::Duration::from_millis(*timestamp_ms)));
+
+            if let Ok(mut state) = self.playback_state.lock() {
+                state.position_ms = *timestamp_ms;
+            }
+        }
+    }
+
     pub(crate) fn toggle_shuffle(&mut self, window: &MainWindow) {
         self.shuffle_enabled = !self.shuffle_enabled;
         window.global::<AppState>().set_shuffle_enabled(self.shuffle_enabled);

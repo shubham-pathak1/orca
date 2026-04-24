@@ -24,9 +24,10 @@ export component FullPlayerOverlay inherits Rectangle {
         }
         Image { 
             source: AppState.now-artwork-blurred; width: 100%; height: 100%; image-fit: cover; 
-            opacity: AppState.blur-enabled ? 0.9 : 0.0; 
+            opacity: AppState.blur-enabled ? 0.85 : 0.0; 
         }
-        Rectangle { width: 100%; height: 100%; background: AppState.blur-enabled ? #0606063a : #0a0a0af0; }
+        // Stronger dark overlay to ensure white text/icons are ALWAYS legible against pure white album art
+        Rectangle { width: 100%; height: 100%; background: AppState.blur-enabled ? #0000007a : #0a0a0af0; }
         
         TouchArea {
             width: 100%; height: 100%;
@@ -83,7 +84,8 @@ export component FullPlayerOverlay inherits Rectangle {
             VerticalLayout {
                 x: parent.target-art-x;
                 y: skyline-y;
-                width: art-width; spacing: 20px; // Tightened from 24px
+                width: art-width; spacing: 20px;
+                alignment: start;
                 
                 // Artwork Billboard (380x380)
                 HorizontalLayout {
@@ -111,10 +113,6 @@ export component FullPlayerOverlay inherits Rectangle {
                         Text { 
                             text: AppState.now-artist; color: #ffffff; opacity: 0.7; font-size: 17px; font-weight: 600; 
                             horizontal-alignment: center; letter-spacing: 0.3px; 
-                        }
-                        
-                        if (AppState.now-playing-quality != "") : Text { 
-                            text: AppState.now-playing-quality; color: #ffffff; opacity: 0.55; font-size: 11px; font-weight: 800; vertical-alignment: center; 
                         }
                     }
                 }
@@ -223,6 +221,27 @@ export component FullPlayerOverlay inherits Rectangle {
                                     horizontal-alignment: left; width: parent.width; vertical-alignment: center;
                                     animate color { duration: 550ms; }
                                 }
+                                line-touch := TouchArea {
+                                    clicked => { AppState.seek-to-lyric-index(idx); }
+                                    mouse-cursor: pointer;
+                                    
+                                    // Manual scroll detection per line to prevent stealing clicks
+                                    pointer-event(evt) => {
+                                        if (evt.kind == PointerEventKind.down) { root.manual-scroll-active = true; }
+                                    }
+                                    scroll-event(evt) => {
+                                        root.manual-scroll-active = true;
+                                        root.lyrics-target-y += evt.delta-y;
+                                        return EventResult.reject; 
+                                    }
+                                }
+                                // Hover effect
+                                Rectangle {
+                                    width: parent.width; height: parent.height;
+                                    background: #ffffff;
+                                    opacity: line-touch.has-hover ? 0.05 : 0.0;
+                                    border-radius: 8px;
+                                }
                             }
                         }
                         if (AppState.lyric-lines.length == 0) : VerticalLayout {
@@ -235,9 +254,11 @@ export component FullPlayerOverlay inherits Rectangle {
                     }
                 }
                 
-                // Manual Scroll Detection
+                // Manual Scroll Detection for empty areas
                 TouchArea {
                     width: 100%; height: 100%;
+                    // Put it in background so it doesn't block line clicks
+                    z: -1;
                     scroll-event(evt) => {
                         root.manual-scroll-active = true;
                         root.lyrics-target-y += evt.delta-y;
@@ -255,13 +276,34 @@ export component FullPlayerOverlay inherits Rectangle {
         // Footer
         HorizontalLayout {
             height: 44px;
+            
             Rectangle { horizontal-stretch: 1; }
-            Rectangle {
-                width: 44px; height: 44px; border-radius: 12px;
-                background: AppState.full-player-lyrics-visible ? #ffffff25 : #ffffff10;
-                LucideIcon { icon: AppState.icon-list-music; icon-color: #ffffff; width: 20px; height: 20px; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
-                TouchArea { clicked => { AppState.full-player-lyrics-visible = !AppState.full-player-lyrics-visible; } }
+            
+            // Bottom Right Lyrics Toggle
+            VerticalLayout {
+                alignment: end;
+                Rectangle {
+                    width: 44px; height: 44px; border-radius: 12px;
+                    background: AppState.full-player-lyrics-visible ? #ffffff25 : #ffffff10;
+                    LucideIcon { icon: AppState.icon-list-music; icon-color: #ffffff; width: 20px; height: 20px; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+                    TouchArea { clicked => { AppState.full-player-lyrics-visible = !AppState.full-player-lyrics-visible; } }
+                }
             }
+        }
+    }
+
+    // --- Absolute Bottom Left Quality Indicator ---
+    if (AppState.now-playing-quality != "") : Rectangle {
+        x: 24px;
+        y: parent.height - 32px;
+        width: 200px;
+        height: 20px;
+        Text { 
+            text: AppState.now-playing-quality; 
+            color: #ffffff; opacity: 0.35; font-size: 10px; font-weight: 800; 
+            letter-spacing: 1px;
+            horizontal-alignment: left;
+            vertical-alignment: center;
         }
     }
 }
