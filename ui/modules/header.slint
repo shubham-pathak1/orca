@@ -144,14 +144,4 @@ export component Header inherits HorizontalLayout {
         }
     }
 
-    // --- Header Stats (Restored from Svelte) ---
-    if (AppState.active-nav-index == 0) : VerticalLayout {
-        alignment: center;
-        padding-left: 8px;
-        Text {
-            text: AppState.song-rows.length + " Tracks";
-            color: #ffffff; opacity: 0.4; font-size: 11px; font-weight: 700;
-            letter-spacing: 0.5px;
-        }
-    }
 }

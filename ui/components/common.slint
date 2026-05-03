@@ -18,26 +18,16 @@ export component SidebarItem inherits Rectangle {
     in property <bool> active: false;
     callback clicked;
 
+    width: 48px;
     height: 48px;
-    border-radius: 8px;
-    background: active ? #1a1a1a : touch.has-hover ? #121212 : #00000000;
+    border-radius: 12px;
+    background: active ? #ffffff15 : touch.has-hover ? #ffffff08 : #00000000;
 
-    HorizontalLayout {
-        padding-left: 16px;
-        spacing: 12px;
-        alignment: start;
-        LucideIcon {
-            icon: root.icon;
-            icon-color: active ? #ffffff : #a3a3a3;
-            y: (parent.height - self.height) / 2;
-        }
-        Text {
-            text: root.text;
-            color: active ? #ffffff : #d1d1d1;
-            font-size: 14px;
-            font-weight: active ? 600 : 400;
-            vertical-alignment: center;
-        }
+    LucideIcon {
+        icon: root.icon;
+        icon-color: active ? #ffffff : #a3a3a3;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
     }
 
     touch := TouchArea {

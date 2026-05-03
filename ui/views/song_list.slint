@@ -9,12 +9,12 @@ export component SongListView inherits Rectangle {
             VerticalLayout {
                 spacing: 0px;
                 Rectangle {
-                    height: 36px;
+                    height: 48px;
                     HorizontalLayout {
                         padding-left: 8px;
                         padding-right: 12px;
                         spacing: 12px;
-                        Rectangle { width: 26px; } // Spacer for image align
+                        Rectangle { width: 36px; } // Spacer for image align
                         Text { text: "Title"; color: #888888; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; width: 36%; vertical-alignment: center; overflow: elide; }
                         Text { text: "Artist"; color: #888888; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; width: 24%; vertical-alignment: center; overflow: elide; }
                         Text { text: "Album"; color: #888888; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; width: 22%; vertical-alignment: center; overflow: elide; }
@@ -33,7 +33,7 @@ export component SongListView inherits Rectangle {
                         AppState.song-list-visible-height = self.visible-height;
                     }
                     for row in AppState.song-rows : Rectangle {
-                        height: 36px;
+                        height: 48px;
                         border-radius: 6px;
                         background: row.songs[0].is_playing ? #ffffff10 : (song_touch.has-hover ? #ffffff08 : #00000000);
                         HorizontalLayout {
@@ -43,7 +43,7 @@ export component SongListView inherits Rectangle {
                             
                             // ── Thumbnail ──
                             Rectangle {
-                                width: 28px; height: 28px; y: (parent.height - self.height) / 2;
+                                width: 36px; height: 36px; y: (parent.height - self.height) / 2;
                                 border-radius: 4px;
                                 clip: true;
                                 background: #1a1a1a;

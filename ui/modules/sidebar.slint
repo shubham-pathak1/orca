@@ -2,19 +2,18 @@ import { AppState } from "../global.slint";
 import { SidebarItem } from "../components/common.slint";
 
 export component Sidebar inherits Rectangle {
-    width: 180px;
+    width: 72px;
     background: #00000000;
     VerticalLayout {
-        padding: 16px; spacing: 4px;
+        padding: 12px; spacing: 12px;
         
         // ── Branding ──
-        if (AppState.active-nav-index != 4) : VerticalLayout {
+        VerticalLayout {
             padding-bottom: 24px;
             HorizontalLayout {
-                spacing: 12px;
-                alignment: start;
+                alignment: center;
                 Rectangle {
-                    width: 24px; height: 24px;
+                    width: 28px; height: 28px;
                     Image {
                         source: AppState.branding-logo;
                         width: 100%; height: 100%;
@@ -22,17 +21,9 @@ export component Sidebar inherits Rectangle {
                         colorize: #ffffff;
                     }
                 }
-                Text {
-                    text: "Orca";
-                    color: #ffffff;
-                    font-size: 18px;
-                    font-weight: 800;
-                    vertical-alignment: center;
-                    letter-spacing: -0.2px;
-                }
             }
         }
-        SidebarItem { icon: AppState.icon-music; text: "Songs"; active: AppState.active-nav-index == 0; clicked => { AppState.active-nav-index = 0; } }
+        SidebarItem { icon: AppState.icon-home; text: "Home"; active: AppState.active-nav-index == 0; clicked => { AppState.active-nav-index = 0; } }
         SidebarItem { icon: AppState.icon-users; text: "Artists"; active: AppState.active-nav-index == 1; clicked => { AppState.active-nav-index = 1; } }
         SidebarItem { icon: AppState.icon-disc-3; text: "Albums"; active: AppState.active-nav-index == 2; clicked => { AppState.active-nav-index = 2; } }
         SidebarItem { icon: AppState.icon-list-music; text: "Playlists"; active: AppState.active-nav-index == 3; clicked => { AppState.active-nav-index = 3; } }
