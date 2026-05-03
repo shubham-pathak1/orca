@@ -122,7 +122,7 @@ export component Header inherits HorizontalLayout {
 
     Rectangle { horizontal-stretch: 1; }
 
-    Rectangle {
+    if !AppState.bottom-player-mode : Rectangle {
         width: 36px; height: 36px;
         IconButton { icon: AppState.icon-list-music; clicked => { AppState.queue-visible = !AppState.queue-visible; } }
         if AppState.queue-items.length > 0 : Rectangle {

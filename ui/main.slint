@@ -4,6 +4,7 @@ export { AppState, SongRow, SongRowData, ArtistRow, ArtistRowData, AlbumRow, Alb
 import { ScrollView } from "std-widgets.slint";
 import { Sidebar } from "modules/sidebar.slint";
 import { PlayerBar } from "modules/player_bar.slint";
+import { BottomPlayer } from "modules/bottom_player.slint";
 import { QueuePanel } from "modules/queue_panel.slint";
 import { Header } from "modules/header.slint";
 import { FullPlayerOverlay } from "modules/full_player.slint";
@@ -130,12 +131,14 @@ export component MainWindow inherits Window {
                                 }
                             }
                         }
+                        
+                        if AppState.bottom-player-mode : BottomPlayer {}
                     }
                 }
     
                 if AppState.queue-visible : QueuePanel {}
     
-                PlayerBar {}
+                if !AppState.bottom-player-mode : PlayerBar {}
             }
         }
 

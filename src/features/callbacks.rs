@@ -208,7 +208,22 @@ pub fn wire_callbacks(window: &MainWindow, state: Rc<RefCell<AppController>>) {
             if let Some(window) = weak.upgrade() {
                 state
                     .borrow_mut()
-                    .enqueue_song_by_row(index as usize, &window);
+                    .enqueue_song_by_master_idx(index as usize, &window);
+            }
+        }
+    });
+
+    window.global::<AppState>().on_play_queue_item({
+        let weak = weak.clone();
+        let state = state.clone();
+        move |index| {
+            if index < 0 {
+                return;
+            }
+            if let Some(window) = weak.upgrade() {
+                state
+                    .borrow_mut()
+                    .play_queue_item(index as usize, &window);
             }
         }
     });
@@ -241,6 +256,16 @@ pub fn wire_callbacks(window: &MainWindow, state: Rc<RefCell<AppController>>) {
         move |enabled| {
             if let Some(window) = weak.upgrade() {
                 state.borrow_mut().set_dynamic_theme_enabled(enabled, &window);
+            }
+        }
+    });
+
+    window.global::<AppState>().on_set_bottom_player_mode({
+        let weak = weak.clone();
+        let state = state.clone();
+        move |enabled| {
+            if let Some(window) = weak.upgrade() {
+                state.borrow_mut().set_bottom_player_mode(enabled, &window);
             }
         }
     });

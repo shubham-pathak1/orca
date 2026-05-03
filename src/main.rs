@@ -137,6 +137,7 @@ struct AppController {
     eq_enabled: bool,
     app_blur_enabled: bool,
     dynamic_theme_enabled: bool,
+    bottom_player_mode: bool,
     monochrome_mode: bool,
     #[allow(dead_code)]
     compact_library_mode: bool,

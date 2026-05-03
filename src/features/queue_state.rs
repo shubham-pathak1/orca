@@ -12,10 +12,12 @@ impl AppController {
         let rows = self
             .queue
             .iter()
-            .filter_map(|idx| self.songs.get(*idx))
-            .map(|entry| QueueRow {
+            .filter_map(|idx| self.songs.get(*idx).map(|entry| (*idx, entry)))
+            .map(|(idx, entry)| QueueRow {
                 title: entry.song.title.clone().into(),
                 artist: entry.song.artist.clone().into(),
+                duration: crate::features::app_utils::format_duration(entry.song.duration as u64).into(),
+                artwork: self.representative_artwork(idx),
             })
             .collect::<Vec<_>>();
         let model: ModelRc<QueueRow> = Rc::new(VecModel::from(rows)).into();
@@ -37,10 +39,11 @@ impl AppController {
         }
     }
 
-    pub(crate) fn enqueue_song_by_row(&mut self, row_index: usize, window: &MainWindow) {
-        let Some(song_idx) = self.displayed_indices.get(row_index).copied() else {
+    pub(crate) fn enqueue_song_by_master_idx(&mut self, master_idx: usize, window: &MainWindow) {
+        if master_idx >= self.songs.len() {
             return;
-        };
+        }
+        let song_idx = master_idx;
         self.queue.push_back(song_idx);
         self.refresh_queue_ui(window);
         if let Some(entry) = self.songs.get(song_idx) {
@@ -63,5 +66,15 @@ impl AppController {
             self.refresh_queue_ui(window);
         }
         next
+    }
+
+    pub(crate) fn play_queue_item(&mut self, index: usize, window: &MainWindow) {
+        if index < self.queue.len() {
+            // Remove from queue
+            if let Some(song_idx) = self.queue.remove(index) {
+                self.refresh_queue_ui(window);
+                self.play_song_index(song_idx, window);
+            }
+        }
     }
 }

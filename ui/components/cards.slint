@@ -150,16 +150,28 @@ export component AlbumCard inherits Rectangle {
 export component QueueItemCard inherits Rectangle {
     in property <string> title;
     in property <string> artist;
+    in property <string> duration;
+    in property <image> artwork;
+    callback clicked;
 
     height: 56px;
-    background: #141414;
+    background: touch.has-hover ? #ffffff0a : #141414;
     border-radius: 8px;
 
-    VerticalLayout {
-        padding: 12px;
-        Text { text: root.title; color: #ffffff; font-size: 14px; font-weight: 600; overflow: elide; }
-        Text { text: root.artist; color: #888888; font-size: 12px; overflow: elide; }
+    HorizontalLayout {
+        padding: 8px; spacing: 12px;
+        Rectangle {
+            width: 40px; height: 40px; border-radius: 4px; clip: true; background: #222;
+            Image { source: root.artwork; width: 100%; height: 100%; image-fit: cover; }
+        }
+        VerticalLayout {
+            vertical-stretch: 1; alignment: center;
+            Text { text: root.title; color: #ffffff; font-size: 14px; font-weight: 600; overflow: elide; }
+            Text { text: root.artist; color: #888888; font-size: 12px; overflow: elide; }
+        }
+        Text { text: root.duration; color: #666666; font-size: 12px; vertical-alignment: center; }
     }
+    touch := TouchArea { clicked => { root.clicked(); } }
 }
 
 export component PlaylistCard inherits Rectangle {

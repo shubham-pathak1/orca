@@ -296,6 +296,7 @@ impl AppController {
             eq_enabled: false,
             app_blur_enabled: true,
             dynamic_theme_enabled: true,
+            bottom_player_mode: false,
             monochrome_mode: false,
             compact_library_mode: false,
             sort_mode: crate::LibrarySortMode::Title,
@@ -378,6 +379,10 @@ impl AppController {
             self.dynamic_theme_enabled =
                 saved_dynamic_theme == "1" || saved_dynamic_theme.eq_ignore_ascii_case("true");
         }
+        if let Some(saved_bottom_player) = orca_core::db::get_setting(&self.db_conn, "bottom_player_mode") {
+            self.bottom_player_mode =
+                saved_bottom_player == "1" || saved_bottom_player.eq_ignore_ascii_case("true");
+        }
         if let Some(saved_monochrome) = orca_core::db::get_setting(&self.db_conn, "orca_monochrome_mode") {
             self.monochrome_mode =
                 saved_monochrome == "1" || saved_monochrome.eq_ignore_ascii_case("true");
@@ -427,6 +432,11 @@ impl AppController {
             &self.db_conn,
             "dynamic_theme_enabled",
             if self.dynamic_theme_enabled { "1" } else { "0" },
+        );
+        let _ = orca_core::db::set_setting(
+            &self.db_conn,
+            "bottom_player_mode",
+            if self.bottom_player_mode { "1" } else { "0" },
         );
         let _ = orca_core::db::set_setting(
             &self.db_conn,
@@ -482,6 +492,7 @@ impl AppController {
         window.global::<AppState>().set_is_playing(is_playing);
         window.global::<AppState>().set_blur_enabled(self.app_blur_enabled);
         window.global::<AppState>().set_dynamic_theme_enabled(self.dynamic_theme_enabled);
+        window.global::<AppState>().set_bottom_player_mode(self.bottom_player_mode);
         window.global::<AppState>().set_monochrome_mode(self.monochrome_mode);
         window.global::<AppState>().set_compact_library_mode(self.compact_library_mode);
         window.global::<AppState>().set_sort_mode(self.sort_mode as i32);
@@ -568,6 +579,13 @@ impl AppController {
         window.global::<AppState>().set_dynamic_theme_enabled(enabled);
         self.persist_preferences();
         self.update_now_playing(window);
+    }
+
+    pub(crate) fn set_bottom_player_mode(&mut self, enabled: bool, window: &MainWindow) {
+        if self.bottom_player_mode == enabled { return; }
+        self.bottom_player_mode = enabled;
+        window.global::<AppState>().set_bottom_player_mode(enabled);
+        self.persist_preferences();
     }
 
     pub(crate) fn set_monochrome_mode(&mut self, enabled: bool, window: &MainWindow) {

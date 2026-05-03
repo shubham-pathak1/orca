@@ -19,9 +19,12 @@ export component QueuePanel inherits Rectangle {
         ScrollView {
             VerticalLayout {
                 spacing: 8px;
-                for item in AppState.queue-items : QueueItemCard {
+                for item[i] in AppState.queue-items : QueueItemCard {
                     title: item.title;
                     artist: item.artist;
+                    duration: item.duration;
+                    artwork: item.artwork;
+                    clicked => { AppState.play-queue-item(i); }
                 }
             }
         }

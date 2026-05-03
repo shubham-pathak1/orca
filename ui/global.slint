@@ -44,6 +44,8 @@ export struct PlaylistRow {
 export struct QueueRow {
     title: string,
     artist: string,
+    duration: string,
+    artwork: image,
 }
 
 export global AppState {
@@ -116,6 +118,7 @@ export global AppState {
     in_out property <color> accent-color: #ffffff;
     in_out property <bool> is-fullscreen: false;
     in_out property <bool> dynamic-theme-enabled: true;
+    in_out property <bool> bottom-player-mode: false;
 
     
     // Sync properties for backend
@@ -146,12 +149,14 @@ export global AppState {
     callback enqueue-selected();
     callback clear-queue();
     callback enqueue-song(int);
+    callback play-queue-item(index: int);
     callback song-grid-viewport-changed(viewport-y: float, visible-height: float);
     callback toggle-fullscreen();
     callback set-blur-enabled(enabled: bool);
     callback set-compact-library-mode(enabled: bool);
     callback set-monochrome-mode(enabled: bool);
     callback set-dynamic-theme-enabled(enabled: bool);
+    callback set-bottom-player-mode(enabled: bool);
     callback set-sort-mode(mode: int);
     callback remove-scan-root(root: string);
     callback create-playlist(name: string);

@@ -57,6 +57,22 @@ export component SettingsView inherits VerticalLayout {
                 }
             }
 
+                // Row: Bottom Player Layout
+                HorizontalLayout {
+                    spacing: 12px; height: 44px;
+                    VerticalLayout { spacing: 6px; alignment: center;
+                        Text { text: "Bottom Player Layout"; color: #e8e8e8; font-size: 14px; font-weight: 500; }
+                        Text { text: "Move player bar from the right side to the bottom"; color: #888888; font-size: 12px; }
+                    }
+                Rectangle { horizontal-stretch: 1; }
+                Rectangle { 
+                    y: (parent.height - self.height) / 2;
+                    width: 44px; height: 24px; border-radius: 12px; background: AppState.bottom-player-mode ? #ffffff : #333333;
+                    Rectangle { x: AppState.bottom-player-mode ? parent.width - self.width - 3px : 3px; y: 3px; width: 18px; height: 18px; border-radius: 9px; background: AppState.bottom-player-mode ? #000000 : #ffffff; }
+                    TouchArea { clicked => { AppState.set-bottom-player-mode(!AppState.bottom-player-mode); } }
+                }
+            }
+
                 // Row: Compact Library
                 HorizontalLayout {
                     spacing: 12px; height: 44px;

@@ -8,7 +8,7 @@ use crate::features::app_utils::format_duration;
 use crate::{AlbumData, AlbumRow, AlbumRowData, AppController, ArtistRow, ArtistRowData, MainWindow, SongRow, SongRowData, GRID_MODEL_LIMIT};
 
 impl AppController {
-    fn representative_artwork(&self, song_idx: usize) -> slint::Image {
+    pub(crate) fn representative_artwork(&self, song_idx: usize) -> slint::Image {
         if let Some(img) = self.thumbnail_cache.get(&song_idx) {
             return img.clone();
         }
