@@ -181,6 +181,7 @@ impl AppController {
                     } else {
                         window.global::<AppState>().set_now_artwork(slint::Image::default());
                         window.global::<AppState>().set_now_artwork_blurred(slint::Image::default());
+                        window.global::<AppState>().set_accent_color(slint::Color::from_rgb_u8(255, 255, 255));
                     }
 
                     self.select_song_in_filtered(song_idx);
@@ -529,6 +530,13 @@ impl AppController {
                         window.global::<AppState>().set_now_artwork_blurred(
                             blur_img.unwrap_or_else(|| now_img.clone()),
                         );
+                        if self.dynamic_theme_enabled {
+                            if let Some(color) = result.dominant_color {
+                                window.global::<AppState>().set_accent_color(color);
+                            }
+                        } else {
+                            window.global::<AppState>().set_accent_color(slint::Color::from_rgb_u8(255, 255, 255));
+                        }
                     }
                 }
             }

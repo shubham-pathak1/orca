@@ -123,7 +123,7 @@ export component FullPlayerOverlay inherits Rectangle {
                         height: 24px;
                         Rectangle { 
                             y: 10px; height: 5px; background: #ffffff12; border-radius: 2.5px;
-                            Rectangle { x: 0; width: parent.width * AppState.progress-slider-value; background: #ffffff; border-radius: 2.5px; }
+                            Rectangle { x: 0; width: parent.width * AppState.progress-slider-value; background: AppState.accent-color; border-radius: 2.5px; animate background { duration: 400ms; } }
                         }
                         TouchArea { clicked => { AppState.seek-to-ratio(self.mouse-x / self.width); } }
                     }
@@ -155,7 +155,8 @@ export component FullPlayerOverlay inherits Rectangle {
 
                     // Play/Pause
                     Rectangle {
-                        width: 72px; height: 72px; border-radius: 36px; background: #ffffff;
+                        width: 72px; height: 72px; border-radius: 36px; background: AppState.accent-color;
+                        animate background { duration: 400ms; }
                         LucideIcon { icon: AppState.is-playing ? AppState.icon-pause : AppState.icon-play; icon-color: #000000; width: 32px; height: 32px; x: (parent.width - self.width) / 2 + (AppState.is-playing ? 0px : 3px); y: (parent.height - self.height) / 2; }
                         TouchArea { clicked => { AppState.toggle-play-pause(); } }
                     }

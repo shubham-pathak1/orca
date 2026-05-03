@@ -136,6 +136,7 @@ struct AppController {
     repeat_mode: RepeatMode,
     eq_enabled: bool,
     app_blur_enabled: bool,
+    dynamic_theme_enabled: bool,
     monochrome_mode: bool,
     #[allow(dead_code)]
     compact_library_mode: bool,
@@ -221,6 +222,7 @@ struct NowArtworkResult {
     blur_pixels: Option<Vec<u8>>,
     blur_w: u32,
     blur_h: u32,
+    dominant_color: Option<slint::Color>,
 }
 
 fn build_placeholder_song_entries(songs: Vec<LocalSong>) -> Vec<SongEntry> {

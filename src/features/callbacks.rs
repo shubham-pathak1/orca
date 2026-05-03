@@ -66,7 +66,7 @@ pub fn wire_callbacks(window: &MainWindow, state: Rc<RefCell<AppController>>) {
         let state = state.clone();
         let weak = weak.clone();
         move |index| {
-            if let Some(window) = weak.upgrade() {
+            if let Some(_window) = weak.upgrade() {
                 state.borrow_mut().seek_to_lyric_index(index as usize);
             }
         }
@@ -231,6 +231,16 @@ pub fn wire_callbacks(window: &MainWindow, state: Rc<RefCell<AppController>>) {
         move |enabled| {
             if let Some(window) = weak.upgrade() {
                 state.borrow_mut().set_app_blur_enabled(enabled, &window);
+            }
+        }
+    });
+
+    window.global::<AppState>().on_set_dynamic_theme_enabled({
+        let weak = weak.clone();
+        let state = state.clone();
+        move |enabled| {
+            if let Some(window) = weak.upgrade() {
+                state.borrow_mut().set_dynamic_theme_enabled(enabled, &window);
             }
         }
     });

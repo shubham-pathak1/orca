@@ -113,7 +113,10 @@ export global AppState {
     in_out property <length> viewport-y-manual-songs: 0px;
     in_out property <length> song-list-visible-height: 0px;
     in_out property <length> grid-visible-height: 0px;
+    in_out property <color> accent-color: #ffffff;
     in_out property <bool> is-fullscreen: false;
+    in_out property <bool> dynamic-theme-enabled: true;
+
     
     // Sync properties for backend
     in_out property <bool> shuffle-enabled: false;
@@ -148,6 +151,7 @@ export global AppState {
     callback set-blur-enabled(enabled: bool);
     callback set-compact-library-mode(enabled: bool);
     callback set-monochrome-mode(enabled: bool);
+    callback set-dynamic-theme-enabled(enabled: bool);
     callback set-sort-mode(mode: int);
     callback remove-scan-root(root: string);
     callback create-playlist(name: string);

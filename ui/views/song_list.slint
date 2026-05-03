@@ -35,7 +35,8 @@ export component SongListView inherits Rectangle {
                     for row in AppState.song-rows : Rectangle {
                         height: 48px;
                         border-radius: 6px;
-                        background: row.songs[0].is_playing ? #ffffff10 : (song_touch.has-hover ? #ffffff08 : #00000000);
+                        background: row.songs[0].is_playing ? AppState.accent-color.with-alpha(0.12) : (song_touch.has-hover ? #ffffff08 : #00000000);
+                        animate background { duration: 400ms; easing: ease-in-out; }
                         HorizontalLayout {
                             padding-left: 8px;
                             padding-right: 12px;
@@ -53,8 +54,14 @@ export component SongListView inherits Rectangle {
                                     image-fit: cover;
                                 }
                             }
-
-                            Text { text: row.songs[0].title; color: row.songs[0].is_playing ? #ffffff : #e8e8e8; font-size: 13px; font-weight: row.songs[0].is_playing ? 600 : 400; overflow: elide; width: 36%; vertical-alignment: center; }
+ 
+                            Text { 
+                                text: row.songs[0].title; 
+                                color: row.songs[0].is_playing ? AppState.accent-color : #e8e8e8; 
+                                font-size: 13px; font-weight: row.songs[0].is_playing ? 600 : 400; 
+                                overflow: elide; width: 36%; vertical-alignment: center; 
+                                animate color { duration: 400ms; easing: ease-in-out; }
+                            }
                             Text { text: row.songs[0].artist; color: row.songs[0].is_playing ? #cccccc : #999999; font-size: 13px; overflow: elide; width: 24%; vertical-alignment: center; }
                             Text { text: row.songs[0].album; color: row.songs[0].is_playing ? #aaaaaa : #777777; font-size: 13px; overflow: elide; width: 22%; vertical-alignment: center; }
                             Text { text: row.songs[0].duration; color: row.songs[0].is_playing ? #aaaaaa : #777777; font-size: 12px; width: 60px; horizontal-alignment: right; vertical-alignment: center; overflow: elide; }

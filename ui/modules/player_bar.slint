@@ -30,14 +30,16 @@ export component PlayerBar inherits Rectangle {
             spacing: 4px;
             Rectangle { height: 12px;
                 Rectangle { height: 4px; background: #ffffff10; border-radius: 2px;
-                    Rectangle { x: 0; width: parent.width * AppState.progress-slider-value; background: #ffffff; border-radius: 2px; 
+                    Rectangle { x: 0; width: parent.width * AppState.progress-slider-value; background: AppState.accent-color; border-radius: 2px; 
+                        animate background { duration: 400ms; }
                         Rectangle {
                             x: parent.width - 4px;
                             y: -2px;
                             width: 8px;
                             height: 8px;
                             border-radius: 4px;
-                            background: #ffffff;
+                            background: AppState.accent-color;
+                            animate background { duration: 400ms; }
                         }
                     }
                 }
@@ -51,7 +53,8 @@ export component PlayerBar inherits Rectangle {
             alignment: center; spacing: 16px;
             VerticalLayout { alignment: center; IconButton { icon: AppState.icon-skip-back; clicked => { AppState.previous-song(); } } }
             Rectangle {
-                width: 64px; height: 64px; border-radius: 32px; background: #ffffff;
+                width: 64px; height: 64px; border-radius: 32px; background: AppState.accent-color;
+                animate background { duration: 400ms; }
                 LucideIcon { icon: AppState.is-playing ? AppState.icon-pause : AppState.icon-play; icon-color: #000000; width: 28px; height: 28px;
                     x: (parent.width - self.width) / 2 + (AppState.is-playing ? 0px : 2px);
                     y: (parent.height - self.height) / 2 + (AppState.is-playing ? 0px : -1px);

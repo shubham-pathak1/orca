@@ -8,13 +8,14 @@ export component SettingsView inherits VerticalLayout {
         VerticalLayout { padding: 20px; spacing: 16px;
             Text { text: "Appearance"; color: #ffffff; font-size: 15px; font-weight: 700; letter-spacing: 0.4px; }
             Rectangle { height: 1px; background: #1a1a1a; }
-            // Row: Background Blur
-            HorizontalLayout {
-                spacing: 12px; height: 44px;
-                VerticalLayout { spacing: 2px; alignment: center;
-                    Text { text: "Background Blur"; color: #e8e8e8; font-size: 14px; font-weight: 500; }
-                    Text { text: "Blurred album art as the app background"; color: #666666; font-size: 12px; }
-                }
+            VerticalLayout { spacing: 24px;
+                // Row: Background Blur
+                HorizontalLayout {
+                    spacing: 12px; height: 44px;
+                    VerticalLayout { spacing: 6px; alignment: center;
+                        Text { text: "Background Blur"; color: #e8e8e8; font-size: 14px; font-weight: 500; }
+                        Text { text: "Blurred album art as the app background"; color: #888888; font-size: 12px; }
+                    }
                 Rectangle { horizontal-stretch: 1; }
                 Rectangle { 
                     y: (parent.height - self.height) / 2;
@@ -24,13 +25,13 @@ export component SettingsView inherits VerticalLayout {
                 }
             }
 
-            // Row: Monochrome Mode
-            HorizontalLayout {
-                spacing: 12px; height: 44px;
-                VerticalLayout { spacing: 2px; alignment: center;
-                    Text { text: "Noir Mode"; color: #e8e8e8; font-size: 14px; font-weight: 500; }
-                    Text { text: "Complete monochrome experience (Ctrl+Shift+M)"; color: #666666; font-size: 12px; }
-                }
+                // Row: Monochrome Mode
+                HorizontalLayout {
+                    spacing: 12px; height: 44px;
+                    VerticalLayout { spacing: 6px; alignment: center;
+                        Text { text: "Noir Mode"; color: #e8e8e8; font-size: 14px; font-weight: 500; }
+                        Text { text: "Complete monochrome experience (Ctrl+Shift+M)"; color: #888888; font-size: 12px; }
+                    }
                 Rectangle { horizontal-stretch: 1; }
                 Rectangle { 
                     y: (parent.height - self.height) / 2;
@@ -40,13 +41,29 @@ export component SettingsView inherits VerticalLayout {
                 }
             }
 
-            // Row: Compact Library
-            HorizontalLayout {
-                spacing: 12px; height: 44px;
-                VerticalLayout { spacing: 2px; alignment: center;
-                    Text { text: "Compact Library"; color: #e8e8e8; font-size: 14px; font-weight: 500; }
-                    Text { text: "Text-first list view instead of album art grid"; color: #666666; font-size: 12px; }
+                // Row: Dynamic Theme
+                HorizontalLayout {
+                    spacing: 12px; height: 44px;
+                    VerticalLayout { spacing: 6px; alignment: center;
+                        Text { text: "Dynamic Theme"; color: #e8e8e8; font-size: 14px; font-weight: 500; }
+                        Text { text: "Extract colors from album art for UI accents"; color: #888888; font-size: 12px; }
+                    }
+                Rectangle { horizontal-stretch: 1; }
+                Rectangle { 
+                    y: (parent.height - self.height) / 2;
+                    width: 44px; height: 24px; border-radius: 12px; background: AppState.dynamic-theme-enabled ? #ffffff : #333333;
+                    Rectangle { x: AppState.dynamic-theme-enabled ? parent.width - self.width - 3px : 3px; y: 3px; width: 18px; height: 18px; border-radius: 9px; background: AppState.dynamic-theme-enabled ? #000000 : #ffffff; }
+                    TouchArea { clicked => { AppState.set-dynamic-theme-enabled(!AppState.dynamic-theme-enabled); } }
                 }
+            }
+
+                // Row: Compact Library
+                HorizontalLayout {
+                    spacing: 12px; height: 44px;
+                    VerticalLayout { spacing: 6px; alignment: center;
+                        Text { text: "Compact Library"; color: #e8e8e8; font-size: 14px; font-weight: 500; }
+                        Text { text: "Text-first list view instead of album art grid"; color: #888888; font-size: 12px; }
+                    }
                 Rectangle { horizontal-stretch: 1; }
                 Rectangle { 
                     y: (parent.height - self.height) / 2;
@@ -55,6 +72,7 @@ export component SettingsView inherits VerticalLayout {
                     TouchArea { clicked => { AppState.set-compact-library-mode(!AppState.compact-library-mode); } }
                 }
             }
+            } // Close VerticalLayout { spacing: 24px;
         }
     }
     Rectangle {

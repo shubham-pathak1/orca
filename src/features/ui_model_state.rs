@@ -83,7 +83,7 @@ impl AppController {
         let viewport_y = window.global::<AppState>().get_viewport_y_manual_songs();
         let visible_height = window.global::<AppState>().get_song_list_visible_height();
         
-        let row_height = 34.0;
+        let row_height = 48.0;
         let start_row = (-viewport_y / row_height).floor() as i32;
         let visible_rows = (visible_height / row_height).ceil() as i32;
         let end_row = start_row + visible_rows;
@@ -191,7 +191,7 @@ impl AppController {
         let viewport_y = window.global::<AppState>().get_viewport_y_manual_songs();
         let visible_height = window.global::<AppState>().get_song_list_visible_height();
         
-        let row_height = 34.0;
+        let row_height = 48.0;
         let start_row = (-viewport_y / row_height).floor() as usize;
         let visible_rows = (visible_height / row_height).ceil() as usize;
         let end_row = (start_row + visible_rows + 40).min(self.displayed_indices.len());

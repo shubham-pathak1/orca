@@ -152,10 +152,58 @@ impl AppController {
                             // The user wants ORIGINAL embedded cover art for the foreground.
                             let full_img = image::open(&path).ok();
                             
-                            let (now_pixels, now_w, now_h, blur_pixels, blur_w, blur_h) =
+                            let (now_pixels, now_w, now_h, blur_pixels, blur_w, blur_h, dominant_color) =
                                 if let Some(full) = full_img {
                                     let mut now_img = full.to_rgba8();
                                     let (nw, nh) = now_img.dimensions();
+
+                                    // Extract Dominant Color for Dynamic UI
+                                    let dominant_color = {
+                                        // Downscale for performance
+                                        let tiny = full.resize(100, 100, image::imageops::FilterType::Triangle).to_rgba8();
+                                        let pixels = tiny.as_raw();
+                                        if let Ok(palette) = color_thief::get_palette(pixels, color_thief::ColorFormat::Rgba, 10, 5) {
+                                            let mut best_c = palette[0];
+                                            let mut max_score = -1.0;
+                                            
+                                            for c in &palette {
+                                                let r = c.r as f32 / 255.0;
+                                                let g = c.g as f32 / 255.0;
+                                                let b = c.b as f32 / 255.0;
+                                                let max = r.max(g).max(b);
+                                                let min = r.min(g).min(b);
+                                                let l = (max + min) / 2.0;
+                                                let s = if max == min { 0.0 } else { if l > 0.5 { (max - min) / (2.0 - max - min) } else { (max - min) / (max + min) } };
+                                                
+                                                // We want decent saturation and not too dark/light
+                                                if l > 0.2 && l < 0.85 {
+                                                    let score = s * 3.0 + l;
+                                                    if score > max_score {
+                                                        max_score = score;
+                                                        best_c = *c;
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Ensure the color is not too dark for the dark UI
+                                            let mut r = best_c.r as f32;
+                                            let mut g = best_c.g as f32;
+                                            let mut b = best_c.b as f32;
+                                            
+                                            let luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+                                            if luminance < 120.0 {
+                                                let factor = 120.0 / luminance.max(1.0);
+                                                r = (r * factor).min(255.0);
+                                                g = (g * factor).min(255.0);
+                                                b = (b * factor).min(255.0);
+                                            }
+                                            
+                                            Some(slint::Color::from_rgb_u8(r as u8, g as u8, b as u8))
+                                        } else {
+                                            None
+                                        }
+                                    };
+
 
                                     if with_monochrome {
                                         for p in now_img.pixels_mut() {
@@ -212,7 +260,7 @@ impl AppController {
                                         (None, 0, 0)
                                     };
 
-                                    (now_img.into_raw(), nw, nh, bp, bw, bh)
+                                    (now_img.into_raw(), nw, nh, bp, bw, bh, dominant_color)
                                 } else {
                                     // Complete failure fallback
                                     continue;
@@ -226,6 +274,7 @@ impl AppController {
                                 blur_pixels,
                                 blur_w,
                                 blur_h,
+                                dominant_color,
                             });
                         }
                     }
@@ -246,6 +295,7 @@ impl AppController {
             repeat_mode: RepeatMode::Off,
             eq_enabled: false,
             app_blur_enabled: true,
+            dynamic_theme_enabled: true,
             monochrome_mode: false,
             compact_library_mode: false,
             sort_mode: crate::LibrarySortMode::Title,
@@ -324,6 +374,10 @@ impl AppController {
             self.app_blur_enabled =
                 saved_blur_enabled == "1" || saved_blur_enabled.eq_ignore_ascii_case("true");
         }
+        if let Some(saved_dynamic_theme) = orca_core::db::get_setting(&self.db_conn, "dynamic_theme_enabled") {
+            self.dynamic_theme_enabled =
+                saved_dynamic_theme == "1" || saved_dynamic_theme.eq_ignore_ascii_case("true");
+        }
         if let Some(saved_monochrome) = orca_core::db::get_setting(&self.db_conn, "orca_monochrome_mode") {
             self.monochrome_mode =
                 saved_monochrome == "1" || saved_monochrome.eq_ignore_ascii_case("true");
@@ -368,6 +422,11 @@ impl AppController {
             &self.db_conn,
             crate::SETTING_APP_BLUR_ENABLED,
             if self.app_blur_enabled { "1" } else { "0" },
+        );
+        let _ = orca_core::db::set_setting(
+            &self.db_conn,
+            "dynamic_theme_enabled",
+            if self.dynamic_theme_enabled { "1" } else { "0" },
         );
         let _ = orca_core::db::set_setting(
             &self.db_conn,
@@ -422,6 +481,7 @@ impl AppController {
             .unwrap_or(false);
         window.global::<AppState>().set_is_playing(is_playing);
         window.global::<AppState>().set_blur_enabled(self.app_blur_enabled);
+        window.global::<AppState>().set_dynamic_theme_enabled(self.dynamic_theme_enabled);
         window.global::<AppState>().set_monochrome_mode(self.monochrome_mode);
         window.global::<AppState>().set_compact_library_mode(self.compact_library_mode);
         window.global::<AppState>().set_sort_mode(self.sort_mode as i32);
@@ -500,6 +560,14 @@ impl AppController {
         let _ = self
             .audio_tx
             .send(orca_core::audio_engine::AudioCommand::SetEqEnabled(self.eq_enabled));
+    }
+
+    pub(crate) fn set_dynamic_theme_enabled(&mut self, enabled: bool, window: &MainWindow) {
+        if self.dynamic_theme_enabled == enabled { return; }
+        self.dynamic_theme_enabled = enabled;
+        window.global::<AppState>().set_dynamic_theme_enabled(enabled);
+        self.persist_preferences();
+        self.update_now_playing(window);
     }
 
     pub(crate) fn set_monochrome_mode(&mut self, enabled: bool, window: &MainWindow) {

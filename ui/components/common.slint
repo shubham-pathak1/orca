@@ -1,3 +1,5 @@
+import { AppState } from "../global.slint";
+
 export component LucideIcon inherits Rectangle {
     in property <image> icon;
     in property <color> icon-color: #a3a3a3;
@@ -21,11 +23,13 @@ export component SidebarItem inherits Rectangle {
     width: 48px;
     height: 48px;
     border-radius: 12px;
-    background: active ? #ffffff15 : touch.has-hover ? #ffffff08 : #00000000;
+    background: active ? AppState.accent-color.with-alpha(0.15) : touch.has-hover ? #ffffff08 : #00000000;
+    animate background { duration: 400ms; easing: ease-in-out; }
 
     LucideIcon {
         icon: root.icon;
-        icon-color: active ? #ffffff : #a3a3a3;
+        icon-color: active ? AppState.accent-color : #a3a3a3;
+        animate icon-color { duration: 400ms; easing: ease-in-out; }
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
     }
