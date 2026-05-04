@@ -119,6 +119,7 @@ export global AppState {
     in_out property <bool> is-fullscreen: false;
     in_out property <bool> dynamic-theme-enabled: true;
     in_out property <bool> bottom-player-mode: false;
+    in_out property <bool> waveform-seekbar-enabled: true;
 
     
     // Sync properties for backend
@@ -157,6 +158,7 @@ export global AppState {
     callback set-monochrome-mode(enabled: bool);
     callback set-dynamic-theme-enabled(enabled: bool);
     callback set-bottom-player-mode(enabled: bool);
+    callback set-waveform-seekbar-enabled(enabled: bool);
     callback set-sort-mode(mode: int);
     callback remove-scan-root(root: string);
     callback create-playlist(name: string);

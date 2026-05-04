@@ -72,7 +72,6 @@ export component SettingsView inherits VerticalLayout {
                     TouchArea { clicked => { AppState.set-bottom-player-mode(!AppState.bottom-player-mode); } }
                 }
             }
-
                 // Row: Compact Library
                 HorizontalLayout {
                     spacing: 12px; height: 44px;
@@ -88,6 +87,32 @@ export component SettingsView inherits VerticalLayout {
                     TouchArea { clicked => { AppState.set-compact-library-mode(!AppState.compact-library-mode); } }
                 }
             }
+
+                // Row: Seekbar Style
+                HorizontalLayout {
+                    spacing: 12px; height: 44px;
+                    VerticalLayout { spacing: 6px; alignment: center;
+                        Text { text: "Seekbar Style"; color: #e8e8e8; font-size: 14px; font-weight: 500; }
+                        Text { text: "Choose between classic bar and Poweramp-style waveform"; color: #888888; font-size: 12px; }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    
+                    // Simple Dropdown implementation
+                    Rectangle {
+                        y: (parent.height - self.height) / 2;
+                        width: 120px; height: 32px; border-radius: 8px; background: #1a1a1a; border-width: 1px; border-color: #333333;
+                        HorizontalLayout {
+                            padding-left: 12px; padding-right: 8px;
+                            Text {
+                                text: AppState.waveform-seekbar-enabled ? "Waveform" : "Classic";
+                                color: #ffffff; font-size: 13px; vertical-alignment: center;
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                            Text { text: "v"; color: #666666; font-size: 10px; vertical-alignment: center; }
+                        }
+                        TouchArea { clicked => { AppState.set-waveform-seekbar-enabled(!AppState.waveform-seekbar-enabled); } }
+                    }
+                }
             } // Close VerticalLayout { spacing: 24px;
         }
     }

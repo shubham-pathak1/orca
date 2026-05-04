@@ -1,8 +1,8 @@
 import { AppState } from "../global.slint";
-import { IconButton, LucideIcon } from "../components/common.slint";
+import { IconButton, LucideIcon, WaveformSeekbar } from "../components/common.slint";
 
 export component BottomPlayer inherits Rectangle {
-    height: 80px;
+    height: 90px;
     background: #111111;
     border-radius: 12px;
     border-width: 1px;
@@ -37,14 +37,22 @@ export component BottomPlayer inherits Rectangle {
 
         // ── Middle: Playback Controls & Progress ──
         VerticalLayout {
-            horizontal-stretch: 1; alignment: center; spacing: 6px;
+            horizontal-stretch: 1; alignment: center; spacing: 4px;
             
             HorizontalLayout {
-                spacing: 12px; height: 16px;
+                spacing: 12px; height: 32px;
                 VerticalLayout { alignment: center; Text { text: AppState.progress-current; color: #777777; font-size: 11px; } }
-                Rectangle {
+                
+                if AppState.waveform-seekbar-enabled : WaveformSeekbar {
+                    horizontal-stretch: 1;
+                    progress: AppState.progress-slider-value;
+                    seek(ratio) => { AppState.seek-to-ratio(ratio); }
+                }
+
+                if !AppState.waveform-seekbar-enabled : Rectangle {
                     horizontal-stretch: 1;
                     height: 16px;
+                    y: (parent.height - self.height) / 2;
                     Rectangle { y: 6px; height: 4px; background: #ffffff10; border-radius: 2px;
                         Rectangle { x: 0; width: parent.width * AppState.progress-slider-value; background: AppState.accent-color; border-radius: 2px;
                             animate background { duration: 400ms; }
@@ -56,6 +64,7 @@ export component BottomPlayer inherits Rectangle {
                     }
                     TouchArea { clicked => { AppState.seek-to-ratio(self.mouse-x / self.width); } }
                 }
+
                 VerticalLayout { alignment: center; Text { text: AppState.progress-total; color: #777777; font-size: 11px; } }
             }
 

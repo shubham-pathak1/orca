@@ -1,5 +1,5 @@
 import { AppState } from "../global.slint";
-import { IconButton, LucideIcon } from "../components/common.slint";
+import { IconButton, LucideIcon, WaveformSeekbar } from "../components/common.slint";
 
 export component PlayerBar inherits Rectangle {
     width: 320px;
@@ -27,8 +27,12 @@ export component PlayerBar inherits Rectangle {
         }
         Rectangle { height: 8px; }
         VerticalLayout {
-            spacing: 4px;
-            Rectangle { height: 12px;
+            spacing: 8px;
+            if AppState.waveform-seekbar-enabled : WaveformSeekbar {
+                progress: AppState.progress-slider-value;
+                seek(ratio) => { AppState.seek-to-ratio(ratio); }
+            }
+            if !AppState.waveform-seekbar-enabled : Rectangle { height: 12px;
                 Rectangle { height: 4px; background: #ffffff10; border-radius: 2px;
                     Rectangle { x: 0; width: parent.width * AppState.progress-slider-value; background: AppState.accent-color; border-radius: 2px; 
                         animate background { duration: 400ms; }

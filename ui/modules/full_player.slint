@@ -1,6 +1,6 @@
 import { ScrollView } from "std-widgets.slint";
 import { AppState } from "../global.slint";
-import { IconButton, LucideIcon } from "../components/common.slint";
+import { IconButton, LucideIcon, WaveformSeekbar } from "../components/common.slint";
 
 export component FullPlayerOverlay inherits Rectangle {
     width: 100%; height: 100%; background: #111111;
@@ -118,8 +118,15 @@ export component FullPlayerOverlay inherits Rectangle {
 
                 // Seekbar (Symmetrical)
                 VerticalLayout {
-                    width: 500px; spacing: 8px; x: (art-width - 500px) / 2;
-                    Rectangle {
+                    width: 380px; spacing: 8px; x: (art-width - 380px) / 2;
+                    
+                    if AppState.waveform-seekbar-enabled : WaveformSeekbar {
+                        height: 48px;
+                        progress: AppState.progress-slider-value;
+                        seek(ratio) => { AppState.seek-to-ratio(ratio); }
+                    }
+
+                    if !AppState.waveform-seekbar-enabled : Rectangle {
                         height: 24px;
                         Rectangle { 
                             y: 10px; height: 5px; background: #ffffff12; border-radius: 2.5px;

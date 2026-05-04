@@ -115,3 +115,45 @@ export component SearchBar inherits Rectangle {
         clicked => { root.focus-input(); }
     }
 }
+export component WaveformSeekbar inherits Rectangle {
+    in property <float> progress; // 0.0 to 1.0
+    callback seek(float);
+
+    height: 40px;
+    background: transparent;
+
+    HorizontalLayout {
+        spacing: 2px;
+        alignment: space-between;
+        
+        // We use a series of bars to simulate a waveform
+        // In a real app, these heights would come from FFT data
+        for i[index] in [
+            0.3, 0.5, 0.8, 0.6, 0.4, 0.7, 0.9, 0.5, 0.3, 0.6, 
+            0.8, 0.4, 0.5, 0.7, 0.3, 0.6, 0.9, 0.8, 0.5, 0.4,
+            0.7, 0.6, 0.3, 0.5, 0.8, 0.4, 0.6, 0.9, 0.7, 0.5,
+            0.4, 0.8, 0.6, 0.3, 0.7, 0.5, 0.4, 0.9, 0.6, 0.8,
+            0.5, 0.3, 0.7, 0.4, 0.6, 0.8, 0.5, 0.9, 0.4, 0.7,
+            0.6, 0.3, 0.5, 0.8, 0.4, 0.6, 0.9, 0.7, 0.5, 0.4
+        ] : Rectangle {
+            width: 3px;
+            height: parent.height * i;
+            y: (parent.height - self.height) / 2;
+            border-radius: 1.5px;
+            
+            // Highlight bars that are already "played"
+            background: (root.progress > (index / 60.0)) ? AppState.accent-color : #ffffff15;
+            
+            animate background { duration: 200ms; }
+        }
+    }
+
+    TouchArea {
+        clicked => { root.seek(self.mouse-x / self.width); }
+        pointer-event(event) => {
+            if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                root.seek(self.mouse-x / self.width);
+            }
+        }
+    }
+}
