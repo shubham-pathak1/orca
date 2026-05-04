@@ -57,6 +57,39 @@ pub enum AudioCommand {
     SetVolume(f32),
     SetEqEnabled(bool),
     SetEqGains([f32; 5]),
+    QueueNext(String),
+    UpdateMetadata(String, u64),
+}
+
+struct TransitionSource<S: Source<Item = f32>> {
+    inner: S,
+    callback: Option<Box<dyn FnOnce() + Send>>,
+}
+
+impl<S: Source<Item = f32>> TransitionSource<S> {
+    fn new(inner: S, callback: impl FnOnce() + Send + 'static) -> Self {
+        Self {
+            inner,
+            callback: Some(Box::new(callback)),
+        }
+    }
+}
+
+impl<S: Source<Item = f32>> Iterator for TransitionSource<S> {
+    type Item = f32;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(cb) = self.callback.take() {
+            cb();
+        }
+        self.inner.next()
+    }
+}
+
+impl<S: Source<Item = f32>> Source for TransitionSource<S> {
+    fn current_span_len(&self) -> Option<usize> { self.inner.current_span_len() }
+    fn channels(&self) -> u16 { self.inner.channels() }
+    fn sample_rate(&self) -> u32 { self.inner.sample_rate() }
+    fn total_duration(&self) -> Option<Duration> { self.inner.total_duration() }
 }
 
 #[allow(dead_code)]
@@ -198,6 +231,37 @@ impl<S: Source<Item = f32>> Source for EqSource<S> {
     }
 }
 
+fn create_track_source(
+    path: &str,
+    start_pos: Duration,
+    eq_enabled: bool,
+    eq_gains: [f32; 5],
+    visualizer: &Arc<Mutex<std::collections::VecDeque<f32>>>,
+    on_start: Option<Box<dyn FnOnce() + Send>>,
+) -> Result<(u64, Box<dyn Source<Item = f32> + Send>), String> {
+    let file = File::open(path).map_err(|e| format!("Failed to open '{path}': {e}"))?;
+    let decoder = Decoder::try_from(file).map_err(|e| format!("Decode error for '{path}': {e}"))?;
+    let total_duration_ms = decoder
+        .total_duration()
+        .unwrap_or_else(|| Duration::from_secs(0))
+        .as_millis() as u64;
+
+    let source = decoder.skip_duration(start_pos);
+    let vis_source = VisualizerSource::new(source, Arc::clone(visualizer));
+    
+    let eq_source: Box<dyn Source<Item = f32> + Send> = if eq_enabled {
+        Box::new(EqSource::new(vis_source, eq_gains))
+    } else {
+        Box::new(vis_source)
+    };
+
+    if let Some(cb) = on_start {
+        Ok((total_duration_ms, Box::new(TransitionSource::new(eq_source, cb))))
+    } else {
+        Ok((total_duration_ms, eq_source))
+    }
+}
+
 fn load_track_into_sink(
     sink: &Sink,
     path: &str,
@@ -206,24 +270,10 @@ fn load_track_into_sink(
     eq_gains: [f32; 5],
     visualizer: &Arc<Mutex<std::collections::VecDeque<f32>>>,
 ) -> Result<u64, String> {
-    let file = File::open(path).map_err(|e| format!("Failed to open '{path}': {e}"))?;
-    let decoder = Decoder::try_from(file).map_err(|e| format!("Decode error for '{path}': {e}"))?;
-    let total_duration_ms = decoder
-        .total_duration()
-        .unwrap_or_else(|| Duration::from_secs(0))
-        .as_millis() as u64;
-
+    let (duration, source) = create_track_source(path, start_pos, eq_enabled, eq_gains, visualizer, None)?;
     sink.clear();
-
-    let source = decoder.skip_duration(start_pos);
-    let vis_source = VisualizerSource::new(source, Arc::clone(visualizer));
-    if eq_enabled {
-        sink.append(EqSource::new(vis_source, eq_gains));
-    } else {
-        sink.append(vis_source);
-    }
-
-    Ok(total_duration_ms)
+    sink.append(source);
+    Ok(duration)
 }
 
 fn restart_current_with_eq(
@@ -429,6 +479,37 @@ where
                         if let Ok(mut s) = thread_state.lock() {
                             s.current_path = None;
                             s.is_playing = false;
+                        }
+                    }
+                    AudioCommand::QueueNext(path) => {
+                        let thread_tx_inner = thread_tx.clone();
+                        let path_inner = path.clone();
+                        
+                        // We need the duration before creating the source
+                        match create_track_source(&path, Duration::from_millis(0), eq_enabled, eq_gains, &thread_vis, None) {
+                            Ok((duration, _)) => {
+                                let on_start = Box::new(move || {
+                                    let _ = thread_tx_inner.send(AudioCommand::UpdateMetadata(path_inner, duration));
+                                });
+                                // Re-create with callback
+                                if let Ok((_, source)) = create_track_source(&path, Duration::from_millis(0), eq_enabled, eq_gains, &thread_vis, Some(on_start)) {
+                                    primary.append(source);
+                                }
+                            }
+                            Err(e) => error!("Audio Engine: QueueNext error: {e}"),
+                        }
+                    }
+                    AudioCommand::UpdateMetadata(path, d) => {
+                        current_path = Some(path.clone());
+                        position_base_ms = 0; // Reset position base for the new track in the sink
+                        if let Ok(mut s) = thread_state.lock() {
+                            s.current_path = Some(path.clone());
+                            s.duration_ms = d;
+                            s.position_ms = 0;
+                            s.is_playing = true;
+                        }
+                        if let Some(ref cb) = event_callback {
+                            cb("track-transitioned", 0);
                         }
                     }
                 }

@@ -32,8 +32,10 @@ pub(crate) fn bootstrap_app_core() -> Result<(Rc<RefCell<AppController>>, usize)
     let (event_tx, event_rx) = std::sync::mpsc::channel::<AudioEvent>();
     let (audio_tx, playback_state, visualizer_data) =
         audio_engine::spawn_audio_thread(Some(move |event: &str, _| {
-            if event == "playback-ended" {
-                let _ = event_tx.send(AudioEvent::TrackEnded);
+            match event {
+                "playback-ended" => { let _ = event_tx.send(AudioEvent::TrackEnded); }
+                "track-transitioned" => { let _ = event_tx.send(AudioEvent::TrackTransitioned); }
+                _ => {}
             }
         }));
 

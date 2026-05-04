@@ -113,6 +113,7 @@ struct SongEntry {
 
 enum AudioEvent {
     TrackEnded,
+    TrackTransitioned,
 }
 
 enum ScanWorkResult {
@@ -202,6 +203,7 @@ struct AppController {
     #[allow(dead_code)]
     visualizer_data: orca_core::audio_engine::VisualizerData,
     last_crossfade_triggered_path: Option<String>,
+    last_gapless_queued_path: Option<String>,
 }
 
 enum ArtworkTask {

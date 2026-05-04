@@ -336,26 +336,55 @@ impl AppController {
 
         // 1. Audio Event Processing
         while let Ok(event) = self.event_rx.try_recv() {
-            if matches!(event, AudioEvent::TrackEnded) {
-                self.on_track_finished(window);
+            match event {
+                AudioEvent::TrackEnded => {
+                    self.on_track_finished(window);
+                }
+                AudioEvent::TrackTransitioned => {
+                    // Update metadata and UI for the new track that just started in the sink
+                    self.update_now_playing(window);
+                    self.last_gapless_queued_path = None;
+                    self.last_crossfade_triggered_path = None;
+                    
+                    // Since we transitioned to a new track, we might need to pop the queue
+                    if let Some(current_idx) = self.current_song_index {
+                         if self.queue.front() == Some(&current_idx) {
+                             self.queue.pop_front();
+                             self.refresh_queue_ui(window);
+                         }
+                    }
+                }
             }
         }
 
-        // Automatic Crossfade Lookahead (2.5s crossfade, trigger 3s before end)
+        // Automatic Gapless / Crossfade Lookahead
         let (pos_ms, dur_ms, is_playing, curr_path) = {
             let pb = self.playback_state.lock().map(|s| s.clone()).unwrap_or_default();
             (pb.position_ms, pb.duration_ms, pb.is_playing, pb.current_path)
         };
         
-        if is_playing && dur_ms > 5000 && (dur_ms - pos_ms) < 3000 {
+        // Gapless Preload (2s before end)
+        if is_playing && dur_ms > 4000 && (dur_ms - pos_ms) < 2000 {
             if let Some(path) = curr_path {
-                if self.last_crossfade_triggered_path.as_ref() != Some(&path) {
+                if self.last_gapless_queued_path.as_ref() != Some(&path) && self.last_crossfade_triggered_path.as_ref() != Some(&path) {
                     if let Some(next_idx) = self.get_next_song_index() {
-                        self.play_song_index_crossfade(next_idx, window, Duration::from_millis(2500));
+                        if let Some(next_song) = self.songs.get(next_idx) {
+                            let _ = self.audio_tx.send(orca_core::audio_engine::AudioCommand::QueueNext(next_song.song.path.clone()));
+                            self.last_gapless_queued_path = Some(path);
+                        }
                     }
                 }
             }
         }
+
+        // Automatic Crossfade (Only if we didn't gapless-queue?) 
+        // Actually, let's stick to gapless for now as it's more standard. 
+        // We'll keep crossfade logic but maybe disabled or only if dur is long.
+        /*
+        if is_playing && dur_ms > 5000 && (dur_ms - pos_ms) < 3000 {
+            ...
+        }
+        */
 
         if let Some(deadline) = self.status_ready_deadline {
             if Instant::now() >= deadline {

@@ -35,6 +35,7 @@ impl AppController {
             let _ = self.audio_tx.send(orca_core::audio_engine::AudioCommand::Play(path));
             self.current_song_index = Some(song_idx);
             self.last_crossfade_triggered_path = None; // Reset crossfade tracker
+            self.last_gapless_queued_path = None;
             self.select_song_in_filtered(song_idx);
             self.refresh_song_model(window);
             self.update_now_playing(window);
@@ -43,30 +44,7 @@ impl AppController {
         }
     }
 
-    pub(crate) fn play_song_index_crossfade(&mut self, song_idx: usize, window: &MainWindow, duration: std::time::Duration) {
-        if let Some(entry) = self.songs.get(song_idx) {
-            let path = entry.song.path.clone();
-            let artist = entry.song.artist.clone();
-            let title = entry.song.title.clone();
 
-            if let Ok(mut playback) = self.playback_state.lock() {
-                playback.current_path = Some(path.clone());
-                playback.is_playing = true;
-                playback.position_ms = 0;
-                playback.duration_ms = entry.song.duration as u64;
-            }
-
-            let _ = self.audio_tx.send(orca_core::audio_engine::AudioCommand::PlayCrossfade(path.clone(), duration));
-            
-            self.current_song_index = Some(song_idx);
-            self.last_crossfade_triggered_path = Some(path);
-            self.select_song_in_filtered(song_idx);
-            self.refresh_song_model(window);
-            self.update_now_playing(window);
-            self.set_status(format!("Fading into: {} - {}", artist, title), window);
-            self.persist_preferences();
-        }
-    }
 
     pub(crate) fn get_next_song_index(&self) -> Option<usize> {
         // Look at queue
@@ -335,6 +313,7 @@ impl AppController {
             let _ = self.audio_tx.send(orca_core::audio_engine::AudioCommand::Play(path));
             self.current_song_index = Some(song_idx);
             self.last_crossfade_triggered_path = None;
+            self.last_gapless_queued_path = None;
             self.persist_preferences();
         }
     }

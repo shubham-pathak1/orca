@@ -353,6 +353,7 @@ impl AppController {
             phantom_hotkey: None,
             visualizer_data,
             last_crossfade_triggered_path: None,
+            last_gapless_queued_path: None,
         }
     }
 
