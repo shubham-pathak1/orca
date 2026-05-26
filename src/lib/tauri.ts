@@ -87,6 +87,10 @@ export async function playSong(path: string): Promise<PlaybackState> {
   return invoke<PlaybackState>('play_song', { path });
 }
 
+export async function queueNextPlayback(path: string): Promise<PlaybackState> {
+  return invoke<PlaybackState>('queue_next_playback', { path });
+}
+
 export async function pausePlayback(): Promise<PlaybackState> {
   return invoke<PlaybackState>('pause_playback');
 }

@@ -18,7 +18,7 @@
   export let onShowQualityInfoChange: (enabled: boolean) => void = () => {};
 
   let activeTab = 'Appearance';
-  const tabs = ['Appearance', 'Interface', 'Library', 'Scrobbling', 'Audio'];
+  const tabs = ['Appearance', 'Interface', 'Library', 'Audio'];
   const themes = ['Default', 'White'];
   const fontOptions = ['Plus Jakarta Sans', 'System', 'Segoe UI'];
   const playerPlacements: { id: 'right' | 'bottom'; title: string; description: string }[] = [
@@ -200,27 +200,13 @@
       </div>
     </section>
   {:else if activeTab === 'Library'}
-    <section class="max-w-[900px] space-y-7">
-      <div class="grid grid-cols-[1fr_44px] items-center gap-5">
-        <div>
-          <h3 class="text-sm font-bold text-white">Song quality info</h3>
-          <p class="text-sm text-white/48">Show format, sample rate, and bitrate in rows and players</p>
-        </div>
-        <button
-          class={`relative h-6 w-11 rounded-full border transition ${showQualityInfo ? 'border-white bg-white' : 'border-white/24 bg-white/[0.08]'}`}
-          title="Song quality info"
-          on:click={() => onShowQualityInfoChange(!showQualityInfo)}
-        >
-          <span class={`absolute top-1 h-4 w-4 rounded-full transition ${showQualityInfo ? 'left-6 bg-black' : 'left-1 bg-white'}`}></span>
-        </button>
-      </div>
-
+    <section class="max-w-[900px]">
       <div>
         <h3 class="text-sm font-bold text-white">Music folders</h3>
         <p class="text-sm text-white/48">Remove folders Orca should no longer scan</p>
       </div>
 
-      <div class="overflow-hidden rounded-md border border-white/10 bg-black/18">
+      <div class="mt-4 overflow-hidden rounded-md border border-white/10 bg-black/18">
         {#if scanRoots.length}
           {#each scanRoots as root}
             <div class="grid min-h-14 grid-cols-[minmax(0,1fr)_92px] items-center gap-4 border-b border-white/[0.06] px-4 last:border-b-0">
@@ -249,15 +235,21 @@
         Removing a folder keeps the files on disk. It only removes that folder from Orca and drops its songs from the library.
       </p>
     </section>
-  {:else if activeTab === 'Scrobbling'}
-    <section class="max-w-[760px] border-t border-white/10 pt-5">
-      <h3 class="text-sm font-bold text-white">Scrobbling</h3>
-      <p class="mt-1 text-sm text-white/44">No scrobbling options are available yet.</p>
-    </section>
   {:else if activeTab === 'Audio'}
-    <section class="max-w-[760px] border-t border-white/10 pt-5">
-      <h3 class="text-sm font-bold text-white">Audio</h3>
-      <p class="mt-1 text-sm text-white/44">No audio options are available yet.</p>
+    <section class="max-w-[820px]">
+      <div class="grid grid-cols-[1fr_44px] items-center gap-5 border-t border-white/10 pt-5">
+        <div>
+          <h3 class="text-sm font-bold text-white">Song quality info</h3>
+          <p class="text-sm text-white/48">Show format, sample rate, and bitrate in rows and players</p>
+        </div>
+        <button
+          class={`relative h-6 w-11 rounded-full border transition ${showQualityInfo ? 'border-white bg-white' : 'border-white/24 bg-white/[0.08]'}`}
+          title="Song quality info"
+          on:click={() => onShowQualityInfoChange(!showQualityInfo)}
+        >
+          <span class={`absolute top-1 h-4 w-4 rounded-full transition ${showQualityInfo ? 'left-6 bg-black' : 'left-1 bg-white'}`}></span>
+        </button>
+      </div>
     </section>
   {/if}
 </div>

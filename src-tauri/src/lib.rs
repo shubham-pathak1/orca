@@ -422,6 +422,16 @@ fn play_song(path: String, state: State<'_, SharedOrcaState>) -> Result<Playback
 }
 
 #[tauri::command]
+fn queue_next_playback(path: String, state: State<'_, SharedOrcaState>) -> Result<PlaybackState, String> {
+    let state = state.0.lock().map_err(|error| error.to_string())?;
+    state
+        .audio_tx
+        .send(AudioCommand::QueueNext(path))
+        .map_err(|error| error.to_string())?;
+    Ok(playback_snapshot_from(&state))
+}
+
+#[tauri::command]
 fn pause_playback(state: State<'_, SharedOrcaState>) -> Result<PlaybackState, String> {
     let state = state.0.lock().map_err(|error| error.to_string())?;
     state
@@ -502,6 +512,7 @@ pub fn run() {
             pick_and_scan_folder,
             rescan_library,
             play_song,
+            queue_next_playback,
             pause_playback,
             resume_playback,
             seek_playback,

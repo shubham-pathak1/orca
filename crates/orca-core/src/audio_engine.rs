@@ -402,6 +402,7 @@ where
         
         let mut current_path: Option<String> = None;
         let mut position_base_ms: u64 = 0;
+        let mut track_started_at: Option<Instant> = None;
         
         let mut fading_out_sink: Option<Sink> = None;
         let mut fade_start: Option<Instant> = None;
@@ -433,6 +434,7 @@ where
                                 primary.play();
                                 playing = true;
                                 position_base_ms = 0;
+                                track_started_at = Some(Instant::now());
                                 current_path = Some(path.clone());
                                 
                                 if let Ok(mut s) = thread_state.lock() {
@@ -465,6 +467,7 @@ where
                                     
                                     playing = true;
                                     position_base_ms = 0;
+                                    track_started_at = Some(Instant::now());
                                     current_path = Some(path.clone());
 
                                     if let Ok(mut s) = thread_state.lock() {
@@ -479,19 +482,29 @@ where
                         }
                     }
                     AudioCommand::Pause => {
+                        if playing {
+                            if let Some(started_at) = track_started_at.take() {
+                                position_base_ms = position_base_ms.saturating_add(started_at.elapsed().as_millis() as u64);
+                            }
+                        }
                         primary.pause();
                         playing = false;
-                        if let Ok(mut s) = thread_state.lock() { s.is_playing = false; }
+                        if let Ok(mut s) = thread_state.lock() {
+                            s.position_ms = position_base_ms;
+                            s.is_playing = false;
+                        }
                     }
                     AudioCommand::Resume => {
                         primary.play();
                         playing = true;
+                        track_started_at = Some(Instant::now());
                         if let Ok(mut s) = thread_state.lock() { s.is_playing = true; }
                     }
                     AudioCommand::Seek(pos) => {
                         match load_track_into_sink(&primary, current_path.as_ref().unwrap_or(&"".to_string()), pos, eq_enabled, eq_gains, &thread_vis) {
                             Ok(d) => {
                                 position_base_ms = pos.as_millis() as u64;
+                                track_started_at = Some(Instant::now());
                                 primary.play();
                                 playing = true;
                                 if let Ok(mut s) = thread_state.lock() {
@@ -522,6 +535,7 @@ where
                         primary.stop();
                         secondary.stop();
                         fading_out_sink = None;
+                        track_started_at = None;
                         playing = false;
                         if let Ok(mut s) = thread_state.lock() {
                             s.current_path = None;
@@ -548,6 +562,7 @@ where
                     AudioCommand::UpdateMetadata(path, d) => {
                         current_path = Some(path.clone());
                         position_base_ms = 0; // Reset position base for the new track in the sink
+                        track_started_at = Some(Instant::now());
                         if let Ok(mut s) = thread_state.lock() {
                             s.current_path = Some(path.clone());
                             s.duration_ms = d;
@@ -577,7 +592,9 @@ where
             }
 
             if playing && !primary.empty() {
-                let pos_ms = position_base_ms.saturating_add(primary.get_pos().as_millis() as u64);
+                let pos_ms = track_started_at
+                    .map(|started_at| position_base_ms.saturating_add(started_at.elapsed().as_millis() as u64))
+                    .unwrap_or(position_base_ms);
                 if let Ok(mut s) = thread_state.lock() {
                     s.position_ms = pos_ms;
                 }
@@ -588,6 +605,7 @@ where
 
             if playing && primary.empty() && fading_out_sink.is_none() {
                 playing = false;
+                track_started_at = None;
                 if let Ok(mut s) = thread_state.lock() { s.is_playing = false; }
                 if let Some(ref cb) = event_callback {
                     cb("playback-ended", 0);

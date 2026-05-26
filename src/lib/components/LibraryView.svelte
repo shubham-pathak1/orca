@@ -78,6 +78,11 @@
     if (savedLayout === 'grid' || savedLayout === 'list') {
       songLayout = savedLayout;
     }
+
+    const savedSort = window.localStorage.getItem('orca.librarySortKey');
+    if (savedSort === 'title' || savedSort === 'artist' || savedSort === 'album') {
+      sortKey = savedSort;
+    }
   });
 
   type ArtistEntry = {
@@ -244,6 +249,7 @@
 
   function selectSort(key: 'title' | 'artist' | 'album') {
     sortKey = key;
+    window.localStorage.setItem('orca.librarySortKey', key);
     sortMenuOpen = false;
   }
 
@@ -479,7 +485,7 @@
       <label>
         <span class="sr-only">Search settings</span>
         <input
-          class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
+          class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
           bind:value={settingsQuery}
           placeholder="Search settings..."
         />
@@ -488,7 +494,7 @@
       <label>
         <span class="sr-only">Search playlists</span>
         <input
-          class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
+          class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
           bind:value={playlistQuery}
           placeholder="Search playlists..."
         />
@@ -497,7 +503,7 @@
       <label>
         <span class="sr-only">Search library</span>
         <input
-          class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
+          class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
           bind:value={query}
           placeholder="Search library..."
         />
@@ -604,7 +610,7 @@
               <label class="w-full max-w-xl">
                 <span class="sr-only">Search songs in playlist</span>
                 <input
-                  class="h-10 w-full rounded-md border border-white/10 bg-black/24 px-3 text-sm text-white outline-none transition placeholder:text-white/32 focus:border-[color:var(--accent-mid)]"
+                  class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
                   bind:value={detailQuery}
                   placeholder={detailSearchPlaceholder}
                 />
@@ -691,9 +697,9 @@
             {/each}
           {:else}
             <div class="flex min-h-[260px] max-w-xl flex-col justify-center">
-              <p class="text-sm font-bold uppercase text-white/34">Empty playlist</p>
-              <h2 class="mt-3 text-3xl font-black tracking-normal">Add songs from Library.</h2>
-              <p class="mt-3 text-sm leading-6 text-white/48">Right-click any song in Library, then choose this playlist.</p>
+              <p class="text-sm font-bold uppercase text-white/34">{detailQuery.trim() ? 'No songs found' : 'Empty playlist'}</p>
+              <h2 class="mt-3 text-3xl font-black tracking-normal">{detailQuery.trim() ? 'Oops, no songs in this playlist match :(' : 'Add songs from Library.'}</h2>
+              <p class="mt-3 text-sm leading-6 text-white/48">{detailQuery.trim() ? 'Try a different search inside this playlist.' : 'Right-click any song in Library, then choose this playlist.'}</p>
             </div>
           {/if}
         {:else}
@@ -731,9 +737,9 @@
             </div>
           {:else}
             <div class="flex h-[calc(100%-60px)] max-w-xl flex-col justify-center">
-              <p class="text-sm font-bold uppercase text-white/34">No playlists yet</p>
-              <h2 class="mt-3 text-4xl font-black tracking-normal">Build a queue worth keeping.</h2>
-              <p class="mt-3 text-sm leading-6 text-white/48">Create a playlist, then right-click songs in Library to add them.</p>
+              <p class="text-sm font-bold uppercase text-white/34">{playlistQuery.trim() ? 'No playlists found' : 'No playlists yet'}</p>
+              <h2 class="mt-3 text-4xl font-black tracking-normal">{playlistQuery.trim() ? 'Oops, no such playlist found :(' : 'Build a queue worth keeping.'}</h2>
+              <p class="mt-3 text-sm leading-6 text-white/48">{playlistQuery.trim() ? 'Try another playlist name.' : 'Create a playlist, then right-click songs in Library to add them.'}</p>
             </div>
           {/if}
         {/if}
@@ -748,7 +754,8 @@
         </div>
         <div class="grid h-[calc(100%-32px)] grid-cols-[minmax(0,1fr)_24px]">
           <div class="scrollbar-none overflow-auto" bind:this={songListEl}>
-            {#each sortedSongs as song}
+            {#if sortedSongs.length}
+              {#each sortedSongs as song}
               <button
                 data-letter={initialFromText(song.title)}
                 class={`grid min-h-10 w-full grid-cols-[minmax(240px,1.35fr)_minmax(130px,0.7fr)_minmax(130px,0.8fr)_72px] items-center gap-3 border-b border-white/[0.035] px-2 text-left transition max-lg:grid-cols-[minmax(220px,1fr)_90px] ${song.path === currentPath ? 'bg-[var(--accent-soft)]' : selectedPath === song.path ? 'bg-white/[0.055]' : 'hover:bg-white/[0.045]'}`}
@@ -769,14 +776,22 @@
                 <span class="truncate text-xs text-white/42 max-lg:hidden">{song.album}</span>
                 <span class="text-right text-xs text-white/48">{formatDuration(song.duration)}</span>
               </button>
-            {/each}
+              {/each}
+            {:else}
+              <div class="flex min-h-[320px] max-w-xl flex-col justify-center px-2">
+                <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
+                <h2 class="mt-3 text-4xl font-black tracking-normal">Oops, no such song found :(</h2>
+                <p class="mt-3 text-sm leading-6 text-white/48">Try another title, artist, album, or format.</p>
+              </div>
+            {/if}
           </div>
           <AlphabetRail onJump={(letter) => jumpToLetter(songListEl, letter)} />
         </div>
       {:else}
         <div class="grid h-full grid-cols-[minmax(0,1fr)_24px]">
           <div class="scrollbar-none grid max-h-full content-start grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-4 overflow-auto pr-3" bind:this={songListEl}>
-            {#each sortedSongs as song}
+            {#if sortedSongs.length}
+              {#each sortedSongs as song}
               <button
                 data-letter={initialFromText(song.title)}
                 class={`min-w-0 text-left transition ${song.path === currentPath ? 'opacity-100' : selectedPath === song.path ? 'opacity-90' : 'opacity-76 hover:opacity-100'}`}
@@ -791,7 +806,14 @@
                 <span class="mt-2 block truncate text-sm font-bold text-white">{song.title}</span>
                 <span class="block truncate text-xs text-white/46">{song.artist}</span>
               </button>
-            {/each}
+              {/each}
+            {:else}
+              <div class="col-span-full flex min-h-[320px] max-w-xl flex-col justify-center">
+                <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
+                <h2 class="mt-3 text-4xl font-black tracking-normal">Oops, no such song found :(</h2>
+                <p class="mt-3 text-sm leading-6 text-white/48">Try another title, artist, album, or format.</p>
+              </div>
+            {/if}
           </div>
           <AlphabetRail onJump={(letter) => jumpToLetter(songListEl, letter)} />
         </div>
@@ -817,7 +839,7 @@
               <label class="w-full max-w-xl">
                 <span class="sr-only">Search songs in album</span>
                 <input
-                  class="h-10 w-full rounded-md border border-white/10 bg-black/24 px-3 text-sm text-white outline-none transition placeholder:text-white/32 focus:border-[color:var(--accent-mid)]"
+                  class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
                   bind:value={detailQuery}
                   placeholder={detailSearchPlaceholder}
                 />
@@ -870,6 +892,13 @@
                   <span class="text-right text-xs text-white/48">{formatDuration(song.duration)}</span>
                 </button>
               {/each}
+              {#if !selectedAlbumVisibleSongs.length}
+                <div class="flex min-h-[220px] max-w-xl flex-col justify-center px-2">
+                  <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
+                  <h2 class="mt-3 text-3xl font-black tracking-normal">Oops, no songs in this album match :(</h2>
+                  <p class="mt-3 text-sm leading-6 text-white/48">Try a different search inside this album.</p>
+                </div>
+              {/if}
             </div>
             <div>
               <h3 class="mb-3 text-sm font-black">More albums from {selectedAlbum.artist}</h3>
@@ -892,7 +921,8 @@
       {:else}
         <div class="grid h-full grid-cols-[minmax(0,1fr)_24px]">
           <div class="scrollbar-none grid max-h-full grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-3 overflow-auto pr-2" bind:this={albumListEl}>
-            {#each albumEntries as album}
+            {#if albumEntries.length}
+              {#each albumEntries as album}
               <button data-letter={initialFromText(album.title)} class="text-left opacity-82 transition hover:opacity-100" on:click={() => openAlbum(album.key)}>
                 <div class="aspect-square overflow-hidden rounded-md bg-white/8">
                   {#if artworkUrl(album.artwork)}
@@ -902,7 +932,14 @@
                 <p class="mt-2 truncate text-sm font-semibold">{album.title}</p>
                 <p class="truncate text-xs text-white/40">{album.artist}</p>
               </button>
-            {/each}
+              {/each}
+            {:else}
+              <div class="col-span-full flex min-h-[320px] max-w-xl flex-col justify-center">
+                <p class="text-sm font-bold uppercase text-white/34">No albums found</p>
+                <h2 class="mt-3 text-4xl font-black tracking-normal">Oops, no such album found :(</h2>
+                <p class="mt-3 text-sm leading-6 text-white/48">Try another album or artist name.</p>
+              </div>
+            {/if}
           </div>
           <AlphabetRail onJump={(letter) => jumpToLetter(albumListEl, letter)} />
         </div>
@@ -928,7 +965,7 @@
               <label class="w-full max-w-xl">
                 <span class="sr-only">Search songs by artist</span>
                 <input
-                  class="h-10 w-full rounded-md border border-white/10 bg-black/24 px-3 text-sm text-white outline-none transition placeholder:text-white/32 focus:border-[color:var(--accent-mid)]"
+                  class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
                   bind:value={detailQuery}
                   placeholder={detailSearchPlaceholder}
                 />
@@ -978,6 +1015,13 @@
                   <span class="text-right text-xs text-white/48">{formatDuration(song.duration)}</span>
                 </button>
               {/each}
+              {#if !selectedArtistVisibleSongs.length}
+                <div class="flex min-h-[220px] max-w-xl flex-col justify-center px-2">
+                  <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
+                  <h2 class="mt-3 text-3xl font-black tracking-normal">Oops, no songs by this artist match :(</h2>
+                  <p class="mt-3 text-sm leading-6 text-white/48">Try a different search inside this artist page.</p>
+                </div>
+              {/if}
             </div>
 
             <div>
@@ -1001,7 +1045,8 @@
       {:else}
         <div class="grid h-full grid-cols-[minmax(0,1fr)_24px]">
           <div class="scrollbar-none grid max-h-full grid-cols-5 gap-x-3 overflow-auto pr-2 max-2xl:grid-cols-4 max-lg:grid-cols-3 max-md:grid-cols-2" bind:this={artistListEl}>
-            {#each artistEntries as artist}
+            {#if artistEntries.length}
+              {#each artistEntries as artist}
               <button data-letter={initialFromText(artist.name)} class="flex min-w-0 items-center gap-3 border-b border-white/[0.04] px-2 py-3 text-left transition hover:bg-white/[0.035]" on:click={() => openArtist(artist.name)}>
                 {#if artworkUrl(artist.artwork)}
                   <img class="h-10 w-10 shrink-0 rounded-sm object-cover opacity-90" src={artworkUrl(artist.artwork) ?? ''} alt="" />
@@ -1015,7 +1060,14 @@
                   <span class="text-xs text-white/36">{artist.songCount} {artist.songCount === 1 ? 'song' : 'songs'}</span>
                 </span>
               </button>
-            {/each}
+              {/each}
+            {:else}
+              <div class="col-span-full flex min-h-[320px] max-w-xl flex-col justify-center">
+                <p class="text-sm font-bold uppercase text-white/34">No artists found</p>
+                <h2 class="mt-3 text-4xl font-black tracking-normal">Oops, no such artist found :(</h2>
+                <p class="mt-3 text-sm leading-6 text-white/48">Try another artist name.</p>
+              </div>
+            {/if}
           </div>
           <AlphabetRail onJump={(letter) => jumpToLetter(artistListEl, letter)} />
         </div>

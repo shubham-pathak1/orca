@@ -21,6 +21,7 @@
     pickAndScanFolder,
     playSong,
     playbackSnapshot,
+    queueNextPlayback,
     removeLibraryScanRoot,
     playlistSongIds,
     removePlaylistCover,
@@ -71,6 +72,8 @@
   let isPollingPlayback = false;
   let isHandlingTrackEnd = false;
   let handledEndedPath: string | null = null;
+  let queuedNextForPath: string | null = null;
+  let queuedNextPath: string | null = null;
   $: bottomRowSize = seekbarStyle === 'waveform' ? '96px' : '72px';
   $: effectiveAccentRgb = dynamicCoverAccent ? accentRgb : '245,245,245';
 
@@ -246,6 +249,19 @@
     const previousPlayback = playback;
     playback = nextPlayback;
 
+    if (previousPlayback.current_path !== nextPlayback.current_path) {
+      selectedPath = nextPlayback.current_path;
+      queuedNextForPath = null;
+      queuedNextPath = null;
+      handledEndedPath = null;
+    } else if (previousPlayback.is_playing && previousPlayback.position_ms > nextPlayback.position_ms + 1000) {
+      queuedNextForPath = null;
+      queuedNextPath = null;
+      handledEndedPath = null;
+    }
+
+    await maybeQueueNextTrack(nextPlayback);
+
     if (!nextPlayback.current_path || isHandlingTrackEnd || handledEndedPath === nextPlayback.current_path) {
       return;
     }
@@ -269,6 +285,62 @@
     } finally {
       isHandlingTrackEnd = false;
     }
+  }
+
+  async function maybeQueueNextTrack(nextPlayback: PlaybackState) {
+    if (!nextPlayback.current_path || !nextPlayback.is_playing || nextPlayback.duration_ms <= 0) {
+      return;
+    }
+
+    const remainingMs = nextPlayback.duration_ms - nextPlayback.position_ms;
+    if (remainingMs > 5000 || remainingMs < 0) {
+      return;
+    }
+
+    if (queuedNextForPath === nextPlayback.current_path && queuedNextPath) {
+      return;
+    }
+
+    const nextSong = pickNextSong(nextPlayback.current_path);
+    if (!nextSong) {
+      return;
+    }
+
+    queuedNextForPath = nextPlayback.current_path;
+    queuedNextPath = nextSong.path;
+
+    try {
+      await queueNextPlayback(nextSong.path);
+    } catch {
+      queuedNextForPath = null;
+      queuedNextPath = null;
+    }
+  }
+
+  function pickNextSong(currentPath: string) {
+    const currentIndex = songs.findIndex((song) => song.path === currentPath);
+    if (currentIndex < 0 || songs.length === 0) {
+      return null;
+    }
+
+    if (repeatMode === 'one') {
+      return songs[currentIndex];
+    }
+
+    if (shuffleEnabled && songs.length > 1) {
+      let nextIndex = currentIndex;
+      while (nextIndex === currentIndex) {
+        nextIndex = Math.floor(Math.random() * songs.length);
+      }
+      return songs[nextIndex];
+    }
+
+    const isLastSong = currentIndex >= songs.length - 1;
+    if (isLastSong && repeatMode !== 'all') {
+      return null;
+    }
+
+    return songs[(currentIndex + 1) % songs.length];
   }
 
   async function handleTrackEnded(path: string) {
@@ -554,6 +626,8 @@
 
   async function chooseSong(song: LocalSong) {
     handledEndedPath = null;
+    queuedNextForPath = null;
+    queuedNextPath = null;
     selectedPath = song.path;
     playback = await playSong(song.path);
   }
@@ -589,17 +663,23 @@
     }
 
     handledEndedPath = null;
+    queuedNextForPath = null;
+    queuedNextPath = null;
     playback = playback.is_playing ? await pausePlayback() : await resumePlayback();
   }
 
   async function seek(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
     handledEndedPath = null;
+    queuedNextForPath = null;
+    queuedNextPath = null;
     playback = await seekPlayback(Number(target.value));
   }
 
   async function seekToPosition(positionMs: number) {
     handledEndedPath = null;
+    queuedNextForPath = null;
+    queuedNextPath = null;
     playback = await seekPlayback(positionMs);
   }
 
