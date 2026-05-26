@@ -1,0 +1,97 @@
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("./lib/fonts/PlusJakartaSans-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("./lib/fonts/PlusJakartaSans-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #f4f0e8;
+  background: #0b0c0f;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+::selection {
+  background: rgba(244, 240, 232, 0.32);
+  color: #fff;
+}
+
+main ::selection {
+  background: var(--accent-mid);
+  color: #fff;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+@layer components {
+  .glass-panel {
+    border: 1px solid rgba(244, 240, 232, 0.09);
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025)),
+      rgba(20, 23, 29, 0.82);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+  }
+
+  .icon-button {
+    display: inline-grid;
+    height: 2.5rem;
+    width: 2.5rem;
+    place-items: center;
+    border: 1px solid rgba(244, 240, 232, 0.1);
+    background: rgba(244, 240, 232, 0.07);
+    color: #f4f0e8;
+    transition:
+      transform 140ms ease,
+      border-color 140ms ease,
+      background 140ms ease;
+  }
+
+  .icon-button:hover {
+    transform: translateY(-1px);
+    border-color: rgba(244, 240, 232, 0.24);
+    background: rgba(244, 240, 232, 0.13);
+  }
+}

@@ -1,0 +1,136 @@
+import { convertFileSrc } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
+import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate } from './types';
+
+const fallbackPlayback: PlaybackState = {
+  current_path: null,
+  position_ms: 0,
+  duration_ms: 0,
+  is_playing: false,
+  volume: 1
+};
+
+export async function getLibrarySnapshot(): Promise<LibrarySnapshot> {
+  return invoke<LibrarySnapshot>('library_snapshot').catch(() => ({
+    songs: [],
+    playlists: [],
+    playback: fallbackPlayback,
+    folder_count: 0
+  }));
+}
+
+export async function libraryFolderCount(): Promise<number> {
+  return invoke<number>('library_folder_count').catch(() => 0);
+}
+
+export async function libraryScanRoots(): Promise<string[]> {
+  return invoke<string[]>('library_scan_roots').catch(() => []);
+}
+
+export async function removeLibraryScanRoot(root: string): Promise<LibrarySnapshot> {
+  return invoke<LibrarySnapshot>('remove_library_scan_root', { root });
+}
+
+export async function pickAndScanFolder(): Promise<LocalSong[]> {
+  return invoke<LocalSong[]>('pick_and_scan_folder');
+}
+
+export async function rescanLibrary(): Promise<LocalSong[]> {
+  return invoke<LocalSong[]>('rescan_library');
+}
+
+export async function createPlaylist(name: string): Promise<Playlist[]> {
+  return invoke<Playlist[]>('create_playlist', { name });
+}
+
+export async function renamePlaylist(playlistId: number, name: string): Promise<Playlist[]> {
+  return invoke<Playlist[]>('rename_playlist', { playlistId, name });
+}
+
+export async function deletePlaylist(playlistId: number): Promise<Playlist[]> {
+  return invoke<Playlist[]>('delete_playlist', { playlistId });
+}
+
+export async function addSongToPlaylist(playlistId: number, songId: number): Promise<Playlist[]> {
+  return invoke<Playlist[]>('add_song_to_playlist', { playlistId, songId });
+}
+
+export async function removeSongFromPlaylist(playlistId: number, songId: number): Promise<Playlist[]> {
+  return invoke<Playlist[]>('remove_song_from_playlist', { playlistId, songId });
+}
+
+export async function playlistSongIds(playlistId: number): Promise<number[]> {
+  return invoke<number[]>('playlist_song_ids', { playlistId });
+}
+
+export async function choosePlaylistCover(playlistId: number): Promise<Playlist[]> {
+  return invoke<Playlist[]>('choose_playlist_cover', { playlistId });
+}
+
+export async function removePlaylistCover(playlistId: number): Promise<Playlist[]> {
+  return invoke<Playlist[]>('remove_playlist_cover', { playlistId });
+}
+
+export async function updateSongMetadata(update: SongMetadataUpdate): Promise<LibrarySnapshot> {
+  return invoke<LibrarySnapshot>('update_song_metadata', { update });
+}
+
+export async function chooseSongCover(path: string): Promise<LibrarySnapshot> {
+  return invoke<LibrarySnapshot>('choose_song_cover', { path });
+}
+
+export async function removeSongCover(path: string): Promise<LibrarySnapshot> {
+  return invoke<LibrarySnapshot>('remove_song_cover', { path });
+}
+
+export async function playSong(path: string): Promise<PlaybackState> {
+  return invoke<PlaybackState>('play_song', { path });
+}
+
+export async function pausePlayback(): Promise<PlaybackState> {
+  return invoke<PlaybackState>('pause_playback');
+}
+
+export async function resumePlayback(): Promise<PlaybackState> {
+  return invoke<PlaybackState>('resume_playback');
+}
+
+export async function seekPlayback(positionMs: number): Promise<PlaybackState> {
+  return invoke<PlaybackState>('seek_playback', { positionMs });
+}
+
+export async function setVolume(volume: number): Promise<PlaybackState> {
+  return invoke<PlaybackState>('set_volume', { volume });
+}
+
+export async function waveformPeaks(path: string, buckets = 96): Promise<number[]> {
+  return invoke<number[]>('waveform_peaks', { path, buckets });
+}
+
+export async function playbackSnapshot(): Promise<PlaybackState> {
+  return invoke<PlaybackState>('playback_snapshot').catch(() => fallbackPlayback);
+}
+
+export function artworkUrl(path: string | null): string | null {
+  if (!path) {
+    return null;
+  }
+
+  try {
+    return convertFileSrc(path);
+  } catch {
+    return null;
+  }
+}
+
+export function audioUrl(path: string | null): string | null {
+  if (!path) {
+    return null;
+  }
+
+  try {
+    return convertFileSrc(path);
+  } catch {
+    return null;
+  }
+}

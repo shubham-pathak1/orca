@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Frontend build/cache
+dist/
+.vite/
+.svelte-kit/
+vite-dev.*.log
+
+# Rust/Tauri build output
+target/
+src-tauri/target/
+src-tauri/gen/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Windows build/debug artifacts
+*.pdb
+*.exe
+
+# Local app data and generated caches
+orca.db
+orca_settings.json
+audio_prefs.json
+lyrics_cache/
+thumbs-*/
+temp_logo.png

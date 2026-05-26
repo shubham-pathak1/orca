@@ -1,0 +1,702 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import AppBackdrop from './lib/components/AppBackdrop.svelte';
+  import DetailsPanel from './lib/components/DetailsPanel.svelte';
+  import FullPlayer from './lib/components/FullPlayer.svelte';
+  import LibraryView from './lib/components/LibraryView.svelte';
+  import MetadataEditor from './lib/components/MetadataEditor.svelte';
+  import PlayerBar from './lib/components/PlayerBar.svelte';
+  import Sidebar from './lib/components/Sidebar.svelte';
+  import {
+    addSongToPlaylist,
+    artworkUrl,
+    chooseSongCover,
+    choosePlaylistCover,
+    createPlaylist,
+    deletePlaylist,
+    getLibrarySnapshot,
+    libraryFolderCount,
+    libraryScanRoots,
+    pausePlayback,
+    pickAndScanFolder,
+    playSong,
+    playbackSnapshot,
+    removeLibraryScanRoot,
+    playlistSongIds,
+    removePlaylistCover,
+    removeSongCover,
+    removeSongFromPlaylist,
+    renamePlaylist,
+    rescanLibrary,
+    resumePlayback,
+    seekPlayback,
+    setVolume,
+    updateSongMetadata
+  } from './lib/tauri';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
+  import type { ActiveView } from './lib/navigation';
+  import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate } from './lib/types';
+
+  let songs: LocalSong[] = [];
+  let playlists: Playlist[] = [];
+  let playback: PlaybackState = {
+    current_path: null,
+    position_ms: 0,
+    duration_ms: 0,
+    is_playing: false,
+    volume: 1
+  };
+  let query = '';
+  let activeView: ActiveView = 'songs';
+  let isScanning = false;
+  let status = 'Ready';
+  let selectedPath: string | null = null;
+  let fullPlayerOpen = false;
+  let accentRgb = '245,245,245';
+  let sampledArtwork: string | null = null;
+  let playerPlacement: 'right' | 'bottom' = 'right';
+  let seekbarStyle: 'standard' | 'waveform' = 'standard';
+  let dynamicCoverAccent = true;
+  let blurredNowPlayingBackground = true;
+  let fontFamily = 'Plus Jakarta Sans';
+  let fontSizePercent = 100;
+  let shuffleEnabled = false;
+  let repeatMode: 'off' | 'all' | 'one' = 'off';
+  let metadataEditorSong: LocalSong | null = null;
+  let isSavingMetadata = false;
+  let folderCount = 0;
+  let scanRoots: string[] = [];
+  let isPollingPlayback = false;
+  let isHandlingTrackEnd = false;
+  let handledEndedPath: string | null = null;
+  $: bottomRowSize = seekbarStyle === 'waveform' ? '96px' : '72px';
+  $: effectiveAccentRgb = dynamicCoverAccent ? accentRgb : '245,245,245';
+
+  $: filteredSongs = songs.filter((song) => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) {
+      return true;
+    }
+
+    return [song.title, song.artist, song.album, song.format ?? ''].some((value) =>
+      value.toLowerCase().includes(needle)
+    );
+  });
+
+  $: nowPlaying = songs.find((song) => song.path === playback.current_path) ?? null;
+  $: selectedSong = songs.find((song) => song.path === selectedPath) ?? nowPlaying ?? filteredSongs[0] ?? null;
+  $: albumCount = new Set(songs.map((song) => `${song.album_artist}:${song.album}`)).size;
+  $: artistCount = new Set(songs.map((song) => song.artist)).size;
+  $: ambientArtwork = artworkUrl((nowPlaying ?? selectedSong)?.artwork_preview ?? (nowPlaying ?? selectedSong)?.artwork ?? null);
+  $: shellStyle = [
+    `--cover-art: ${ambientArtwork ? `url("${ambientArtwork}")` : 'none'}`,
+    `--accent: rgb(${effectiveAccentRgb})`,
+    `--accent-soft: rgba(${effectiveAccentRgb}, 0.18)`,
+    `--accent-mid: rgba(${effectiveAccentRgb}, 0.34)`,
+    `font-family: ${fontStack(fontFamily)}`
+  ].join('; ');
+  $: if (dynamicCoverAccent && ambientArtwork && ambientArtwork !== sampledArtwork) {
+    void sampleAccent(ambientArtwork);
+  }
+  $: applyRootFontSize(fontSizePercent);
+
+  onMount(() => {
+    playerPlacement = readPreference('orca.playerPlacement', 'right', ['right', 'bottom']);
+    seekbarStyle = readPreference('orca.seekbarStyle', 'standard', ['standard', 'waveform']);
+    dynamicCoverAccent = readBooleanPreference('orca.dynamicCoverAccent', true);
+    blurredNowPlayingBackground = readBooleanPreference('orca.blurredNowPlayingBackground', true);
+    fontFamily = readPreference('orca.fontFamily', 'Plus Jakarta Sans', ['Plus Jakarta Sans', 'System', 'Segoe UI']);
+    fontSizePercent = readNumberPreference('orca.fontSizePercent', 100, 80, 120);
+    shuffleEnabled = readBooleanPreference('orca.shuffleEnabled', false);
+    repeatMode = readPreference('orca.repeatMode', 'off', ['off', 'all', 'one']);
+
+    void (async () => {
+      const snapshot = await getLibrarySnapshot();
+      songs = snapshot.songs;
+      playlists = snapshot.playlists;
+      playback = snapshot.playback;
+      folderCount = snapshot.folder_count ?? 0;
+      scanRoots = await libraryScanRoots();
+      status = songs.length ? `${songs.length} tracks loaded` : 'Add a folder to build your library';
+    })();
+
+    const timer = window.setInterval(async () => {
+      if (isPollingPlayback) {
+        return;
+      }
+
+      isPollingPlayback = true;
+      try {
+        await handlePlaybackSnapshot(await playbackSnapshot());
+      } finally {
+        isPollingPlayback = false;
+      }
+    }, 500);
+
+    window.addEventListener('keydown', handleKeydown);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('keydown', handleKeydown);
+    };
+  });
+
+  function readPreference<T extends string>(key: string, fallback: T, allowed: T[]): T {
+    const value = window.localStorage.getItem(key);
+    return allowed.includes(value as T) ? (value as T) : fallback;
+  }
+
+  function readBooleanPreference(key: string, fallback: boolean) {
+    const value = window.localStorage.getItem(key);
+    return value === null ? fallback : value === 'true';
+  }
+
+  function readNumberPreference(key: string, fallback: number, min: number, max: number) {
+    const value = Number(window.localStorage.getItem(key));
+    return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+  }
+
+  function fontStack(value: string) {
+    if (value === 'System') {
+      return 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    }
+
+    if (value === 'Segoe UI') {
+      return '"Segoe UI", ui-sans-serif, system-ui, sans-serif';
+    }
+
+    return '"Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif';
+  }
+
+  function applyRootFontSize(value: number) {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    document.documentElement.style.fontSize = `${16 * (value / 100)}px`;
+  }
+
+  function setPlayerPlacement(placement: 'right' | 'bottom') {
+    playerPlacement = placement;
+    window.localStorage.setItem('orca.playerPlacement', placement);
+  }
+
+  function setSeekbarStyle(style: 'standard' | 'waveform') {
+    seekbarStyle = style;
+    window.localStorage.setItem('orca.seekbarStyle', style);
+  }
+
+  function setDynamicCoverAccent(enabled: boolean) {
+    dynamicCoverAccent = enabled;
+    window.localStorage.setItem('orca.dynamicCoverAccent', String(enabled));
+    if (!enabled) {
+      sampledArtwork = null;
+      accentRgb = '245,245,245';
+    } else if (ambientArtwork) {
+      sampledArtwork = null;
+      void sampleAccent(ambientArtwork);
+    }
+  }
+
+  function setBlurredNowPlayingBackground(enabled: boolean) {
+    blurredNowPlayingBackground = enabled;
+    window.localStorage.setItem('orca.blurredNowPlayingBackground', String(enabled));
+  }
+
+  function setFontFamily(value: string) {
+    fontFamily = value;
+    window.localStorage.setItem('orca.fontFamily', value);
+  }
+
+  function setFontSizePercent(value: number) {
+    fontSizePercent = Math.min(120, Math.max(80, Math.round(value)));
+    window.localStorage.setItem('orca.fontSizePercent', String(fontSizePercent));
+  }
+
+  function toggleShuffle() {
+    shuffleEnabled = !shuffleEnabled;
+    window.localStorage.setItem('orca.shuffleEnabled', String(shuffleEnabled));
+  }
+
+  function cycleRepeat() {
+    repeatMode = repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off';
+    window.localStorage.setItem('orca.repeatMode', repeatMode);
+  }
+
+  function applyLibrarySnapshot(snapshot: LibrarySnapshot) {
+    songs = snapshot.songs;
+    playlists = snapshot.playlists;
+    playback = snapshot.playback;
+    folderCount = snapshot.folder_count ?? folderCount;
+
+    if (metadataEditorSong) {
+      metadataEditorSong = songs.find((song) => song.path === metadataEditorSong?.path) ?? metadataEditorSong;
+    }
+  }
+
+  async function handlePlaybackSnapshot(nextPlayback: PlaybackState) {
+    const previousPlayback = playback;
+    playback = nextPlayback;
+
+    if (!nextPlayback.current_path || isHandlingTrackEnd || handledEndedPath === nextPlayback.current_path) {
+      return;
+    }
+
+    const endingPosition = Math.max(previousPlayback.position_ms, nextPlayback.position_ms);
+    const nearEnd = nextPlayback.duration_ms > 0 && endingPosition >= Math.max(0, nextPlayback.duration_ms - 1500);
+    const playbackStoppedAtEnd =
+      previousPlayback.current_path === nextPlayback.current_path &&
+      previousPlayback.is_playing &&
+      !nextPlayback.is_playing &&
+      nearEnd;
+
+    if (!playbackStoppedAtEnd) {
+      return;
+    }
+
+    handledEndedPath = nextPlayback.current_path;
+    isHandlingTrackEnd = true;
+    try {
+      await handleTrackEnded(nextPlayback.current_path);
+    } finally {
+      isHandlingTrackEnd = false;
+    }
+  }
+
+  async function handleTrackEnded(path: string) {
+    const currentIndex = songs.findIndex((song) => song.path === path);
+    if (currentIndex < 0) {
+      return;
+    }
+
+    if (repeatMode === 'one') {
+      await chooseSong(songs[currentIndex]);
+      return;
+    }
+
+    if (shuffleEnabled && songs.length > 1) {
+      await playSongByOffset(1);
+      return;
+    }
+
+    const isLastSong = currentIndex >= songs.length - 1;
+    if (!isLastSong || repeatMode === 'all') {
+      await chooseSong(songs[(currentIndex + 1) % songs.length]);
+    }
+  }
+
+  async function handleKeydown(event: KeyboardEvent) {
+    if (shouldIgnorePlaybackShortcut(event)) {
+      return;
+    }
+
+    const key = event.key.toLowerCase();
+    if (event.key === 'F11') {
+      event.preventDefault();
+      await toggleFullscreen();
+      return;
+    }
+
+    if (event.altKey && key === 'n') {
+      event.preventDefault();
+      await playNextSong();
+      return;
+    }
+
+    if (event.altKey && key === 'p') {
+      event.preventDefault();
+      await playPreviousSong();
+      return;
+    }
+
+    if (event.code === 'Space' && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault();
+      await togglePlayback();
+    }
+  }
+
+  function shouldIgnorePlaybackShortcut(event: KeyboardEvent) {
+    const target = event.target as HTMLElement | null;
+    return Boolean(target?.closest('input, textarea, select, button, [contenteditable="true"]'));
+  }
+
+  function suppressNativeContextMenu(event: MouseEvent) {
+    event.preventDefault();
+  }
+
+  async function toggleFullscreen() {
+    try {
+      const appWindow = getCurrentWindow();
+      await appWindow.setFullscreen(!(await appWindow.isFullscreen()));
+      return;
+    } catch {
+      // Browser fallback for Vite preview.
+    }
+
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else {
+      await document.documentElement.requestFullscreen();
+    }
+  }
+
+  async function sampleAccent(src: string) {
+    sampledArtwork = src;
+
+    try {
+      const image = new Image();
+      image.crossOrigin = 'anonymous';
+      image.src = src;
+      await image.decode();
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 48;
+      canvas.height = 48;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) {
+        return;
+      }
+
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let count = 0;
+
+      for (let index = 0; index < pixels.length; index += 16) {
+        const red = pixels[index];
+        const green = pixels[index + 1];
+        const blue = pixels[index + 2];
+        const max = Math.max(red, green, blue);
+        const min = Math.min(red, green, blue);
+        const brightness = (red + green + blue) / 3;
+
+        if (max - min > 18 && brightness > 34 && brightness < 232) {
+          r += red;
+          g += green;
+          b += blue;
+          count += 1;
+        }
+      }
+
+      if (count > 0) {
+        accentRgb = `${Math.round(r / count)},${Math.round(g / count)},${Math.round(b / count)}`;
+      }
+    } catch {
+      accentRgb = '245,245,245';
+    }
+  }
+
+  async function addFolder() {
+    isScanning = true;
+    status = 'Scanning folder...';
+    try {
+      songs = await pickAndScanFolder();
+      folderCount = await libraryFolderCount();
+      scanRoots = await libraryScanRoots();
+      status = `${songs.length} tracks loaded`;
+    } catch (error) {
+      status = error instanceof Error ? error.message : 'Scan cancelled';
+    } finally {
+      isScanning = false;
+    }
+  }
+
+  async function refreshLibrary() {
+    isScanning = true;
+    status = 'Refreshing library...';
+    try {
+      songs = await rescanLibrary();
+      folderCount = await libraryFolderCount();
+      scanRoots = await libraryScanRoots();
+      status = `${songs.length} tracks loaded`;
+    } catch (error) {
+      status = error instanceof Error ? error.message : 'Refresh failed';
+    } finally {
+      isScanning = false;
+    }
+  }
+
+  async function addPlaylist(name: string) {
+    playlists = await createPlaylist(name);
+  }
+
+  async function removeScanRoot(root: string) {
+    isScanning = true;
+    status = 'Removing folder...';
+    try {
+      const snapshot = await removeLibraryScanRoot(root);
+      applyLibrarySnapshot(snapshot);
+      scanRoots = await libraryScanRoots();
+      status = `${snapshot.songs.length} tracks loaded`;
+    } catch (error) {
+      status = error instanceof Error ? error.message : 'Could not remove folder';
+    } finally {
+      isScanning = false;
+    }
+  }
+
+  async function renameExistingPlaylist(playlistId: number, name: string) {
+    playlists = await renamePlaylist(playlistId, name);
+    status = `Renamed playlist to ${name}`;
+  }
+
+  async function deleteExistingPlaylist(playlistId: number) {
+    playlists = await deletePlaylist(playlistId);
+    status = 'Deleted playlist';
+  }
+
+  async function chooseExistingPlaylistCover(playlistId: number) {
+    playlists = await choosePlaylistCover(playlistId);
+    status = 'Updated playlist cover';
+  }
+
+  async function clearExistingPlaylistCover(playlistId: number) {
+    playlists = await removePlaylistCover(playlistId);
+    status = 'Removed playlist cover';
+  }
+
+  async function loadPlaylistSongs(playlistId: number) {
+    return playlistSongIds(playlistId);
+  }
+
+  async function addToPlaylist(playlistId: number, song: LocalSong) {
+    if (song.id === null) {
+      status = 'Song is not saved in the library yet';
+      return;
+    }
+
+    playlists = await addSongToPlaylist(playlistId, song.id);
+    const playlist = playlists.find((item) => item.id === playlistId);
+    status = playlist ? `Added to ${playlist.name}` : 'Added to playlist';
+  }
+
+  function editSongMetadata(song: LocalSong) {
+    metadataEditorSong = song;
+  }
+
+  async function saveSongMetadata(update: SongMetadataUpdate) {
+    isSavingMetadata = true;
+    status = 'Saving metadata...';
+    try {
+      const snapshot = await updateSongMetadata(update);
+      applyLibrarySnapshot(snapshot);
+      metadataEditorSong = null;
+      status = 'Updated song metadata';
+    } catch (error) {
+      status = error instanceof Error ? error.message : 'Could not save metadata';
+    } finally {
+      isSavingMetadata = false;
+    }
+  }
+
+  async function replaceSongCover(song: LocalSong) {
+    isSavingMetadata = true;
+    status = 'Choosing cover...';
+    try {
+      const snapshot = await chooseSongCover(song.path);
+      applyLibrarySnapshot(snapshot);
+      status = 'Updated song cover';
+    } catch (error) {
+      status = error instanceof Error ? error.message : 'Cover change cancelled';
+    } finally {
+      isSavingMetadata = false;
+    }
+  }
+
+  async function clearSongCover(song: LocalSong) {
+    isSavingMetadata = true;
+    status = 'Removing cover...';
+    try {
+      const snapshot = await removeSongCover(song.path);
+      applyLibrarySnapshot(snapshot);
+      status = 'Removed song cover';
+    } catch (error) {
+      status = error instanceof Error ? error.message : 'Could not remove cover';
+    } finally {
+      isSavingMetadata = false;
+    }
+  }
+
+  async function removeFromPlaylist(playlistId: number, song: LocalSong) {
+    if (song.id === null) {
+      status = 'Song is not saved in the library yet';
+      return;
+    }
+
+    playlists = await removeSongFromPlaylist(playlistId, song.id);
+    status = `Removed ${song.title} from playlist`;
+  }
+
+  async function chooseSong(song: LocalSong) {
+    handledEndedPath = null;
+    selectedPath = song.path;
+    playback = await playSong(song.path);
+  }
+
+  async function playSongByOffset(offset: number) {
+    const currentPath = playback.current_path ?? selectedPath;
+    const currentIndex = songs.findIndex((song) => song.path === currentPath);
+    if (currentIndex < 0 || songs.length === 0) {
+      return;
+    }
+
+    let nextIndex = (currentIndex + offset + songs.length) % songs.length;
+    if (shuffleEnabled && songs.length > 1) {
+      do {
+        nextIndex = Math.floor(Math.random() * songs.length);
+      } while (nextIndex === currentIndex);
+    }
+    await chooseSong(songs[nextIndex]);
+  }
+
+  async function playPreviousSong() {
+    await playSongByOffset(-1);
+  }
+
+  async function playNextSong() {
+    await playSongByOffset(1);
+  }
+
+  async function togglePlayback() {
+    if (!playback.current_path && selectedSong) {
+      await chooseSong(selectedSong);
+      return;
+    }
+
+    handledEndedPath = null;
+    playback = playback.is_playing ? await pausePlayback() : await resumePlayback();
+  }
+
+  async function seek(event: Event) {
+    const target = event.currentTarget as HTMLInputElement;
+    handledEndedPath = null;
+    playback = await seekPlayback(Number(target.value));
+  }
+
+  async function seekToPosition(positionMs: number) {
+    handledEndedPath = null;
+    playback = await seekPlayback(positionMs);
+  }
+
+  async function changeVolume(event: Event) {
+    const target = event.currentTarget as HTMLInputElement;
+    playback = await setVolume(Number(target.value));
+  }
+</script>
+
+<svelte:head>
+  <title>Orca</title>
+</svelte:head>
+
+<svelte:window on:contextmenu={suppressNativeContextMenu} />
+
+<main class="relative h-screen overflow-hidden bg-[#090a0c] text-[#f4f4f5]" style={shellStyle}>
+  <AppBackdrop {shellStyle} blurredBackground={blurredNowPlayingBackground} />
+
+  <div
+    class={`relative grid h-full ${playerPlacement === 'right' ? 'grid-cols-[132px_minmax(0,1fr)_250px] grid-rows-[1fr] max-xl:grid-cols-[132px_minmax(0,1fr)]' : 'grid-cols-[132px_minmax(0,1fr)]'} max-md:grid-cols-1`}
+    style={playerPlacement === 'right' ? undefined : `grid-template-rows: minmax(0, 1fr) ${bottomRowSize};`}
+  >
+    <Sidebar {activeView} {isScanning} {folderCount} onSelect={(view) => (activeView = view)} onAddFolder={addFolder} onRefresh={refreshLibrary} />
+    <LibraryView
+      {activeView}
+      {songs}
+      {playlists}
+      {filteredSongs}
+      bind:query
+      {selectedPath}
+      currentPath={playback.current_path}
+      {artistCount}
+      {albumCount}
+      onChooseSong={chooseSong}
+      onCreatePlaylist={addPlaylist}
+      onAddSongToPlaylist={addToPlaylist}
+      onLoadPlaylistSongIds={loadPlaylistSongs}
+      onRenamePlaylist={renameExistingPlaylist}
+      onDeletePlaylist={deleteExistingPlaylist}
+      onChoosePlaylistCover={chooseExistingPlaylistCover}
+      onRemovePlaylistCover={clearExistingPlaylistCover}
+      onRemoveSongFromPlaylist={removeFromPlaylist}
+      onEditSong={editSongMetadata}
+      {playerPlacement}
+      onPlayerPlacementChange={setPlayerPlacement}
+      {seekbarStyle}
+      onSeekbarStyleChange={setSeekbarStyle}
+      {scanRoots}
+      {isScanning}
+      onRemoveScanRoot={removeScanRoot}
+      {dynamicCoverAccent}
+      onDynamicCoverAccentChange={setDynamicCoverAccent}
+      blurredBackground={blurredNowPlayingBackground}
+      onBlurredBackgroundChange={setBlurredNowPlayingBackground}
+      {fontFamily}
+      onFontFamilyChange={setFontFamily}
+      {fontSizePercent}
+      onFontSizePercentChange={setFontSizePercent}
+    />
+    {#if playerPlacement === 'right'}
+      <DetailsPanel
+        song={nowPlaying ?? selectedSong}
+        {playback}
+        {status}
+        {seekbarStyle}
+        {shuffleEnabled}
+        {repeatMode}
+        onToggle={togglePlayback}
+        onPrevious={playPreviousSong}
+        onNext={playNextSong}
+        onToggleShuffle={toggleShuffle}
+        onCycleRepeat={cycleRepeat}
+        onSeek={seek}
+        onVolume={changeVolume}
+        onOpenFullPlayer={() => (fullPlayerOpen = true)}
+      />
+    {/if}
+    <div class={playerPlacement === 'bottom' ? 'contents' : 'hidden max-xl:contents'}>
+      <PlayerBar
+        {nowPlaying}
+        {playback}
+        {status}
+        {seekbarStyle}
+        {shuffleEnabled}
+        {repeatMode}
+        alwaysVisible={playerPlacement === 'bottom'}
+        onToggle={togglePlayback}
+        onPrevious={playPreviousSong}
+        onNext={playNextSong}
+        onToggleShuffle={toggleShuffle}
+        onCycleRepeat={cycleRepeat}
+        onSeek={seek}
+        onVolume={changeVolume}
+        onOpenFullPlayer={() => (fullPlayerOpen = true)}
+      />
+    </div>
+    <FullPlayer
+      open={fullPlayerOpen}
+      song={nowPlaying ?? selectedSong}
+      {playback}
+      {seekbarStyle}
+      {shuffleEnabled}
+      {repeatMode}
+      onClose={() => (fullPlayerOpen = false)}
+      onToggle={togglePlayback}
+      onPrevious={playPreviousSong}
+      onNext={playNextSong}
+      onToggleShuffle={toggleShuffle}
+      onCycleRepeat={cycleRepeat}
+      onSeek={seek}
+      onSeekTo={seekToPosition}
+    />
+    <MetadataEditor
+      open={Boolean(metadataEditorSong)}
+      song={metadataEditorSong}
+      isSaving={isSavingMetadata}
+      onClose={() => (metadataEditorSong = null)}
+      onSave={saveSongMetadata}
+      onReplaceCover={replaceSongCover}
+      onRemoveCover={clearSongCover}
+    />
+  </div>
+</main>
