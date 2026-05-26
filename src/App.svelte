@@ -52,6 +52,7 @@
   let status = 'Ready';
   let selectedPath: string | null = null;
   let fullPlayerOpen = false;
+  let fullPlayerLyricsOpen = false;
   let accentRgb = '245,245,245';
   let sampledArtwork: string | null = null;
   let playerPlacement: 'right' | 'bottom' = 'right';
@@ -60,6 +61,7 @@
   let blurredNowPlayingBackground = true;
   let fontFamily = 'Plus Jakarta Sans';
   let fontSizePercent = 100;
+  let showQualityInfo = true;
   let shuffleEnabled = false;
   let repeatMode: 'off' | 'all' | 'one' = 'off';
   let metadataEditorSong: LocalSong | null = null;
@@ -107,6 +109,7 @@
     blurredNowPlayingBackground = readBooleanPreference('orca.blurredNowPlayingBackground', true);
     fontFamily = readPreference('orca.fontFamily', 'Plus Jakarta Sans', ['Plus Jakarta Sans', 'System', 'Segoe UI']);
     fontSizePercent = readNumberPreference('orca.fontSizePercent', 100, 80, 120);
+    showQualityInfo = readBooleanPreference('orca.showQualityInfo', true);
     shuffleEnabled = readBooleanPreference('orca.shuffleEnabled', false);
     repeatMode = readPreference('orca.repeatMode', 'off', ['off', 'all', 'one']);
 
@@ -213,6 +216,11 @@
     window.localStorage.setItem('orca.fontSizePercent', String(fontSizePercent));
   }
 
+  function setShowQualityInfo(enabled: boolean) {
+    showQualityInfo = enabled;
+    window.localStorage.setItem('orca.showQualityInfo', String(enabled));
+  }
+
   function toggleShuffle() {
     shuffleEnabled = !shuffleEnabled;
     window.localStorage.setItem('orca.shuffleEnabled', String(shuffleEnabled));
@@ -286,14 +294,20 @@
   }
 
   async function handleKeydown(event: KeyboardEvent) {
-    if (shouldIgnorePlaybackShortcut(event)) {
-      return;
-    }
-
     const key = event.key.toLowerCase();
     if (event.key === 'F11') {
       event.preventDefault();
       await toggleFullscreen();
+      return;
+    }
+
+    if (fullPlayerOpen && key === 'l' && !event.altKey && !event.ctrlKey && !event.metaKey && !isTextEntryTarget(event)) {
+      event.preventDefault();
+      fullPlayerLyricsOpen = !fullPlayerLyricsOpen;
+      return;
+    }
+
+    if (shouldIgnorePlaybackShortcut(event)) {
       return;
     }
 
@@ -316,8 +330,17 @@
   }
 
   function shouldIgnorePlaybackShortcut(event: KeyboardEvent) {
+    if (isTextEntryTarget(event)) {
+      return true;
+    }
+
     const target = event.target as HTMLElement | null;
-    return Boolean(target?.closest('input, textarea, select, button, [contenteditable="true"]'));
+    return Boolean(target?.closest('button'));
+  }
+
+  function isTextEntryTarget(event: KeyboardEvent) {
+    const target = event.target as HTMLElement | null;
+    return Boolean(target?.closest('input, textarea, select, [contenteditable="true"]'));
   }
 
   function suppressNativeContextMenu(event: MouseEvent) {
@@ -635,6 +658,8 @@
       onFontFamilyChange={setFontFamily}
       {fontSizePercent}
       onFontSizePercentChange={setFontSizePercent}
+      {showQualityInfo}
+      onShowQualityInfoChange={setShowQualityInfo}
     />
     {#if playerPlacement === 'right'}
       <DetailsPanel
@@ -642,6 +667,7 @@
         {playback}
         {status}
         {seekbarStyle}
+        {showQualityInfo}
         {shuffleEnabled}
         {repeatMode}
         onToggle={togglePlayback}
@@ -660,6 +686,7 @@
         {playback}
         {status}
         {seekbarStyle}
+        {showQualityInfo}
         {shuffleEnabled}
         {repeatMode}
         alwaysVisible={playerPlacement === 'bottom'}
@@ -676,8 +703,10 @@
     <FullPlayer
       open={fullPlayerOpen}
       song={nowPlaying ?? selectedSong}
+      bind:lyricsOpen={fullPlayerLyricsOpen}
       {playback}
       {seekbarStyle}
+      {showQualityInfo}
       {shuffleEnabled}
       {repeatMode}
       onClose={() => (fullPlayerOpen = false)}

@@ -42,6 +42,8 @@
   export let onFontFamilyChange: (font: string) => void = () => {};
   export let fontSizePercent = 100;
   export let onFontSizePercentChange: (size: number) => void = () => {};
+  export let showQualityInfo = true;
+  export let onShowQualityInfoChange: (enabled: boolean) => void = () => {};
 
   let songListEl: HTMLDivElement;
   let artistListEl: HTMLDivElement;
@@ -578,6 +580,8 @@
         {onFontFamilyChange}
         {fontSizePercent}
         {onFontSizePercentChange}
+        {showQualityInfo}
+        {onShowQualityInfoChange}
       />
     {:else if activeView === 'playlists'}
       <div class="scrollbar-none h-full overflow-auto pr-2">
@@ -858,7 +862,9 @@
                     {/if}
                     <span class="min-w-0">
                       <span class="block truncate text-sm font-semibold text-white">{song.title}</span>
-                      <span class="block truncate text-xs text-white/38">{formatQuality(song.format, song.sample_rate, song.bitrate)}</span>
+                      {#if showQualityInfo}
+                        <span class="block truncate text-xs text-white/38">{formatQuality(song.format, song.sample_rate, song.bitrate)}</span>
+                      {/if}
                     </span>
                   </span>
                   <span class="text-right text-xs text-white/48">{formatDuration(song.duration)}</span>

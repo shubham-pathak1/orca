@@ -20,6 +20,8 @@
   export let onSeek: (event: Event) => void = () => {};
   export let onSeekTo: (positionMs: number) => Promise<void> | void = () => {};
   export let seekbarStyle: 'standard' | 'waveform' = 'standard';
+  export let showQualityInfo = true;
+  export let lyricsOpen = false;
 
   let lyricsViewport: HTMLDivElement | null = null;
   let centeredLyricIndex = -1;
@@ -27,7 +29,6 @@
   let fetchedLyrics = '';
   let fetchedLyricsSongPath: string | null = null;
   let lyricsStatus: 'idle' | 'loading' | 'not-found' | 'offline' | 'error' = 'idle';
-  let lyricsOpen = false;
   let lastOpenSongPath: string | null = null;
 
   type LyricLine = {
@@ -320,7 +321,7 @@
           <div class="mt-6 w-full max-w-[min(420px,48vh)]">
             <h2 class="truncate text-4xl font-black">{song?.title ?? 'Select a song'}</h2>
             <p class="mt-2 truncate text-lg text-white/68">{song?.artist ?? 'No track playing'}</p>
-            {#if song}
+            {#if song && showQualityInfo}
               <p class="mt-4 inline-flex rounded-sm bg-white/14 px-2.5 py-1.5 text-[10px] font-bold uppercase text-white/72">
                 {formatQuality(song.format, song.sample_rate, song.bitrate) || 'Local audio'}
               </p>

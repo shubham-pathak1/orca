@@ -9,6 +9,7 @@
   export let playback: PlaybackState;
   export let status = 'Ready';
   export let seekbarStyle: 'standard' | 'waveform' = 'standard';
+  export let showQualityInfo = true;
   export let shuffleEnabled = false;
   export let repeatMode: 'off' | 'all' | 'one' = 'off';
   export let onToggle: () => void = () => {};
@@ -36,7 +37,7 @@
     <div class="min-w-0">
       <p class="truncate text-sm font-bold">{nowPlaying?.title ?? 'No track playing'}</p>
       <p class="truncate text-xs text-white/42">{nowPlaying?.artist ?? status}</p>
-      {#if nowPlaying}
+      {#if nowPlaying && showQualityInfo}
         <p class="mt-0.5 truncate text-[10px] font-bold uppercase text-white/32">{formatQuality(nowPlaying.format, nowPlaying.sample_rate, nowPlaying.bitrate)}</p>
       {/if}
     </div>

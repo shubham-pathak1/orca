@@ -9,6 +9,7 @@
   export let playback: PlaybackState;
   export let status = 'Ready';
   export let seekbarStyle: 'standard' | 'waveform' = 'standard';
+  export let showQualityInfo = true;
   export let shuffleEnabled = false;
   export let repeatMode: 'off' | 'all' | 'one' = 'off';
   export let onToggle: () => void = () => {};
@@ -38,9 +39,11 @@
       <div class="mt-5 text-center">
         <h2 class="truncate text-2xl font-bold">{song.title}</h2>
         <p class="mt-1 truncate text-base text-white/68">{song.artist}</p>
-        <p class="mt-4 inline-flex rounded-sm bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase text-white/66">
-          {formatQuality(song.format, song.sample_rate, song.bitrate) || 'Local audio'}
-        </p>
+        {#if showQualityInfo}
+          <p class="mt-4 inline-flex rounded-sm bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase text-white/66">
+            {formatQuality(song.format, song.sample_rate, song.bitrate) || 'Local audio'}
+          </p>
+        {/if}
       </div>
 
       <div class="mt-10 space-y-5">
