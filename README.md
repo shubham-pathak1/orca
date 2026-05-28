@@ -4,6 +4,8 @@ Orca is a local music player for Windows, built with Svelte, Tauri, and Rust.
 
 It is designed around fast browsing, editable metadata, playlists, lyrics, and playback controls that stay out of the way. The app is still early, so some parts are changing quickly.
 
+Note: the light theme is still in development and currently disabled in the UI.
+
 ## Features
 
 - Scan local music folders into a persistent library.

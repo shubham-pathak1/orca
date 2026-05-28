@@ -44,6 +44,8 @@
   export let onFontSizePercentChange: (size: number) => void = () => {};
   export let showQualityInfo = true;
   export let onShowQualityInfoChange: (enabled: boolean) => void = () => {};
+  export let theme: 'default' = 'default';
+  export let onThemeChange: (theme: 'default') => void = () => {};
 
   let songListEl: HTMLDivElement;
   let artistListEl: HTMLDivElement;
@@ -588,6 +590,8 @@
         {onFontSizePercentChange}
         {showQualityInfo}
         {onShowQualityInfoChange}
+        {theme}
+        {onThemeChange}
       />
     {:else if activeView === 'playlists'}
       <div class="scrollbar-none h-full overflow-auto pr-2">

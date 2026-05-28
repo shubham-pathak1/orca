@@ -49,6 +49,215 @@ main ::selection {
   color: #fff;
 }
 
+.toggle-switch-on {
+  background: #ffffff;
+  border-color: #ffffff;
+}
+
+.toggle-switch-off {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.toggle-switch-on .toggle-knob {
+  background: #111318;
+}
+
+.toggle-switch-off .toggle-knob {
+  background: #ffffff;
+}
+
+.theme-white {
+  --play-button-bg: #111318;
+  --play-button-fg: #ffffff;
+  --waveform-rest: rgba(17, 19, 24, 0.16);
+  --waveform-rest-stacked: rgba(17, 19, 24, 0.15);
+  color: #111318 !important;
+  background: #ffffff !important;
+  color-scheme: light;
+}
+
+.theme-white [class*="bg-[#090a0c]"],
+.theme-white [class*="bg-[#111315]"],
+.theme-white [class*="bg-[#161616]"],
+.theme-white [class*="bg-[#171719]"],
+.theme-white [class*="bg-[#151515]"] {
+  background-color: #ffffff !important;
+}
+
+.theme-white [class*="bg-[linear-gradient"] {
+  background: #ffffff !important;
+}
+
+.theme-white [class*="bg-black/"] {
+  background-color: #ffffff !important;
+}
+
+.theme-white [class*="bg-white/"] {
+  background-color: transparent !important;
+}
+
+.theme-white button[class*="hover:bg-white/"],
+.theme-white [role="menuitem"][class*="hover:bg-white/"] {
+  background-color: transparent !important;
+}
+
+.theme-white .text-white,
+.theme-white [class*="text-white/"] {
+  color: rgba(17, 19, 24, 0.94) !important;
+}
+
+.theme-white .text-black {
+  color: #111318 !important;
+}
+
+.theme-white [class*="border-white/"] {
+  border-color: rgba(17, 19, 24, 0.14) !important;
+}
+
+.theme-white [class*="placeholder:text-white/"]::placeholder {
+  color: rgba(17, 19, 24, 0.38) !important;
+}
+
+.theme-white input:not([type="range"]),
+.theme-white select,
+.theme-white textarea {
+  background: #ffffff !important;
+  border-color: rgba(17, 19, 24, 0.16) !important;
+  color: #111318 !important;
+}
+
+.theme-white input[type="range"] {
+  accent-color: var(--accent);
+}
+
+.theme-white option {
+  background: #ffffff;
+  color: #111318;
+}
+
+.theme-white img {
+  color: transparent !important;
+}
+
+.theme-white .theme-surface {
+  background: #ffffff !important;
+}
+
+.theme-white .theme-control {
+  background: #ffffff !important;
+  border-color: rgba(17, 19, 24, 0.16) !important;
+  color: #111318 !important;
+}
+
+.theme-white .theme-active-control {
+  background: #111318 !important;
+  border-color: #111318 !important;
+  color: #ffffff !important;
+}
+
+.theme-white .theme-active-control svg,
+.theme-white .theme-active-control span {
+  color: #ffffff !important;
+}
+
+.theme-white button.bg-white {
+  background: #111318 !important;
+  border-color: #111318 !important;
+  color: #ffffff !important;
+}
+
+.theme-white button.bg-white svg,
+.theme-white button.bg-white span {
+  color: #ffffff !important;
+}
+
+.theme-white .sidebar-item {
+  border: 1px solid transparent;
+  background: transparent !important;
+}
+
+.theme-white .sidebar-item:hover {
+  border-color: rgba(17, 19, 24, 0.22);
+  background: transparent !important;
+}
+
+.theme-white .sidebar-item-active {
+  border-color: rgba(17, 19, 24, 0.28);
+  background: transparent !important;
+  box-shadow: inset 3px 0 0 var(--accent) !important;
+}
+
+.theme-white .back-button {
+  background: #ffffff !important;
+  border-color: rgba(17, 19, 24, 0.22) !important;
+  color: #111318 !important;
+}
+
+.theme-white .back-button:hover {
+  background: #ffffff !important;
+  border-color: #111318 !important;
+}
+
+.theme-white .now-playing-pill {
+  background: #ffffff !important;
+  border-color: rgba(17, 19, 24, 0.22) !important;
+  color: #111318 !important;
+  box-shadow: none !important;
+}
+
+.theme-white .now-playing-pill:hover {
+  border-color: #111318 !important;
+  background: #ffffff !important;
+}
+
+.theme-white .now-playing-pill [class*="text-white/"] {
+  color: rgba(17, 19, 24, 0.72) !important;
+}
+
+.theme-white .lyric-line {
+  color: rgba(17, 19, 24, 0.22) !important;
+}
+
+.theme-white .lyric-active {
+  color: #111318 !important;
+}
+
+.theme-white .lyric-muted {
+  color: rgba(17, 19, 24, 0.2) !important;
+}
+
+.theme-white .lyric-line:focus-visible {
+  color: #111318 !important;
+}
+
+.theme-white .no-lyrics-state,
+.theme-white .no-lyrics-state p {
+  color: #111318 !important;
+}
+
+.theme-white .no-lyrics-state p + p {
+  color: rgba(17, 19, 24, 0.62) !important;
+}
+
+.theme-white .toggle-switch-on {
+  background: #111318 !important;
+  border-color: #111318 !important;
+}
+
+.theme-white .toggle-switch-off {
+  background: #ffffff !important;
+  border-color: rgba(17, 19, 24, 0.22) !important;
+}
+
+.theme-white .toggle-switch-on .toggle-knob {
+  background: #ffffff !important;
+}
+
+.theme-white .toggle-switch-off .toggle-knob {
+  background: #111318 !important;
+}
+
 button,
 input {
   font: inherit;

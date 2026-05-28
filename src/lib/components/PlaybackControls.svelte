@@ -46,7 +46,7 @@
     </svg>
   </button>
 
-  <button class={`${playSize} aspect-square shrink-0 rounded-full border border-white/20 bg-white text-black shadow-[0_12px_40px_rgba(0,0,0,0.32)] transition hover:scale-105 grid place-items-center`} title="Play or pause" on:click={onToggle}>
+  <button class={`${playSize} aspect-square shrink-0 rounded-full border border-white/20 bg-[var(--play-button-bg,#fff)] text-[var(--play-button-fg,#000)] transition hover:scale-105 grid place-items-center`} title="Play or pause" on:click={onToggle}>
     {#if isPlaying}
       <svg class={playIconSize} viewBox="0 0 24 24" fill="currentColor">
         <path d="M7 5h4v14H7zM13 5h4v14h-4z" />

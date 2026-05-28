@@ -63,6 +63,7 @@
   let fontFamily = 'Plus Jakarta Sans';
   let fontSizePercent = 100;
   let showQualityInfo = true;
+  let theme: 'default' = 'default';
   let shuffleEnabled = false;
   let repeatMode: 'off' | 'all' | 'one' = 'off';
   let metadataEditorSong: LocalSong | null = null;
@@ -75,7 +76,8 @@
   let queuedNextForPath: string | null = null;
   let queuedNextPath: string | null = null;
   $: bottomRowSize = seekbarStyle === 'waveform' ? '96px' : '72px';
-  $: effectiveAccentRgb = dynamicCoverAccent ? accentRgb : '245,245,245';
+  $: defaultAccentRgb = '245,245,245';
+  $: effectiveAccentRgb = dynamicCoverAccent && sampledArtwork ? accentRgb : defaultAccentRgb;
 
   $: filteredSongs = songs.filter((song) => {
     const needle = query.trim().toLowerCase();
@@ -108,6 +110,7 @@
   onMount(() => {
     playerPlacement = readPreference('orca.playerPlacement', 'right', ['right', 'bottom']);
     seekbarStyle = readPreference('orca.seekbarStyle', 'standard', ['standard', 'waveform']);
+    theme = readPreference('orca.theme', 'default', ['default']);
     dynamicCoverAccent = readBooleanPreference('orca.dynamicCoverAccent', true);
     blurredNowPlayingBackground = readBooleanPreference('orca.blurredNowPlayingBackground', true);
     fontFamily = readPreference('orca.fontFamily', 'Plus Jakarta Sans', ['Plus Jakarta Sans', 'System', 'Segoe UI']);
@@ -190,6 +193,14 @@
   function setSeekbarStyle(style: 'standard' | 'waveform') {
     seekbarStyle = style;
     window.localStorage.setItem('orca.seekbarStyle', style);
+  }
+
+  function setTheme(value: 'default') {
+    theme = value;
+    window.localStorage.setItem('orca.theme', value);
+    if (!sampledArtwork) {
+      accentRgb = '245,245,245';
+    }
   }
 
   function setDynamicCoverAccent(enabled: boolean) {
@@ -479,7 +490,8 @@
         accentRgb = `${Math.round(r / count)},${Math.round(g / count)},${Math.round(b / count)}`;
       }
     } catch {
-      accentRgb = '245,245,245';
+      sampledArtwork = null;
+      accentRgb = defaultAccentRgb;
     }
   }
 
@@ -740,6 +752,8 @@
       onFontSizePercentChange={setFontSizePercent}
       {showQualityInfo}
       onShowQualityInfoChange={setShowQualityInfo}
+      {theme}
+      onThemeChange={setTheme}
     />
     {#if playerPlacement === 'right'}
       <DetailsPanel

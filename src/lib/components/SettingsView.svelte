@@ -16,10 +16,12 @@
   export let onFontSizePercentChange: (size: number) => void = () => {};
   export let showQualityInfo = true;
   export let onShowQualityInfoChange: (enabled: boolean) => void = () => {};
+  export let theme: 'default' = 'default';
+  export let onThemeChange: (theme: 'default') => void = () => {};
 
   let activeTab = 'Appearance';
   const tabs = ['Appearance', 'Interface', 'Library', 'Audio'];
-  const themes = ['Default', 'White'];
+  const themes: { id: 'default'; label: string }[] = [{ id: 'default', label: 'Default' }];
   const fontOptions = ['Plus Jakarta Sans', 'System', 'Segoe UI'];
   const playerPlacements: { id: 'right' | 'bottom'; title: string; description: string }[] = [
     { id: 'right', title: 'Right side', description: 'Keep the full controls in the side rail' },
@@ -73,9 +75,12 @@
         <h3 class="text-sm font-bold text-white">Theme</h3>
         <p class="text-sm text-white/48">Choose your preferred color scheme</p>
         <div class="mt-4 grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-3">
-          {#each themes as theme, index}
-            <button class={`h-12 rounded-md border text-sm font-bold transition ${index === 0 ? 'border-white bg-white text-black' : 'border-white/12 bg-black/20 text-white hover:border-white/35'}`}>
-              {theme}
+          {#each themes as themeOption}
+            <button
+              class={`h-12 rounded-md border text-sm font-bold transition ${theme === themeOption.id ? 'border-white bg-white text-black' : 'border-white/12 bg-black/20 text-white hover:border-white/35'}`}
+              on:click={() => onThemeChange(themeOption.id)}
+            >
+              {themeOption.label}
             </button>
           {/each}
         </div>
@@ -123,11 +128,11 @@
             <p class="text-sm text-white/48">Tint active controls from the current cover art</p>
           </div>
           <button
-            class={`relative h-6 w-11 rounded-full border transition ${dynamicCoverAccent ? 'border-white bg-white' : 'border-white/24 bg-white/[0.08]'}`}
+            class={`relative h-6 w-11 rounded-full border transition ${dynamicCoverAccent ? 'toggle-switch-on' : 'toggle-switch-off'}`}
             title="Dynamic cover accent"
             on:click={() => onDynamicCoverAccentChange(!dynamicCoverAccent)}
           >
-            <span class={`absolute top-1 h-4 w-4 rounded-full transition ${dynamicCoverAccent ? 'left-6 bg-black' : 'left-1 bg-white'}`}></span>
+            <span class={`toggle-knob absolute top-1 h-4 w-4 rounded-full transition ${dynamicCoverAccent ? 'left-6' : 'left-1'}`}></span>
           </button>
         </div>
 
@@ -137,11 +142,11 @@
             <p class="text-sm text-white/48">Show cover art ambience behind the app</p>
           </div>
           <button
-            class={`relative h-6 w-11 rounded-full border transition ${blurredBackground ? 'border-white bg-white' : 'border-white/24 bg-white/[0.08]'}`}
+            class={`relative h-6 w-11 rounded-full border transition ${blurredBackground ? 'toggle-switch-on' : 'toggle-switch-off'}`}
             title="Blurred now playing background"
             on:click={() => onBlurredBackgroundChange(!blurredBackground)}
           >
-            <span class={`absolute top-1 h-4 w-4 rounded-full transition ${blurredBackground ? 'left-6 bg-black' : 'left-1 bg-white'}`}></span>
+            <span class={`toggle-knob absolute top-1 h-4 w-4 rounded-full transition ${blurredBackground ? 'left-6' : 'left-1'}`}></span>
           </button>
         </div>
       </div>
@@ -243,11 +248,11 @@
           <p class="text-sm text-white/48">Show format, sample rate, and bitrate in rows and players</p>
         </div>
         <button
-          class={`relative h-6 w-11 rounded-full border transition ${showQualityInfo ? 'border-white bg-white' : 'border-white/24 bg-white/[0.08]'}`}
+          class={`relative h-6 w-11 rounded-full border transition ${showQualityInfo ? 'toggle-switch-on' : 'toggle-switch-off'}`}
           title="Song quality info"
           on:click={() => onShowQualityInfoChange(!showQualityInfo)}
         >
-          <span class={`absolute top-1 h-4 w-4 rounded-full transition ${showQualityInfo ? 'left-6 bg-black' : 'left-1 bg-white'}`}></span>
+          <span class={`toggle-knob absolute top-1 h-4 w-4 rounded-full transition ${showQualityInfo ? 'left-6' : 'left-1'}`}></span>
         </button>
       </div>
     </section>

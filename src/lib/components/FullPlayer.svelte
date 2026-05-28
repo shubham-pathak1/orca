@@ -215,9 +215,9 @@
 </script>
 
 {#if open}
-  <section class="absolute inset-0 z-30 overflow-hidden bg-black text-white">
-    <div class="absolute inset-0 bg-cover bg-center opacity-55 blur-3xl [background-image:var(--cover-art)]"></div>
-    <div class="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.9)_0%,rgba(0,0,0,0.62)_48%,rgba(0,0,0,0.28)_100%)]"></div>
+  <section class="full-player-surface absolute inset-0 z-30 overflow-hidden bg-black text-white">
+    <div class="full-player-artwork-glow absolute inset-0 bg-cover bg-center opacity-55 blur-3xl [background-image:var(--cover-art)]"></div>
+    <div class="full-player-wash absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.9)_0%,rgba(0,0,0,0.62)_48%,rgba(0,0,0,0.28)_100%)]"></div>
 
     <div class="relative flex h-full min-h-0 flex-col px-14 py-10 max-lg:px-6">
       <header class="flex h-16 shrink-0 items-center justify-between gap-4">
@@ -312,7 +312,7 @@
         </div>
       {:else}
         <div class="flex min-h-0 flex-1 flex-col items-center justify-center pb-10 text-center">
-          <div class="aspect-square w-full max-w-[min(420px,48vh)] shrink-0 overflow-hidden rounded-lg bg-white/10 shadow-[0_28px_100px_rgba(0,0,0,0.42)]">
+          <div class="full-player-cover aspect-square w-full max-w-[min(420px,48vh)] shrink-0 overflow-hidden rounded-lg bg-white/10">
             {#if song && artworkUrl(song.artwork)}
               <img class="h-full w-full object-cover" src={artworkUrl(song.artwork) ?? ''} alt="" />
             {/if}
@@ -328,7 +328,7 @@
             {/if}
           </div>
 
-          <div class="mt-8 w-full max-w-[min(560px,62vw)]">
+          <div class="mt-8 w-full max-w-[min(560px,66vw)]">
             <SeekControl {song} {playback} variant={seekbarStyle} waveformLayout="stacked" waveformHeight={46} onSeek={onSeek} />
           </div>
 
@@ -377,9 +377,7 @@
     background: rgba(0, 0, 0, 0.58);
     padding: 0.38rem 0.55rem 0.38rem 0.38rem;
     color: white;
-    box-shadow:
-      0 18px 60px rgba(0, 0, 0, 0.34),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
   }
 
   .visualizer {
@@ -441,9 +439,10 @@
   }
 
   .lyrics-open {
+    width: min(760px, 52vw);
     margin-inline: auto;
-    max-width: min(900px, 62vw);
-    transform: translateX(clamp(4rem, 7vw, 8rem));
+    max-width: 100%;
+    transform: translateX(clamp(20px, 2.2vw, 42px));
   }
 
   .no-lyrics-state {
@@ -458,7 +457,7 @@
 
   .lyric-line {
     margin-bottom: 1rem;
-    max-width: min(1040px, 100%);
+    max-width: 100%;
     cursor: pointer;
     color: rgba(255, 255, 255, 0.2);
     font-size: clamp(2rem, 3vw, 3.5rem);
@@ -508,8 +507,9 @@
     }
 
     .lyrics-open {
+      width: 100%;
       max-width: 100%;
-      transform: none;
+      transform: translateX(clamp(8px, 2vw, 16px));
     }
 
     .no-lyrics-state {

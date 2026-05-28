@@ -100,8 +100,10 @@
     }
 
     ctx.clearRect(0, 0, width, height);
-    const accent = getComputedStyle(canvas).getPropertyValue('--accent').trim() || 'rgba(255,255,255,0.96)';
-    drawShape(ctx, width, height, waveformLayout === 'stacked' ? 'rgba(255,255,255,0.13)' : 'rgba(255,255,255,0.14)');
+    const styles = getComputedStyle(canvas);
+    const accent = styles.getPropertyValue('--accent').trim() || 'rgba(255,255,255,0.96)';
+    const rest = styles.getPropertyValue(waveformLayout === 'stacked' ? '--waveform-rest-stacked' : '--waveform-rest').trim();
+    drawShape(ctx, width, height, rest || (waveformLayout === 'stacked' ? 'rgba(255,255,255,0.13)' : 'rgba(255,255,255,0.14)'));
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, 0, width * progress, height);
