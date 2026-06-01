@@ -4,6 +4,7 @@
   import type { LocalSong, PlaybackState } from '../types';
   import PlaybackControls from './PlaybackControls.svelte';
   import SeekControl from './SeekControl.svelte';
+  import LazyArtwork from './LazyArtwork.svelte';
 
   export let nowPlaying: LocalSong | null = null;
   export let playback: PlaybackState;
@@ -30,8 +31,13 @@
       title="Open full player"
       on:click={onOpenFullPlayer}
     >
-      {#if nowPlaying && artworkUrl(nowPlaying.artwork)}
-        <img class="h-full w-full object-cover" src={artworkUrl(nowPlaying.artwork) ?? ''} alt="" />
+      {#if nowPlaying && artworkUrl(nowPlaying.artwork_thumb ?? nowPlaying.artwork_preview ?? nowPlaying.artwork)}
+        <LazyArtwork
+          rootClass="h-full w-full"
+          imageClass="h-full w-full object-cover"
+          path={nowPlaying.artwork_thumb ?? nowPlaying.artwork_preview ?? nowPlaying.artwork}
+          alt=""
+        />
       {/if}
     </button>
     <div class="min-w-0">

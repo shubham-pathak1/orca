@@ -68,6 +68,15 @@
   let songLayout: 'list' | 'grid' = 'list';
   let sortKey: 'title' | 'artist' | 'album' = 'title';
   let sortMenuOpen = false;
+  let songScrollTop = 0;
+  let songViewportHeight = 0;
+  let songViewportWidth = 0;
+
+  const LIST_ROW_HEIGHT = 40;
+  const GRID_MIN_COLUMN_WIDTH = 132;
+  const GRID_GAP = 16;
+  const GRID_TEXT_HEIGHT = 50;
+  const OVERSCAN_ROWS = 4;
 
   const sortOptions: { key: 'title' | 'artist' | 'album'; label: string }[] = [
     { key: 'title', label: 'Title' },
@@ -105,6 +114,26 @@
   $: artistEntries = buildArtistEntries(songs, query);
   $: albumEntries = buildAlbumEntries(songs, query);
   $: sortedSongs = [...filteredSongs].sort((a, b) => compareSongs(a, b, sortKey));
+  $: listVisibleStart = Math.max(0, Math.floor(songScrollTop / LIST_ROW_HEIGHT) - OVERSCAN_ROWS);
+  $: listVisibleEnd = Math.min(
+    sortedSongs.length,
+    Math.ceil((songScrollTop + songViewportHeight) / LIST_ROW_HEIGHT) + OVERSCAN_ROWS
+  );
+  $: visibleListSongs = sortedSongs.slice(listVisibleStart, listVisibleEnd);
+  $: gridColumnCount = Math.max(1, Math.floor((songViewportWidth + GRID_GAP) / (GRID_MIN_COLUMN_WIDTH + GRID_GAP)));
+  $: gridItemWidth = gridColumnCount > 0
+    ? Math.max(GRID_MIN_COLUMN_WIDTH, (songViewportWidth - GRID_GAP * (gridColumnCount - 1)) / gridColumnCount)
+    : GRID_MIN_COLUMN_WIDTH;
+  $: gridRowHeight = gridItemWidth + GRID_TEXT_HEIGHT + GRID_GAP;
+  $: gridRowCount = Math.ceil(sortedSongs.length / gridColumnCount);
+  $: gridVisibleRowStart = Math.max(0, Math.floor(songScrollTop / gridRowHeight) - OVERSCAN_ROWS);
+  $: gridVisibleRowEnd = Math.min(
+    gridRowCount,
+    Math.ceil((songScrollTop + songViewportHeight) / gridRowHeight) + OVERSCAN_ROWS
+  );
+  $: gridVisibleStart = gridVisibleRowStart * gridColumnCount;
+  $: gridVisibleEnd = Math.min(sortedSongs.length, gridVisibleRowEnd * gridColumnCount);
+  $: visibleGridSongs = sortedSongs.slice(gridVisibleStart, gridVisibleEnd);
   $: currentSortLabel = sortOptions.find((option) => option.key === sortKey)?.label ?? 'Title';
   $: filteredPlaylists = playlists.filter((playlist) =>
     playlist.name.toLowerCase().includes(playlistQuery.trim().toLowerCase())
@@ -472,6 +501,31 @@
     const top = container.scrollTop + targetRect.top - containerRect.top;
     container.scrollTo({ top, behavior: 'smooth' });
   }
+
+  function jumpToSongLetter(letter: string) {
+    if (!songListEl) {
+      return;
+    }
+
+    const letters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
+    const startIndex = letters.indexOf(letter);
+    const searchOrder = startIndex >= 0 ? letters.slice(startIndex) : [letter];
+    const targetIndex = sortedSongs.findIndex((song) => searchOrder.includes(initialFromText(song.title)));
+
+    if (targetIndex < 0) {
+      return;
+    }
+
+    const top = songLayout === 'list'
+      ? targetIndex * LIST_ROW_HEIGHT
+      : Math.floor(targetIndex / gridColumnCount) * gridRowHeight;
+
+    songListEl.scrollTo({ top, behavior: 'smooth' });
+  }
+
+  function updateSongScroll(event: Event) {
+    songScrollTop = (event.currentTarget as HTMLDivElement).scrollTop;
+  }
 </script>
 
 <svelte:window on:click={closeFloatingUi} on:keydown={handleGlobalKeydown} />
@@ -623,7 +677,7 @@
             <div class="relative grid grid-cols-[148px_minmax(0,1fr)] items-end gap-5 max-md:grid-cols-1">
               <div class="group relative grid aspect-square w-[148px] shrink-0 place-items-center overflow-hidden rounded-md bg-white/[0.07] text-5xl font-black text-white/30 shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
                 {#if artworkUrl(selectedPlaylistArtwork)}
-                  <img class="h-full w-full object-cover" src={artworkUrl(selectedPlaylistArtwork) ?? ''} alt="" />
+                  <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={selectedPlaylistArtwork} alt="" />
                 {:else}
                   {selectedPlaylist.name.charAt(0).toUpperCase()}
                 {/if}
@@ -686,7 +740,7 @@
                 <button class="text-left text-sm text-white/36" on:click={() => onChooseSong(song)}>{index + 1}</button>
                 <button class="flex min-w-0 items-center gap-2 text-left" on:click={() => onChooseSong(song)}>
                   {#if artworkUrl(song.artwork)}
-                    <img class="h-8 w-8 shrink-0 rounded-sm object-cover" src={artworkUrl(song.artwork) ?? ''} alt="" />
+                    <LazyArtwork rootClass="h-8 w-8 shrink-0 rounded-sm overflow-hidden" imageClass="h-full w-full object-cover" path={rowArtwork(song)} alt="" />
                   {:else}
                     <span class="h-8 w-8 shrink-0 rounded-sm bg-white/10"></span>
                   {/if}
@@ -727,7 +781,7 @@
                 <button class="flex min-w-0 items-center gap-3 border-b border-white/[0.04] px-2 py-4 text-left transition hover:bg-white/[0.035]" on:click={() => openPlaylist(playlist)}>
                   <span class="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-sm bg-white/[0.07] text-xs font-black text-white/40">
                     {#if artworkUrl(playlist.cover_path)}
-                      <img class="h-full w-full object-cover" src={artworkUrl(playlist.cover_path) ?? ''} alt="" />
+                      <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={playlist.cover_path} alt="" />
                     {:else}
                       {playlist.name.charAt(0).toUpperCase()}
                     {/if}
@@ -757,18 +811,26 @@
           <span class="text-right">Duration</span>
         </div>
         <div class="grid h-[calc(100%-32px)] grid-cols-[minmax(0,1fr)_24px]">
-          <div class="scrollbar-none overflow-auto" bind:this={songListEl}>
+          <div
+            class="scrollbar-none overflow-auto"
+            bind:this={songListEl}
+            bind:clientHeight={songViewportHeight}
+            bind:clientWidth={songViewportWidth}
+            on:scroll={updateSongScroll}
+          >
             {#if sortedSongs.length}
-              {#each sortedSongs as song}
+              <div class="relative" style={`height: ${sortedSongs.length * LIST_ROW_HEIGHT}px;`}>
+              {#each visibleListSongs as song, index (song.path)}
               <button
                 data-letter={initialFromText(song.title)}
-                class={`grid min-h-10 w-full grid-cols-[minmax(240px,1.35fr)_minmax(130px,0.7fr)_minmax(130px,0.8fr)_72px] items-center gap-3 border-b border-white/[0.035] px-2 text-left transition max-lg:grid-cols-[minmax(220px,1fr)_90px] ${song.path === currentPath ? 'bg-[var(--accent-soft)]' : selectedPath === song.path ? 'bg-white/[0.055]' : 'hover:bg-white/[0.045]'}`}
+                class={`absolute left-0 grid min-h-10 w-full grid-cols-[minmax(240px,1.35fr)_minmax(130px,0.7fr)_minmax(130px,0.8fr)_72px] items-center gap-3 border-b border-white/[0.035] px-2 text-left transition max-lg:grid-cols-[minmax(220px,1fr)_90px] ${song.path === currentPath ? 'bg-[var(--accent-soft)]' : selectedPath === song.path ? 'bg-white/[0.055]' : 'hover:bg-white/[0.045]'}`}
+                style={`height: ${LIST_ROW_HEIGHT}px; transform: translateY(${(listVisibleStart + index) * LIST_ROW_HEIGHT}px);`}
                 on:click={() => onChooseSong(song)}
                 on:contextmenu={(event) => openSongMenu(event, song)}
               >
                 <span class="flex min-w-0 items-center gap-2">
                   {#if artworkUrl(song.artwork)}
-                    <img class="h-7 w-7 shrink-0 rounded-sm object-cover" src={artworkUrl(song.artwork) ?? ''} alt="" />
+                    <LazyArtwork rootClass="h-7 w-7 shrink-0 rounded-sm overflow-hidden" imageClass="h-full w-full object-cover" path={rowArtwork(song)} alt="" />
                   {:else}
                     <span class="h-7 w-7 shrink-0 rounded-sm bg-white/10"></span>
                   {/if}
@@ -781,6 +843,7 @@
                 <span class="text-right text-xs text-white/48">{formatDuration(song.duration)}</span>
               </button>
               {/each}
+              </div>
             {:else}
               <div class="flex min-h-[320px] max-w-xl flex-col justify-center px-2">
                 <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
@@ -789,28 +852,40 @@
               </div>
             {/if}
           </div>
-          <AlphabetRail onJump={(letter) => jumpToLetter(songListEl, letter)} />
+          <AlphabetRail onJump={jumpToSongLetter} />
         </div>
       {:else}
         <div class="grid h-full grid-cols-[minmax(0,1fr)_24px]">
-          <div class="scrollbar-none grid max-h-full content-start grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-4 overflow-auto pr-3" bind:this={songListEl}>
+          <div
+            class="scrollbar-none max-h-full overflow-auto pr-3"
+            bind:this={songListEl}
+            bind:clientHeight={songViewportHeight}
+            bind:clientWidth={songViewportWidth}
+            on:scroll={updateSongScroll}
+          >
             {#if sortedSongs.length}
-              {#each sortedSongs as song}
+              <div class="relative" style={`height: ${gridRowCount * gridRowHeight}px;`}>
+              {#each visibleGridSongs as song, index (song.path)}
+              {@const absoluteIndex = gridVisibleStart + index}
+              {@const column = absoluteIndex % gridColumnCount}
+              {@const row = Math.floor(absoluteIndex / gridColumnCount)}
               <button
                 data-letter={initialFromText(song.title)}
-                class={`min-w-0 text-left transition ${song.path === currentPath ? 'opacity-100' : selectedPath === song.path ? 'opacity-90' : 'opacity-76 hover:opacity-100'}`}
+                class={`absolute min-w-0 text-left transition ${song.path === currentPath ? 'opacity-100' : selectedPath === song.path ? 'opacity-90' : 'opacity-76 hover:opacity-100'}`}
+                style={`width: ${gridItemWidth}px; transform: translate(${column * (gridItemWidth + GRID_GAP)}px, ${row * gridRowHeight}px);`}
                 on:click={() => onChooseSong(song)}
                 on:contextmenu={(event) => openSongMenu(event, song)}
               >
                 <span class={`relative block aspect-square overflow-hidden rounded-md bg-white/[0.07] ${song.path === currentPath ? 'ring-2 ring-[var(--accent)]' : ''}`}>
                   {#if artworkUrl(song.artwork)}
-                    <img class="h-full w-full object-cover" src={artworkUrl(song.artwork) ?? ''} alt="" />
+                    <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={previewArtwork(song)} alt="" />
                   {/if}
                 </span>
                 <span class="mt-2 block truncate text-sm font-bold text-white">{song.title}</span>
                 <span class="block truncate text-xs text-white/46">{song.artist}</span>
               </button>
               {/each}
+              </div>
             {:else}
               <div class="col-span-full flex min-h-[320px] max-w-xl flex-col justify-center">
                 <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
@@ -819,7 +894,7 @@
               </div>
             {/if}
           </div>
-          <AlphabetRail onJump={(letter) => jumpToLetter(songListEl, letter)} />
+          <AlphabetRail onJump={jumpToSongLetter} />
         </div>
       {/if}
     {:else if activeView === 'albums'}
@@ -852,7 +927,7 @@
             <div class="relative grid grid-cols-[148px_minmax(0,1fr)] items-end gap-5 max-md:grid-cols-1">
               <div class="aspect-square w-[148px] shrink-0 overflow-hidden rounded-md bg-white/8 shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
                 {#if artworkUrl(selectedAlbum.artwork)}
-                  <img class="h-full w-full object-cover" src={artworkUrl(selectedAlbum.artwork) ?? ''} alt="" />
+                  <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={selectedAlbum.artwork} alt="" />
                 {/if}
               </div>
               <div class="min-w-0">
@@ -882,7 +957,7 @@
                   <span class="text-sm text-white/36">{song.track_number ?? index + 1}</span>
                   <span class="flex min-w-0 items-center gap-2">
                     {#if artworkUrl(song.artwork)}
-                      <img class="h-8 w-8 shrink-0 rounded-sm object-cover" src={artworkUrl(song.artwork) ?? ''} alt="" />
+                      <LazyArtwork rootClass="h-8 w-8 shrink-0 rounded-sm overflow-hidden" imageClass="h-full w-full object-cover" path={rowArtwork(song)} alt="" />
                     {:else}
                       <span class="h-8 w-8 shrink-0 rounded-sm bg-white/10"></span>
                     {/if}
@@ -911,7 +986,7 @@
                   <button class="min-w-0 rounded-md bg-white/[0.035] p-2 text-left transition hover:bg-white/[0.07]" on:click={() => openAlbum(album.key)}>
                     <div class="aspect-square overflow-hidden rounded bg-white/8">
                       {#if artworkUrl(album.artwork)}
-                        <img class="h-full w-full object-cover" src={artworkUrl(album.artwork) ?? ''} alt="" />
+                        <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={album.artwork} alt="" />
                       {/if}
                     </div>
                     <p class="mt-2 truncate text-xs font-bold">{album.title}</p>
@@ -930,7 +1005,7 @@
               <button data-letter={initialFromText(album.title)} class="text-left opacity-82 transition hover:opacity-100" on:click={() => openAlbum(album.key)}>
                 <div class="aspect-square overflow-hidden rounded-md bg-white/8">
                   {#if artworkUrl(album.artwork)}
-                    <img class="h-full w-full object-cover" src={artworkUrl(album.artwork) ?? ''} alt="" />
+                    <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={album.artwork} alt="" />
                   {/if}
                 </div>
                 <p class="mt-2 truncate text-sm font-semibold">{album.title}</p>
@@ -978,7 +1053,7 @@
             <div class="relative grid grid-cols-[148px_minmax(0,1fr)] items-end gap-5 max-md:grid-cols-1">
               <div class="aspect-square w-[148px] shrink-0 overflow-hidden rounded-full bg-white/8 shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
                 {#if artworkUrl(selectedArtist.artwork)}
-                  <img class="h-full w-full object-cover" src={artworkUrl(selectedArtist.artwork) ?? ''} alt="" />
+                  <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={selectedArtist.artwork} alt="" />
                 {:else}
                   <span class="grid h-full w-full place-items-center text-5xl font-black text-white/28">{selectedArtist.name.charAt(0).toUpperCase()}</span>
                 {/if}
@@ -1011,7 +1086,7 @@
                   <span class="text-sm text-white/36">{index + 1}</span>
                   <span class="flex min-w-0 items-center gap-2">
                     {#if artworkUrl(song.artwork)}
-                      <img class="h-8 w-8 shrink-0 rounded-sm object-cover" src={artworkUrl(song.artwork) ?? ''} alt="" />
+                      <LazyArtwork rootClass="h-8 w-8 shrink-0 rounded-sm overflow-hidden" imageClass="h-full w-full object-cover" path={rowArtwork(song)} alt="" />
                     {/if}
                     <span class="truncate text-sm font-semibold text-white">{song.title}</span>
                   </span>
@@ -1035,7 +1110,7 @@
                   <button class="min-w-0 rounded-md bg-white/[0.035] p-2 text-left transition hover:bg-white/[0.07]" on:click={() => { selectedAlbumKey = album.key; activeView = 'albums'; }}>
                     <div class="aspect-square overflow-hidden rounded bg-white/8">
                       {#if artworkUrl(album.artwork)}
-                        <img class="h-full w-full object-cover" src={artworkUrl(album.artwork) ?? ''} alt="" />
+                        <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={album.artwork} alt="" />
                       {/if}
                     </div>
                     <p class="mt-2 truncate text-xs font-bold">{album.title}</p>
@@ -1053,7 +1128,7 @@
               {#each artistEntries as artist}
               <button data-letter={initialFromText(artist.name)} class="flex min-w-0 items-center gap-3 border-b border-white/[0.04] px-2 py-3 text-left transition hover:bg-white/[0.035]" on:click={() => openArtist(artist.name)}>
                 {#if artworkUrl(artist.artwork)}
-                  <img class="h-10 w-10 shrink-0 rounded-sm object-cover opacity-90" src={artworkUrl(artist.artwork) ?? ''} alt="" />
+                  <LazyArtwork rootClass="h-10 w-10 shrink-0 rounded-sm overflow-hidden opacity-90" imageClass="h-full w-full object-cover" path={artist.artwork} alt="" />
                 {:else}
                   <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-white/[0.06] text-xs font-bold text-white/32">
                     {artist.name.charAt(0).toUpperCase()}

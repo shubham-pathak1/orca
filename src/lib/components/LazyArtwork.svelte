@@ -9,16 +9,23 @@
 
   let root: HTMLSpanElement;
   let isVisible = false;
+  let loaded = false;
   let observer: IntersectionObserver | null = null;
 
   $: src = isVisible ? artworkUrl(path) : null;
+  $: if (!src) {
+    loaded = false;
+  }
+  $: if (src) {
+    loaded = false;
+  }
 
   onMount(() => {
     observer = new IntersectionObserver(
       ([entry]) => {
         isVisible = entry.isIntersecting;
       },
-      { rootMargin: '160px' }
+      { rootMargin: '48px', threshold: 0.01 }
     );
 
     observer.observe(root);
@@ -31,8 +38,15 @@
   });
 </script>
 
-<span bind:this={root} class={rootClass}>
+<span bind:this={root} class={`${rootClass} relative block`}>
   {#if src}
-    <img class={imageClass} {src} {alt} loading="lazy" decoding="async" />
+    <img
+      class={`${imageClass} transition-opacity duration-150 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+      {src}
+      {alt}
+      loading="lazy"
+      decoding="async"
+      on:load={() => (loaded = true)}
+    />
   {/if}
 </span>

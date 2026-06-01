@@ -16,7 +16,36 @@
   let isLoadingWaveform = false;
   let canvas: HTMLCanvasElement | null = null;
   let drawFrame = 0;
+  const WAVEFORM_CACHE_MAX = 96;
   const waveformCache = new Map<string, number[]>();
+
+  function readWaveformCache(path: string): number[] | null {
+    const cached = waveformCache.get(path);
+    if (!cached) {
+      return null;
+    }
+
+    // LRU refresh.
+    waveformCache.delete(path);
+    waveformCache.set(path, cached);
+    return cached;
+  }
+
+  function writeWaveformCache(path: string, values: number[]) {
+    if (waveformCache.has(path)) {
+      waveformCache.delete(path);
+    }
+
+    waveformCache.set(path, values);
+    if (waveformCache.size <= WAVEFORM_CACHE_MAX) {
+      return;
+    }
+
+    const oldest = waveformCache.keys().next().value;
+    if (oldest) {
+      waveformCache.delete(oldest);
+    }
+  }
 
   $: progress = playback.duration_ms > 0 ? Math.min(Math.max(playback.position_ms / playback.duration_ms, 0), 1) : 0;
   $: if (variant === 'waveform' && canvas) {
@@ -33,23 +62,24 @@
     peaks = fallbackPeaks(path);
     isLoadingWaveform = true;
 
-    if (waveformCache.has(path)) {
-      peaks = waveformCache.get(path) ?? [];
+    const cached = readWaveformCache(path);
+    if (cached) {
+      peaks = cached;
       isLoadingWaveform = false;
       return;
     }
 
-    waveformCache.set(path, peaks);
+    writeWaveformCache(path, peaks);
 
     try {
       const nextPeaks = await waveformPeaks(path, 720);
       if (nextPeaks.some((peak) => peak > 0)) {
-        waveformCache.set(path, nextPeaks);
+        writeWaveformCache(path, nextPeaks);
         peaks = nextPeaks;
         scheduleDraw();
       }
     } catch {
-      waveformCache.set(path, peaks);
+      writeWaveformCache(path, peaks);
     } finally {
       isLoadingWaveform = false;
     }
