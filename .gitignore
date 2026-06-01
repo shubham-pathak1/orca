@@ -9,6 +9,7 @@ vite-dev.*.log
 
 # Rust/Tauri build output
 target/
+target-check/
 src-tauri/target/
 src-tauri/gen/
 

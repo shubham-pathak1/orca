@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
-use image::codecs::jpeg::JpegEncoder;
+use image::codecs::webp::WebPEncoder;
 use image::imageops::FilterType;
+use image::ExtendedColorType;
 use rusqlite::{params, Connection};
 
 use crate::library::LocalSong;
@@ -495,8 +496,8 @@ pub fn migrate_inline_artwork_to_files(
         let ext = artwork_extension_from_mime(mime);
         let hash = hash_song_path(&song_path);
         let file_path = artwork_dir.join(format!("{}.{}", hash, ext));
-        let thumb_path = artwork_dir.join(format!("thumb_{}_96.jpg", hash));
-        let preview_path = artwork_dir.join(format!("preview_{}_320.jpg", hash));
+        let thumb_path = artwork_dir.join(format!("thumb_{}_80.webp", hash));
+        let preview_path = artwork_dir.join(format!("preview_{}_256.webp", hash));
         fs::write(&file_path, &decoded).map_err(|e| e.to_string())?;
         let (thumb_url, preview_url) = write_artwork_derivatives(&decoded, &thumb_path, &preview_path)
             .unwrap_or((None, None));
@@ -547,21 +548,27 @@ fn write_artwork_derivatives(
     preview_path: &Path,
 ) -> Result<(Option<String>, Option<String>), String> {
     let image = image::load_from_memory(bytes).map_err(|error| error.to_string())?;
-    let thumb = write_jpeg_derivative(&image, thumb_path, 96, 74).ok().map(|_| thumb_path.to_string_lossy().to_string());
-    let preview = write_jpeg_derivative(&image, preview_path, 320, 80).ok().map(|_| preview_path.to_string_lossy().to_string());
+    let thumb = write_webp_derivative(&image, thumb_path, 80).ok().map(|_| thumb_path.to_string_lossy().to_string());
+    let preview = write_webp_derivative(&image, preview_path, 256).ok().map(|_| preview_path.to_string_lossy().to_string());
     Ok((thumb, preview))
 }
 
-fn write_jpeg_derivative(
+fn write_webp_derivative(
     image: &image::DynamicImage,
     output_path: &Path,
     size: u32,
-    quality: u8,
 ) -> Result<(), String> {
-    let resized = image.resize(size, size, FilterType::Triangle);
+    let resized = image.resize(size, size, FilterType::Triangle).to_rgba8();
     let mut output: Vec<u8> = Vec::new();
-    let mut encoder = JpegEncoder::new_with_quality(Cursor::new(&mut output), quality);
-    encoder.encode_image(&resized).map_err(|error| error.to_string())?;
+    let encoder = WebPEncoder::new_lossless(Cursor::new(&mut output));
+    encoder
+        .encode(
+            resized.as_raw(),
+            resized.width(),
+            resized.height(),
+            ExtendedColorType::Rgba8,
+        )
+        .map_err(|error| error.to_string())?;
     fs::write(output_path, &output).map_err(|error| error.to_string())
 }
 

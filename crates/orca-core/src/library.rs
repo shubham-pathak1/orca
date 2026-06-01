@@ -4,8 +4,9 @@ use std::hash::{Hash, Hasher};
 use std::io::Cursor;
 use std::path::Path;
 
-use image::codecs::jpeg::JpegEncoder;
+use image::codecs::webp::WebPEncoder;
 use image::imageops::FilterType;
+use image::ExtendedColorType;
 
 use lofty::config::WriteOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
@@ -363,18 +364,18 @@ fn persist_artwork(
     let ext = artwork_extension_from_mime(mime.unwrap_or("image/jpeg"));
     let hash = hash_song_path(song_path);
     let original_path = artwork_dir.join(format!("art_{}.{}", hash, ext));
-    let thumb_path = artwork_dir.join(format!("thumb_{}_96.jpg", hash));
-    let preview_path = artwork_dir.join(format!("preview_{}_320.jpg", hash));
+    let thumb_path = artwork_dir.join(format!("thumb_{}_80.webp", hash));
+    let preview_path = artwork_dir.join(format!("preview_{}_256.webp", hash));
 
     fs::write(&original_path, bytes).map_err(|e| e.to_string())?;
 
     let mut thumb_written = false;
     let mut preview_written = false;
     if let Ok(img) = image::load_from_memory(bytes) {
-        if write_jpeg_derivative(&img, &thumb_path, 96, 74).is_ok() {
+        if write_webp_derivative(&img, &thumb_path, 80).is_ok() {
             thumb_written = true;
         }
-        if write_jpeg_derivative(&img, &preview_path, 320, 80).is_ok() {
+        if write_webp_derivative(&img, &preview_path, 256).is_ok() {
             preview_written = true;
         }
     }
@@ -386,16 +387,22 @@ fn persist_artwork(
     })
 }
 
-fn write_jpeg_derivative(
+fn write_webp_derivative(
     image: &image::DynamicImage,
     output_path: &Path,
     size: u32,
-    quality: u8,
 ) -> Result<(), String> {
-    let resized = image.resize(size, size, FilterType::Triangle);
+    let resized = image.resize(size, size, FilterType::Triangle).to_rgba8();
     let mut output: Vec<u8> = Vec::new();
-    let mut encoder = JpegEncoder::new_with_quality(Cursor::new(&mut output), quality);
-    encoder.encode_image(&resized).map_err(|error| error.to_string())?;
+    let encoder = WebPEncoder::new_lossless(Cursor::new(&mut output));
+    encoder
+        .encode(
+            resized.as_raw(),
+            resized.width(),
+            resized.height(),
+            ExtendedColorType::Rgba8,
+        )
+        .map_err(|error| error.to_string())?;
     fs::write(output_path, &output).map_err(|error| error.to_string())
 }
 
