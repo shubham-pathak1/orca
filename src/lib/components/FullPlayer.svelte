@@ -30,6 +30,14 @@
   let fetchedLyricsSongPath: string | null = null;
   let lyricsStatus: 'idle' | 'loading' | 'not-found' | 'offline' | 'error' = 'idle';
   let lastOpenSongPath: string | null = null;
+  let swipeStartX = 0;
+  let swipeStartY = 0;
+  let swipeStartTime = 0;
+  let swipePointerId: number | null = null;
+  let wheelSwipeAccum = 0;
+  let wheelSwipeLastAt = 0;
+  let wheelSwipeConsumed = false;
+  let swipeActionLastAt = 0;
 
   type LyricLine = {
     index: number;
@@ -150,6 +158,137 @@
     seekToLyric(line);
   }
 
+  function shouldIgnoreSwipeTarget(target: EventTarget | null) {
+    if (!(target instanceof Element)) {
+      return false;
+    }
+
+    return Boolean(target.closest('button,input,select,textarea,a,[data-no-swipe]'));
+  }
+
+  function triggerSwipeNavigation(direction: 'next' | 'previous') {
+    const now = Date.now();
+    if (now - swipeActionLastAt < 260) {
+      return;
+    }
+
+    swipeActionLastAt = now;
+    if (direction === 'next') {
+      onNext();
+      return;
+    }
+
+    onPrevious();
+  }
+
+  function startSwipeTracking(clientX: number, clientY: number) {
+    swipeStartX = clientX;
+    swipeStartY = clientY;
+    swipeStartTime = Date.now();
+  }
+
+  function finishSwipeTracking(clientX: number, clientY: number) {
+    if (swipeStartTime === 0) {
+      return;
+    }
+
+    const deltaX = clientX - swipeStartX;
+    const deltaY = clientY - swipeStartY;
+    const elapsed = Date.now() - swipeStartTime;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+
+    swipeStartTime = 0;
+    swipePointerId = null;
+
+    if (elapsed > 650) {
+      return;
+    }
+
+    if (absX < 72 || absX < absY * 1.25) {
+      return;
+    }
+
+    if (deltaX < 0) {
+      triggerSwipeNavigation('next');
+      return;
+    }
+
+    triggerSwipeNavigation('previous');
+  }
+
+  function handleFullPlayerPointerDown(event: PointerEvent) {
+    if (!event.isPrimary) {
+      return;
+    }
+
+    if (event.pointerType === 'mouse' && event.button !== 0) {
+      return;
+    }
+
+    if (shouldIgnoreSwipeTarget(event.target)) {
+      swipePointerId = null;
+      swipeStartTime = 0;
+      return;
+    }
+
+    swipePointerId = event.pointerId;
+    startSwipeTracking(event.clientX, event.clientY);
+  }
+
+  function handleFullPlayerPointerUp(event: PointerEvent) {
+    if (!event.isPrimary || swipePointerId === null || event.pointerId !== swipePointerId) {
+      return;
+    }
+
+    finishSwipeTracking(event.clientX, event.clientY);
+  }
+
+  function handleFullPlayerPointerCancel(event: PointerEvent) {
+    if (swipePointerId !== null && event.pointerId === swipePointerId) {
+      swipePointerId = null;
+      swipeStartTime = 0;
+    }
+  }
+
+  function handleFullPlayerWheel(event: WheelEvent) {
+    if (shouldIgnoreSwipeTarget(event.target)) {
+      return;
+    }
+
+    const absX = Math.abs(event.deltaX);
+    const absY = Math.abs(event.deltaY);
+    if (absX < 6 || absX < absY * 1.2) {
+      return;
+    }
+
+    event.preventDefault();
+    const now = Date.now();
+    if (now - wheelSwipeLastAt > 220) {
+      wheelSwipeAccum = 0;
+      wheelSwipeConsumed = false;
+    }
+    wheelSwipeLastAt = now;
+
+    if (wheelSwipeConsumed) {
+      return;
+    }
+
+    wheelSwipeAccum += event.deltaX;
+
+    if (Math.abs(wheelSwipeAccum) < 84) {
+      return;
+    }
+
+    if (wheelSwipeAccum > 0) {
+      triggerSwipeNavigation('next');
+    } else {
+      triggerSwipeNavigation('previous');
+    }
+    wheelSwipeConsumed = true;
+    wheelSwipeAccum = 0;
+  }
+
   async function centerActiveLyric() {
     await tick();
 
@@ -162,7 +301,7 @@
       return;
     }
 
-    const targetTop = activeLine.offsetTop - lyricsViewport.clientHeight * 0.26 + activeLine.clientHeight / 2;
+    const targetTop = activeLine.offsetTop - lyricsViewport.clientHeight * 0.25 + activeLine.clientHeight / 2;
     const distance = Math.abs(lyricsViewport.scrollTop - targetTop);
     lyricsViewport.scrollTo({
       top: Math.max(0, targetTop),
@@ -215,7 +354,14 @@
 </script>
 
 {#if open}
-  <section class="full-player-surface absolute inset-0 z-30 overflow-hidden bg-black text-white">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <section
+    class="full-player-surface absolute inset-0 z-30 overflow-hidden bg-black text-white"
+    on:pointerdown={handleFullPlayerPointerDown}
+    on:pointerup={handleFullPlayerPointerUp}
+    on:pointercancel={handleFullPlayerPointerCancel}
+    on:wheel={handleFullPlayerWheel}
+  >
     <div class="full-player-artwork-glow absolute inset-0 bg-cover bg-center opacity-55 blur-3xl [background-image:var(--cover-art)]"></div>
     <div class="full-player-wash absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.9)_0%,rgba(0,0,0,0.62)_48%,rgba(0,0,0,0.28)_100%)]"></div>
 
@@ -342,6 +488,10 @@
 {/if}
 
 <style>
+  .full-player-surface {
+    touch-action: pan-y;
+  }
+
   .back-button {
     display: grid;
     width: 2.5rem;
@@ -429,7 +579,8 @@
     height: 100%;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding-block: clamp(7rem, 18vh, 10rem);
+    padding-top: clamp(4.4rem, 10vh, 6.2rem);
+    padding-bottom: clamp(6rem, 14vh, 8rem);
     scroll-behavior: smooth;
     scrollbar-width: none;
   }
@@ -439,10 +590,10 @@
   }
 
   .lyrics-open {
-    width: min(760px, 52vw);
+    width: min(860px, 60vw);
     margin-inline: auto;
     max-width: 100%;
-    transform: translateX(clamp(20px, 2.2vw, 42px));
+    transform: translate(clamp(8px, 1vw, 18px), clamp(-10px, -1.1vh, -4px));
   }
 
   .no-lyrics-state {
@@ -450,9 +601,9 @@
     height: 100%;
     flex-direction: column;
     justify-content: center;
-    max-width: min(900px, 62vw);
+    max-width: min(860px, 60vw);
     margin-inline: auto;
-    transform: translate(clamp(4rem, 7vw, 8rem), -7vh);
+    transform: translate(clamp(8px, 1vw, 18px), -4.8vh);
   }
 
   .lyric-line {
@@ -460,7 +611,7 @@
     max-width: 100%;
     cursor: pointer;
     color: rgba(255, 255, 255, 0.2);
-    font-size: clamp(2rem, 3vw, 3.5rem);
+    font-size: clamp(1.9rem, 2.7vw, 3.2rem);
     font-weight: 900;
     line-height: 1.08;
     letter-spacing: 0;
@@ -509,12 +660,12 @@
     .lyrics-open {
       width: 100%;
       max-width: 100%;
-      transform: translateX(clamp(8px, 2vw, 16px));
+      transform: translate(clamp(2px, 0.8vw, 10px), clamp(-6px, -0.9vh, -2px));
     }
 
     .no-lyrics-state {
       max-width: 100%;
-      transform: translateY(-5vh);
+      transform: translateY(-3.4vh);
     }
 
     .lyric-line {
