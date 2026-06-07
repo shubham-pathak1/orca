@@ -27,7 +27,7 @@
 <footer class={`${alwaysVisible ? 'col-span-2' : 'col-span-3 max-xl:col-span-2'} grid grid-cols-[minmax(190px,280px)_1fr_72px] items-center gap-4 border-t border-white/8 bg-[#111315]/96 px-5 py-2 max-md:col-span-1 max-md:grid-cols-1 max-md:gap-2`}>
   <div class="flex min-w-0 items-center gap-3">
     <button
-      class="h-11 w-11 shrink-0 overflow-hidden rounded-sm bg-white/10 text-left outline-none transition hover:scale-[1.03] focus-visible:ring-2 focus-visible:ring-white/30"
+      class="h-11 w-11 shrink-0 overflow-hidden rounded-sm border border-transparent bg-white/10 text-left outline-none transition hover:border-[color:var(--accent)] focus-visible:border-[color:var(--accent)]"
       title="Open full player"
       on:click={onOpenFullPlayer}
     >
@@ -49,21 +49,14 @@
     </div>
   </div>
 
-  {#if seekbarStyle === 'waveform'}
-    <div class="grid min-w-0 grid-rows-[32px_40px] items-center justify-items-center gap-1">
-      <div class="w-full max-w-[840px] self-end">
-        <SeekControl song={nowPlaying} {playback} variant={seekbarStyle} onSeek={onSeek} />
-      </div>
-      <div class="self-start">
-        <PlaybackControls compact {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
-      </div>
-    </div>
-  {:else}
-    <div class="grid min-w-0 grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-      <PlaybackControls compact {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
+  <div class="grid min-w-0 grid-rows-[34px_36px] items-center justify-items-center gap-1">
+    <div class="w-full max-w-[840px] self-end">
       <SeekControl song={nowPlaying} {playback} variant={seekbarStyle} onSeek={onSeek} />
     </div>
-  {/if}
+    <div class="self-start">
+      <PlaybackControls compact {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
+    </div>
+  </div>
 
   <div class="group relative flex justify-end">
     <button class="grid h-10 w-10 place-items-center rounded-md border border-white/10 text-white/64 transition hover:bg-white/[0.08] hover:text-white focus:bg-white/[0.08] focus:text-white" type="button" aria-label="Volume">

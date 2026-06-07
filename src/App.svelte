@@ -75,7 +75,7 @@
   let handledEndedPath: string | null = null;
   let queuedNextForPath: string | null = null;
   let queuedNextPath: string | null = null;
-  $: bottomRowSize = seekbarStyle === 'waveform' ? '96px' : '72px';
+  $: bottomRowSize = '96px';
   $: defaultAccentRgb = '245,245,245';
   $: effectiveAccentRgb = dynamicCoverAccent && sampledArtwork ? accentRgb : defaultAccentRgb;
 

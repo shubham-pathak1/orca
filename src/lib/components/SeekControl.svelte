@@ -203,18 +203,66 @@
       {/if}
     </label>
   {:else}
-    <input
-      class="h-1 w-full"
-      style={`accent-color: var(--accent)`}
-      type="range"
-      min="0"
-      max={playback.duration_ms || 0}
-      value={playback.position_ms}
-      on:input={onSeek}
-    />
-    <div class="mt-2 flex justify-between text-xs text-white/48">
-      <span>{formatDuration(playback.position_ms)}</span>
-      <span>{formatDuration(playback.duration_ms || song?.duration || 0)}</span>
-    </div>
+    <label class="group grid min-w-0 grid-cols-[42px_minmax(0,1fr)_42px] items-center gap-3">
+      <span class="text-right text-xs font-medium text-white/60">{formatDuration(playback.position_ms)}</span>
+      <span class="standard-seek-track">
+        <span class="standard-seek-progress" style={`width: ${progress * 100}%;`}></span>
+        <span class="standard-seek-thumb" style={`left: ${progress * 100}%;`}></span>
+        <input
+          class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          type="range"
+          min="0"
+          max={playback.duration_ms || 0}
+          value={playback.position_ms}
+          on:input={onSeek}
+        />
+      </span>
+      <span class="text-xs font-medium text-white/60">{formatDuration(playback.duration_ms || song?.duration || 0)}</span>
+    </label>
   {/if}
 </div>
+
+<style>
+  .standard-seek-track {
+    position: relative;
+    display: block;
+    height: 18px;
+    min-width: 0;
+  }
+
+  .standard-seek-track::before {
+    position: absolute;
+    inset: 8px 0;
+    border-radius: 999px;
+    background: var(--waveform-rest, rgba(255, 255, 255, 0.16));
+    content: '';
+  }
+
+  .standard-seek-progress {
+    position: absolute;
+    inset-block: 8px;
+    left: 0;
+    border-radius: 999px;
+    background: var(--accent);
+  }
+
+  .standard-seek-thumb {
+    position: absolute;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.18);
+    transform: translate(-50%, -50%) scale(0.86);
+    transition:
+      box-shadow 140ms ease,
+      transform 140ms ease;
+  }
+
+  .standard-seek-track:hover .standard-seek-thumb,
+  .standard-seek-track:focus-within .standard-seek-thumb {
+    box-shadow: 0 0 0 5px rgba(0, 0, 0, 0.2);
+    transform: translate(-50%, -50%) scale(1);
+  }
+</style>
