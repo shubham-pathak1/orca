@@ -376,22 +376,6 @@
           </button>
 
         </div>
-
-        <button
-          class={`inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-black transition ${lyricsOpen ? 'border-white bg-white text-black' : 'border-white/12 bg-white/[0.06] text-white hover:bg-white/[0.1]'}`}
-          title={lyricsOpen ? 'Hide lyrics' : 'Show lyrics'}
-          on:click={() => (lyricsOpen = !lyricsOpen)}
-        >
-          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M8 5h11" />
-            <path d="M8 12h11" />
-            <path d="M8 19h7" />
-            <path d="M4 5h.01" />
-            <path d="M4 12h.01" />
-            <path d="M4 19h.01" />
-          </svg>
-          Lyrics
-        </button>
       </header>
 
       {#if lyricsOpen}
@@ -417,8 +401,18 @@
               <SeekControl {song} {playback} variant={seekbarStyle} waveformLayout="stacked" waveformHeight={46} onSeek={onSeek} />
             </div>
 
-            <div class="mt-5 shrink-0">
+            <div class="mt-5 flex shrink-0 items-center justify-center gap-6">
+              <div class="h-10 w-10"></div>
               <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
+              <button
+                class={`grid h-10 w-10 place-items-center rounded-full transition ${lyricsOpen ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-white/62 hover:bg-white/[0.08] hover:text-white'}`}
+                title={lyricsOpen ? 'Hide lyrics' : 'Show lyrics'}
+                on:click={() => (lyricsOpen = !lyricsOpen)}
+              >
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                  <path d="M4.583 17.321C3.553 16.227 3 15 3 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 0 1-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179zm10 0C13.553 16.227 13 15 13 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 0 1-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179z"/>
+                </svg>
+              </button>
             </div>
           </div>
 
@@ -459,8 +453,18 @@
 
           <div class="lyrics-controls mx-auto hidden w-full max-w-2xl pb-0 max-lg:block">
             <SeekControl {song} {playback} variant={seekbarStyle} waveformLayout="stacked" waveformHeight={46} onSeek={onSeek} />
-            <div class="mt-5">
+            <div class="mt-5 flex items-center justify-center gap-6">
+              <div class="h-10 w-10"></div>
               <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
+              <button
+                class={`grid h-10 w-10 place-items-center rounded-full transition ${lyricsOpen ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-white/62 hover:bg-white/[0.08] hover:text-white'}`}
+                title={lyricsOpen ? 'Hide lyrics' : 'Show lyrics'}
+                on:click={() => (lyricsOpen = !lyricsOpen)}
+              >
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                  <path d="M4.583 17.321C3.553 16.227 3 15 3 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 0 1-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179zm10 0C13.553 16.227 13 15 13 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 0 1-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179z"/>
+                </svg>
+              </button>
             </div>
           </div>
         </div>
@@ -486,8 +490,18 @@
             <SeekControl {song} {playback} variant={seekbarStyle} waveformLayout="stacked" waveformHeight={46} onSeek={onSeek} />
           </div>
 
-          <div class="mt-5 shrink-0">
+          <div class="mt-5 flex shrink-0 items-center justify-center gap-6">
+            <div class="h-10 w-10"></div>
             <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
+            <button
+              class={`grid h-10 w-10 place-items-center rounded-full transition ${lyricsOpen ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-white/62 hover:bg-white/[0.08] hover:text-white'}`}
+              title={lyricsOpen ? 'Hide lyrics' : 'Show lyrics'}
+              on:click={() => (lyricsOpen = !lyricsOpen)}
+            >
+              <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <path d="M4.583 17.321C3.553 16.227 3 15 3 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 0 1-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179zm10 0C13.553 16.227 13 15 13 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 0 1-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179z"/>
+              </svg>
+            </button>
           </div>
         </div>
       {/if}

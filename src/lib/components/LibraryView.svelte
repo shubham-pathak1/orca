@@ -766,7 +766,7 @@
               </div>
             {/each}
           {:else}
-            <div class="flex min-h-[260px] max-w-xl flex-col justify-center">
+            <div class="mx-auto flex min-h-[260px] max-w-xl flex-col items-center justify-center text-center">
               <p class="text-sm font-bold uppercase text-white/34">{detailQuery.trim() ? 'No songs found' : 'Empty playlist'}</p>
               <h2 class="mt-3 text-3xl font-black tracking-normal">{detailQuery.trim() ? 'Oops, no songs in this playlist match :(' : 'Add songs from Library.'}</h2>
               <p class="mt-3 text-sm leading-6 text-white/48">{detailQuery.trim() ? 'Try a different search inside this playlist.' : 'Right-click any song in Library, then choose this playlist.'}</p>
@@ -806,7 +806,7 @@
               {/each}
             </div>
           {:else}
-            <div class="flex h-[calc(100%-60px)] max-w-xl flex-col justify-center">
+            <div class="mx-auto flex h-[calc(100%-60px)] max-w-xl flex-col items-center justify-center text-center">
               <p class="text-sm font-bold uppercase text-white/34">{playlistQuery.trim() ? 'No playlists found' : 'No playlists yet'}</p>
               <h2 class="mt-3 text-4xl font-black tracking-normal">{playlistQuery.trim() ? 'Oops, no such playlist found :(' : 'Build a queue worth keeping.'}</h2>
               <p class="mt-3 text-sm leading-6 text-white/48">{playlistQuery.trim() ? 'Try another playlist name.' : 'Create a playlist, then right-click songs in Library to add them.'}</p>
@@ -860,7 +860,7 @@
               {/each}
               </div>
             {:else}
-              <div class="flex min-h-[320px] max-w-xl flex-col justify-center px-2">
+              <div class="mx-auto flex min-h-[320px] max-w-xl flex-col items-center justify-center text-center px-2">
                 <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
                 <h2 class="mt-3 text-4xl font-black tracking-normal">Oops, no such song found :(</h2>
                 <p class="mt-3 text-sm leading-6 text-white/48">Try another title, artist, album, or format.</p>
@@ -902,7 +902,7 @@
               {/each}
               </div>
             {:else}
-              <div class="col-span-full flex min-h-[320px] max-w-xl flex-col justify-center">
+              <div class="col-span-full mx-auto flex min-h-[320px] max-w-xl flex-col items-center justify-center text-center">
                 <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
                 <h2 class="mt-3 text-4xl font-black tracking-normal">Oops, no such song found :(</h2>
                 <p class="mt-3 text-sm leading-6 text-white/48">Try another title, artist, album, or format.</p>
@@ -987,7 +987,7 @@
                 </button>
               {/each}
               {#if !selectedAlbumVisibleSongs.length}
-                <div class="flex min-h-[220px] max-w-xl flex-col justify-center px-2">
+                <div class="mx-auto flex min-h-[220px] max-w-xl flex-col items-center justify-center text-center px-2">
                   <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
                   <h2 class="mt-3 text-3xl font-black tracking-normal">Oops, no songs in this album match :(</h2>
                   <p class="mt-3 text-sm leading-6 text-white/48">Try a different search inside this album.</p>
@@ -1028,7 +1028,7 @@
               </button>
               {/each}
             {:else}
-              <div class="col-span-full flex min-h-[320px] max-w-xl flex-col justify-center">
+              <div class="col-span-full mx-auto flex min-h-[320px] max-w-xl flex-col items-center justify-center text-center">
                 <p class="text-sm font-bold uppercase text-white/34">No albums found</p>
                 <h2 class="mt-3 text-4xl font-black tracking-normal">Oops, no such album found :(</h2>
                 <p class="mt-3 text-sm leading-6 text-white/48">Try another album or artist name.</p>
@@ -1110,7 +1110,7 @@
                 </button>
               {/each}
               {#if !selectedArtistVisibleSongs.length}
-                <div class="flex min-h-[220px] max-w-xl flex-col justify-center px-2">
+                <div class="mx-auto flex min-h-[220px] max-w-xl flex-col items-center justify-center text-center px-2">
                   <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
                   <h2 class="mt-3 text-3xl font-black tracking-normal">Oops, no songs by this artist match :(</h2>
                   <p class="mt-3 text-sm leading-6 text-white/48">Try a different search inside this artist page.</p>
@@ -1156,7 +1156,7 @@
               </button>
               {/each}
             {:else}
-              <div class="col-span-full flex min-h-[320px] max-w-xl flex-col justify-center">
+              <div class="col-span-full mx-auto flex min-h-[320px] max-w-xl flex-col items-center justify-center text-center">
                 <p class="text-sm font-bold uppercase text-white/34">No artists found</p>
                 <h2 class="mt-3 text-4xl font-black tracking-normal">Oops, no such artist found :(</h2>
                 <p class="mt-3 text-sm leading-6 text-white/48">Try another artist name.</p>
