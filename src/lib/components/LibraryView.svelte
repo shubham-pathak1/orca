@@ -146,12 +146,24 @@
     .filter((song): song is LocalSong => Boolean(song));
   $: selectedPlaylistVisibleSongs = filterDetailSongs(selectedPlaylistSongs, detailQuery);
   $: selectedPlaylistArtwork = selectedPlaylist?.cover_path ?? selectedPlaylistSongs.find((song) => previewArtwork(song))?.artwork_preview ?? null;
-  $: pageTitle = activeView === 'settings' ? 'Settings' : activeView === 'playlists' ? 'Playlists' : 'Main Library';
+  $: pageTitle = activeView === 'settings'
+    ? 'Settings'
+    : activeView === 'playlists'
+      ? 'Playlists'
+      : activeView === 'artists'
+        ? 'Artists'
+        : activeView === 'albums'
+          ? 'Albums'
+          : 'Main Library';
   $: pageSubtitle = activeView === 'settings'
     ? 'Tune Orca for the way you listen'
     : activeView === 'playlists'
       ? `${playlists.length} ${playlists.length === 1 ? 'playlist' : 'playlists'}`
-      : `${songs.length} songs / ${artistCount} artists / ${albumCount} albums`;
+      : activeView === 'artists'
+        ? `${artistCount} ${artistCount === 1 ? 'artist' : 'artists'}`
+        : activeView === 'albums'
+          ? `${albumCount} ${albumCount === 1 ? 'album' : 'albums'}`
+          : `${songs.length} songs / ${artistCount} artists / ${albumCount} albums`;
   $: selectedArtistSongs = selectedArtistName
     ? songs.filter((song) => song.artist === selectedArtistName).sort((a, b) => a.title.localeCompare(b.title))
     : [];
@@ -530,7 +542,7 @@
 
 <svelte:window on:click={closeFloatingUi} on:keydown={handleGlobalKeydown} />
 
-<section class="min-h-0 border-r border-white/8 bg-black/42 px-5 py-4 max-xl:border-r-0">
+<section class="min-h-0 bg-black/42 px-5 py-4">
   {#if !detailMode}
   <div class={`mb-4 grid items-center gap-4 max-lg:grid-cols-1 ${activeView === 'settings' || activeView === 'playlists' ? 'grid-cols-[minmax(200px,1fr)_minmax(260px,420px)]' : activeView === 'songs' ? 'grid-cols-[minmax(200px,1fr)_minmax(220px,380px)_84px_140px]' : 'grid-cols-[minmax(200px,1fr)_minmax(220px,300px)_140px]'}`}>
     <div>
@@ -541,7 +553,7 @@
       <label>
         <span class="sr-only">Search settings</span>
         <input
-          class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
+          class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white focus:border-[color:var(--accent-mid)]"
           bind:value={settingsQuery}
           placeholder="Search settings..."
         />
@@ -550,7 +562,7 @@
       <label>
         <span class="sr-only">Search playlists</span>
         <input
-          class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
+          class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white focus:border-[color:var(--accent-mid)]"
           bind:value={playlistQuery}
           placeholder="Search playlists..."
         />
@@ -559,7 +571,7 @@
       <label>
         <span class="sr-only">Search library</span>
         <input
-          class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
+          class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white focus:border-[color:var(--accent-mid)]"
           bind:value={query}
           placeholder="Search library..."
         />
@@ -668,7 +680,7 @@
               <label class="w-full max-w-xl">
                 <span class="sr-only">Search songs in playlist</span>
                 <input
-                  class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
+                  class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white focus:border-[color:var(--accent-mid)]"
                   bind:value={detailQuery}
                   placeholder={detailSearchPlaceholder}
                 />
@@ -763,7 +775,7 @@
         {:else}
           <form class="mb-5 grid grid-cols-[minmax(180px,360px)_auto] items-center gap-3 max-md:grid-cols-1" on:submit|preventDefault={createPlaylistFromInput}>
             <input
-              class="h-10 rounded-md border border-white/10 bg-white/[0.045] px-3 text-sm text-white outline-none placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
+              class="h-10 rounded-md border border-white/10 bg-white/[0.045] px-3 text-sm text-white outline-none placeholder:text-white focus:border-[color:var(--accent-mid)]"
               bind:value={newPlaylistName}
               placeholder="New playlist name"
             />
@@ -804,11 +816,14 @@
       </div>
     {:else if activeView === 'songs'}
       {#if songLayout === 'list'}
-        <div class="grid h-8 grid-cols-[minmax(240px,1.35fr)_minmax(130px,0.7fr)_minmax(130px,0.8fr)_72px] items-center gap-3 border-b border-white/8 px-2 text-[11px] font-bold uppercase text-white/36 max-lg:grid-cols-[minmax(220px,1fr)_90px]">
-          <span>Title</span>
-          <span class="max-lg:hidden">Artist</span>
-          <span class="max-lg:hidden">Album</span>
-          <span class="text-right">Duration</span>
+        <div class="grid grid-cols-[minmax(0,1fr)_24px]">
+          <div class="grid h-8 grid-cols-[minmax(240px,1.35fr)_minmax(130px,0.7fr)_minmax(130px,0.8fr)_72px] items-center gap-3 border-b border-white/8 px-2 text-[11px] font-bold uppercase text-white/36 max-lg:grid-cols-[minmax(220px,1fr)_90px]">
+            <span>Title</span>
+            <span class="max-lg:hidden">Artist</span>
+            <span class="max-lg:hidden">Album</span>
+            <span class="text-right">Duration</span>
+          </div>
+          <div></div>
         </div>
         <div class="grid h-[calc(100%-32px)] grid-cols-[minmax(0,1fr)_24px]">
           <div
@@ -918,7 +933,7 @@
               <label class="w-full max-w-xl">
                 <span class="sr-only">Search songs in album</span>
                 <input
-                  class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
+                  class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white focus:border-[color:var(--accent-mid)]"
                   bind:value={detailQuery}
                   placeholder={detailSearchPlaceholder}
                 />
@@ -1044,7 +1059,7 @@
               <label class="w-full max-w-xl">
                 <span class="sr-only">Search songs by artist</span>
                 <input
-                  class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
+                  class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white focus:border-[color:var(--accent-mid)]"
                   bind:value={detailQuery}
                   placeholder={detailSearchPlaceholder}
                 />

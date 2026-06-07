@@ -22,7 +22,7 @@
   export let onOpenFullPlayer: () => void = () => {};
 </script>
 
-<aside class="relative min-h-0 overflow-hidden bg-black/45 px-5 py-5 max-xl:hidden">
+<aside class="relative min-h-0 overflow-hidden border-l border-white/8 bg-black/45 px-5 py-5 max-xl:hidden">
   <div class="pointer-events-none absolute inset-0 bg-cover bg-center opacity-18 blur-2xl [background-image:var(--cover-art)]"></div>
   <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/45 via-black/70 to-black/88"></div>
   <div class="relative flex h-full flex-col">

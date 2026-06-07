@@ -242,7 +242,7 @@
     </section>
   {:else if activeTab === 'Audio'}
     <section class="max-w-[820px]">
-      <div class="grid grid-cols-[1fr_44px] items-center gap-5 border-t border-white/10 pt-5">
+      <div class="grid grid-cols-[1fr_44px] items-center gap-5">
         <div>
           <h3 class="text-sm font-bold text-white">Song quality info</h3>
           <p class="text-sm text-white/48">Show format, sample rate, and bitrate in rows and players</p>
