@@ -301,7 +301,8 @@
       return;
     }
 
-    const targetTop = activeLine.offsetTop - lyricsViewport.clientHeight * 0.25 + activeLine.clientHeight / 2;
+    const anchor = activeLyricIndex <= 1 ? 0.34 : 0.5;
+    const targetTop = activeLine.offsetTop - lyricsViewport.clientHeight * anchor + activeLine.clientHeight / 2;
     const distance = Math.abs(lyricsViewport.scrollTop - targetTop);
     lyricsViewport.scrollTo({
       top: Math.max(0, targetTop),
@@ -374,25 +375,6 @@
             </svg>
           </button>
 
-          {#if lyricsOpen}
-            <button class="now-playing-pill" title="Show player" on:click={() => (lyricsOpen = false)}>
-              <span class="h-12 w-12 shrink-0 overflow-hidden rounded-full bg-white/10">
-                {#if song && artworkUrl(song.artwork)}
-                  <img class="h-full w-full object-cover" src={artworkUrl(song.artwork) ?? ''} alt="" />
-                {/if}
-              </span>
-              <span class="min-w-0 text-left">
-                <span class="block truncate text-base font-black text-[var(--accent)]">{song?.title ?? 'Select a song'}</span>
-                <span class="block truncate text-sm text-white/58">{song?.artist ?? 'No track playing'}</span>
-              </span>
-              <span class="visualizer" aria-hidden="true">
-                <span></span>
-                <span></span>
-                <span></span>
-                <span></span>
-              </span>
-            </button>
-          {/if}
         </div>
 
         <button
@@ -413,8 +395,34 @@
       </header>
 
       {#if lyricsOpen}
-        <div class="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-5 pt-2">
-          <div class="min-h-0">
+        <div class="lyrics-player-layout grid min-h-0 flex-1 grid-cols-[minmax(280px,420px)_minmax(0,1fr)] items-center gap-12 pt-2 max-lg:grid-cols-1 max-lg:items-stretch">
+          <div class="lyrics-side-player flex min-h-0 flex-col items-center justify-center text-center max-lg:hidden">
+            <button class="full-player-cover aspect-square w-full max-w-[min(340px,38vh)] shrink-0 overflow-hidden rounded-lg bg-white/10" title="Show player" on:click={() => (lyricsOpen = false)}>
+              {#if song && artworkUrl(song.artwork)}
+                <img class="h-full w-full object-cover" src={artworkUrl(song.artwork) ?? ''} alt="" />
+              {/if}
+            </button>
+
+            <div class="mt-5 w-full max-w-[min(340px,38vh)]">
+              <h2 class="truncate text-3xl font-black">{song?.title ?? 'Select a song'}</h2>
+              <p class="mt-2 truncate text-base text-white/68">{song?.artist ?? 'No track playing'}</p>
+              {#if song && showQualityInfo}
+                <p class="mt-4 inline-flex rounded-sm bg-white/14 px-2.5 py-1.5 text-[10px] font-bold uppercase text-white/72">
+                  {formatQuality(song.format, song.sample_rate, song.bitrate) || 'Local audio'}
+                </p>
+              {/if}
+            </div>
+
+            <div class="mt-8 w-full max-w-[min(420px,42vw)]">
+              <SeekControl {song} {playback} variant={seekbarStyle} waveformLayout="stacked" waveformHeight={46} onSeek={onSeek} />
+            </div>
+
+            <div class="mt-5 shrink-0">
+              <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
+            </div>
+          </div>
+
+          <div class="lyrics-viewport-shell min-h-0">
             {#if lyricLines.length}
               <div bind:this={lyricsViewport} class="lyrics-stack lyrics-open">
                 {#each lyricLines as line}
@@ -449,7 +457,7 @@
             {/if}
           </div>
 
-          <div class="mx-auto w-full max-w-2xl pb-0">
+          <div class="lyrics-controls mx-auto hidden w-full max-w-2xl pb-0 max-lg:block">
             <SeekControl {song} {playback} variant={seekbarStyle} waveformLayout="stacked" waveformHeight={46} onSeek={onSeek} />
             <div class="mt-5">
               <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
@@ -514,75 +522,16 @@
     color: white;
   }
 
-  .now-playing-pill {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    width: fit-content;
-    min-width: min(250px, 44vw);
-    max-width: min(350px, calc(100vw - 12rem));
-    gap: 0.65rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.58);
-    padding: 0.38rem 0.55rem 0.38rem 0.38rem;
-    color: white;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
-  }
-
-  .visualizer {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 3px;
-    width: 1.9rem;
-    height: 1.9rem;
-    flex-shrink: 0;
-    border-radius: 999px;
-    color: var(--accent);
-  }
-
-  .visualizer span {
-    width: 3px;
-    height: 0.7rem;
-    border-radius: 999px;
-    background: currentColor;
-    opacity: 0.95;
-    animation: visualizer-pulse 900ms ease-in-out infinite;
-  }
-
-  .visualizer span:nth-child(2) {
-    animation-delay: 110ms;
-  }
-
-  .visualizer span:nth-child(3) {
-    animation-delay: 220ms;
-  }
-
-  .visualizer span:nth-child(4) {
-    animation-delay: 330ms;
-  }
-
-  @keyframes visualizer-pulse {
-    0%,
-    100% {
-      transform: scaleY(0.45);
-    }
-
-    50% {
-      transform: scaleY(1.45);
-    }
-  }
-
   .lyrics-stack {
     box-sizing: border-box;
     height: 100%;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding-top: clamp(4.4rem, 10vh, 6.2rem);
-    padding-bottom: clamp(6rem, 14vh, 8rem);
+    padding-top: clamp(8rem, 17vh, 11rem);
+    padding-bottom: clamp(7rem, 15vh, 10rem);
     scroll-behavior: smooth;
     scrollbar-width: none;
+    mask-image: linear-gradient(to bottom, transparent 0, black 3.5rem, black calc(100% - 7rem), transparent 100%);
   }
 
   .lyrics-stack::-webkit-scrollbar {
@@ -590,10 +539,27 @@
   }
 
   .lyrics-open {
-    width: min(860px, 60vw);
+    width: min(900px, 100%);
     margin-inline: auto;
-    max-width: 100%;
-    transform: translate(clamp(8px, 1vw, 18px), clamp(-10px, -1.1vh, -4px));
+    transform: none;
+  }
+
+  .lyrics-player-layout {
+    row-gap: clamp(2.6rem, 5.5vh, 4.4rem);
+  }
+
+  .lyrics-viewport-shell {
+    align-self: stretch;
+  }
+
+  .lyrics-controls {
+    position: relative;
+    z-index: 1;
+  }
+
+  .lyrics-side-player {
+    justify-self: center;
+    width: 100%;
   }
 
   .no-lyrics-state {
@@ -601,9 +567,10 @@
     height: 100%;
     flex-direction: column;
     justify-content: center;
-    max-width: min(860px, 60vw);
+    width: min(980px, calc(100vw - 8rem));
     margin-inline: auto;
-    transform: translate(clamp(8px, 1vw, 18px), -4.8vh);
+    text-align: center;
+    transform: translateY(-4.8vh);
   }
 
   .lyric-line {
@@ -615,6 +582,7 @@
     font-weight: 900;
     line-height: 1.08;
     letter-spacing: 0;
+    text-align: center;
     outline: none;
     user-select: text;
     -webkit-text-fill-color: currentColor;
@@ -652,19 +620,19 @@
   }
 
   @media (max-width: 1024px) {
-    .now-playing-pill {
-      min-width: 0;
-      max-width: calc(100vw - 8rem);
+    .lyrics-open {
+      width: calc(100vw - 3rem);
+      margin-inline: auto;
+      transform: translateY(clamp(-12px, -1.6vh, -4px));
     }
 
-    .lyrics-open {
-      width: 100%;
-      max-width: 100%;
-      transform: translate(clamp(2px, 0.8vw, 10px), clamp(-6px, -0.9vh, -2px));
+    .lyrics-player-layout {
+      row-gap: clamp(1.4rem, 3.6vh, 2.4rem);
     }
 
     .no-lyrics-state {
-      max-width: 100%;
+      width: calc(100vw - 3rem);
+      margin-inline: auto;
       transform: translateY(-3.4vh);
     }
 
