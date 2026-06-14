@@ -21,10 +21,12 @@
   export let onSeek: (event: Event) => void = () => {};
   export let onVolume: (event: Event) => void = () => {};
   export let onOpenFullPlayer: () => void = () => {};
+  export let queueOpen = false;
+  export let onToggleQueue: () => void = () => {};
   export let alwaysVisible = false;
 </script>
 
-<footer class={`${alwaysVisible ? 'col-span-2' : 'col-span-3 max-xl:col-span-2'} grid grid-cols-[minmax(190px,280px)_1fr_72px] items-center gap-4 border-t border-white/8 bg-[#111315]/96 px-5 py-2 max-md:col-span-1 max-md:grid-cols-1 max-md:gap-2`}>
+<footer class={`${alwaysVisible ? 'col-span-2' : 'col-span-3 max-xl:col-span-2'} grid grid-cols-[minmax(190px,280px)_1fr_116px] items-center gap-4 border-t border-white/8 bg-[#111315]/96 px-5 py-2 max-md:col-span-1 max-md:grid-cols-1 max-md:gap-2`}>
   <div class="flex min-w-0 items-center gap-3">
     <button
       class="h-11 w-11 shrink-0 overflow-hidden rounded-sm border border-transparent bg-white/10 text-left outline-none transition hover:border-[color:var(--accent)] focus-visible:border-[color:var(--accent)]"
@@ -58,15 +60,33 @@
     </div>
   </div>
 
-  <div class="group relative flex justify-end">
-    <button class="grid h-10 w-10 place-items-center rounded-md border border-white/10 text-white/64 transition hover:bg-white/[0.08] hover:text-white focus:bg-white/[0.08] focus:text-white" type="button" aria-label="Volume">
+  <div class="flex items-center justify-end gap-2">
+    <button
+      class={`grid h-10 w-10 place-items-center rounded-md border border-white/10 transition hover:bg-white/[0.08] hover:text-white focus:bg-white/[0.08] focus:text-white ${queueOpen ? 'bg-white/[0.08] text-white' : 'text-white/64'}`}
+      type="button"
+      aria-label={queueOpen ? 'Hide queue' : 'Show queue'}
+      aria-pressed={queueOpen}
+      on:click={onToggleQueue}
+    >
+      <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 6h12" />
+        <path d="M8 12h12" />
+        <path d="M8 18h12" />
+        <path d="M4 6h.01" />
+        <path d="M4 12h.01" />
+        <path d="M4 18h.01" />
+      </svg>
+    </button>
+
+    <div class="group relative">
+      <button class="grid h-10 w-10 place-items-center rounded-md border border-white/10 text-white/64 transition hover:bg-white/[0.08] hover:text-white focus:bg-white/[0.08] focus:text-white" type="button" aria-label="Volume">
       <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
         <path d="M11 5 6 9H3v6h3l5 4V5Z" />
         <path d="M15.5 8.5a5 5 0 0 1 0 7" />
         <path d="M18.4 5.6a9 9 0 0 1 0 12.8" />
       </svg>
     </button>
-    <div class="pointer-events-none absolute bottom-full right-0 mb-2 grid h-36 w-12 translate-y-1 place-items-center rounded-md border border-white/10 bg-[#171719] py-3 opacity-0 shadow-[0_18px_60px_rgba(0,0,0,0.36)] transition group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
+      <div class="pointer-events-none absolute bottom-full right-0 mb-2 grid h-36 w-12 translate-y-1 place-items-center rounded-md border border-white/10 bg-[#171719] py-3 opacity-0 shadow-[0_18px_60px_rgba(0,0,0,0.36)] transition group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
       <input
         class="h-28 w-3 [direction:rtl] [writing-mode:vertical-lr]"
         style={`accent-color: var(--accent)`}
@@ -78,6 +98,7 @@
         on:input={onVolume}
         aria-label="Volume level"
       />
+      </div>
     </div>
   </div>
 </footer>

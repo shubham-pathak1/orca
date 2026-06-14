@@ -22,6 +22,8 @@
   export let seekbarStyle: 'standard' | 'waveform' = 'standard';
   export let showQualityInfo = true;
   export let lyricsOpen = false;
+  export let queueOpen = false;
+  export let onToggleQueue: () => void = () => {};
 
   let lyricsViewport: HTMLDivElement | null = null;
   let centeredLyricIndex = -1;
@@ -403,7 +405,22 @@
             </div>
 
             <div class="player-controls-row mt-5 flex shrink-0 items-center justify-center gap-6">
-              <div class="h-10 w-10"></div>
+              <button
+                class:queue-toggle-button-active={queueOpen}
+                class="queue-toggle-button"
+                title={queueOpen ? 'Hide queue' : 'Show queue'}
+                aria-pressed={queueOpen}
+                on:click={onToggleQueue}
+              >
+                <svg class="queue-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M8 6h12" />
+                  <path d="M8 12h12" />
+                  <path d="M8 18h12" />
+                  <path d="M4 6h.01" />
+                  <path d="M4 12h.01" />
+                  <path d="M4 18h.01" />
+                </svg>
+              </button>
               <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
               <button
                 class:lyrics-toggle-button-active={lyricsOpen}
@@ -461,7 +478,22 @@
           <div class="lyrics-controls mx-auto hidden w-full max-w-2xl pb-0 max-lg:block">
             <SeekControl {song} {playback} variant={seekbarStyle} waveformLayout="stacked" waveformHeight={46} onSeek={onSeek} />
             <div class="player-controls-row mt-5 flex items-center justify-center gap-6">
-              <div class="h-10 w-10"></div>
+              <button
+                class:queue-toggle-button-active={queueOpen}
+                class="queue-toggle-button"
+                title={queueOpen ? 'Hide queue' : 'Show queue'}
+                aria-pressed={queueOpen}
+                on:click={onToggleQueue}
+              >
+                <svg class="queue-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M8 6h12" />
+                  <path d="M8 12h12" />
+                  <path d="M8 18h12" />
+                  <path d="M4 6h.01" />
+                  <path d="M4 12h.01" />
+                  <path d="M4 18h.01" />
+                </svg>
+              </button>
               <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
               <button
                 class:lyrics-toggle-button-active={lyricsOpen}
@@ -503,7 +535,22 @@
           </div>
 
           <div class="player-controls-row mt-5 flex shrink-0 items-center justify-center gap-6">
-            <div class="h-10 w-10"></div>
+            <button
+              class:queue-toggle-button-active={queueOpen}
+              class="queue-toggle-button"
+              title={queueOpen ? 'Hide queue' : 'Show queue'}
+              aria-pressed={queueOpen}
+              on:click={onToggleQueue}
+            >
+              <svg class="queue-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M8 6h12" />
+                <path d="M8 12h12" />
+                <path d="M8 18h12" />
+                <path d="M4 6h.01" />
+                <path d="M4 12h.01" />
+                <path d="M4 18h.01" />
+              </svg>
+            </button>
             <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
             <button
               class:lyrics-toggle-button-active={lyricsOpen}
@@ -574,6 +621,33 @@
 
   .player-controls-row {
     transform: translateX(-0.55rem);
+  }
+
+  .queue-toggle-button {
+    display: grid;
+    width: 2.5rem;
+    height: 2.5rem;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.035);
+    color: rgba(255, 255, 255, 0.62);
+    transition:
+      background 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease;
+  }
+
+  .queue-toggle-button:hover,
+  .queue-toggle-button-active {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+  }
+
+  .queue-toggle-icon {
+    width: 1.15rem;
+    height: 1.15rem;
   }
 
   .lyrics-toggle-button {

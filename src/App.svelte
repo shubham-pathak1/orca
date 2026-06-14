@@ -6,6 +6,7 @@
   import LibraryView from './lib/components/LibraryView.svelte';
   import MetadataEditor from './lib/components/MetadataEditor.svelte';
   import PlayerBar from './lib/components/PlayerBar.svelte';
+  import QueuePanel from './lib/components/QueuePanel.svelte';
   import Sidebar from './lib/components/Sidebar.svelte';
   import {
     addSongToPlaylist,
@@ -54,6 +55,7 @@
   let selectedPath: string | null = null;
   let fullPlayerOpen = false;
   let fullPlayerLyricsOpen = false;
+  let queueOpen = false;
   let accentRgb = '245,245,245';
   let sampledArtwork: string | null = null;
   let playerPlacement: 'right' | 'bottom' = 'right';
@@ -66,6 +68,7 @@
   let theme: 'default' = 'default';
   let shuffleEnabled = false;
   let repeatMode: 'off' | 'all' | 'one' = 'off';
+  let queueOrderPaths: string[] = [];
   let metadataEditorSong: LocalSong | null = null;
   let isSavingMetadata = false;
   let folderCount = 0;
@@ -92,6 +95,8 @@
 
   $: nowPlaying = songs.find((song) => song.path === playback.current_path) ?? null;
   $: selectedSong = songs.find((song) => song.path === selectedPath) ?? nowPlaying ?? filteredSongs[0] ?? null;
+  $: orderedPlaybackSongs = orderSongsForQueue(songs, queueOrderPaths);
+  $: queueSongs = buildQueueSongs(orderedPlaybackSongs, playback.current_path ?? selectedPath, repeatMode);
   $: albumCount = new Set(songs.map((song) => `${song.album_artist}:${song.album}`)).size;
   $: artistCount = new Set(songs.map((song) => song.artist)).size;
   $: ambientArtwork = artworkUrl((nowPlaying ?? selectedSong)?.artwork_preview ?? (nowPlaying ?? selectedSong)?.artwork ?? null);
@@ -245,11 +250,79 @@
     window.localStorage.setItem('orca.repeatMode', repeatMode);
   }
 
+  function orderSongsForQueue(sourceSongs: LocalSong[], orderPaths: string[]) {
+    if (!orderPaths.length) {
+      return sourceSongs;
+    }
+
+    const songsByPath = new Map(sourceSongs.map((song) => [song.path, song]));
+    const orderedSongs = orderPaths
+      .map((path) => songsByPath.get(path))
+      .filter((song): song is LocalSong => Boolean(song));
+    const orderedPaths = new Set(orderedSongs.map((song) => song.path));
+    const missingSongs = sourceSongs.filter((song) => !orderedPaths.has(song.path));
+    return [...orderedSongs, ...missingSongs];
+  }
+
+  function buildQueueSongs(sourceSongs: LocalSong[], currentPath: string | null, mode: 'off' | 'all' | 'one') {
+    if (!sourceSongs.length) {
+      return [];
+    }
+
+    const currentIndex = currentPath ? sourceSongs.findIndex((song) => song.path === currentPath) : -1;
+    if (currentIndex < 0) {
+      return sourceSongs;
+    }
+
+    if (mode === 'one') {
+      return [sourceSongs[currentIndex]];
+    }
+
+    const currentAndRemaining = sourceSongs.slice(currentIndex);
+    if (mode !== 'all') {
+      return currentAndRemaining;
+    }
+
+    return [...currentAndRemaining, ...sourceSongs.slice(0, currentIndex)];
+  }
+
+  function toggleQueue() {
+    queueOpen = !queueOpen;
+  }
+
+  function reorderQueueSong(sourcePath: string, targetPath: string) {
+    if (sourcePath === targetPath) {
+      return;
+    }
+
+    const currentPath = playback.current_path ?? selectedPath;
+    if (sourcePath === currentPath) {
+      return;
+    }
+
+    const orderedPaths = orderSongsForQueue(songs, queueOrderPaths).map((song) => song.path);
+    const sourceIndex = orderedPaths.indexOf(sourcePath);
+    if (sourceIndex < 0) {
+      return;
+    }
+
+    const nextOrder = orderedPaths.filter((path) => path !== sourcePath);
+    const targetIndex = nextOrder.indexOf(targetPath);
+    if (targetIndex < 0) {
+      return;
+    }
+
+    const insertIndex = targetPath === currentPath ? targetIndex + 1 : targetIndex;
+    nextOrder.splice(insertIndex, 0, sourcePath);
+    queueOrderPaths = nextOrder;
+  }
+
   function applyLibrarySnapshot(snapshot: LibrarySnapshot) {
     songs = snapshot.songs;
     playlists = snapshot.playlists;
     playback = snapshot.playback;
     folderCount = snapshot.folder_count ?? folderCount;
+    queueOrderPaths = queueOrderPaths.filter((path) => songs.some((song) => song.path === path));
 
     if (metadataEditorSong) {
       metadataEditorSong = songs.find((song) => song.path === metadataEditorSong?.path) ?? metadataEditorSong;
@@ -329,50 +402,35 @@
   }
 
   function pickNextSong(currentPath: string) {
-    const currentIndex = songs.findIndex((song) => song.path === currentPath);
-    if (currentIndex < 0 || songs.length === 0) {
+    const currentIndex = orderedPlaybackSongs.findIndex((song) => song.path === currentPath);
+    if (currentIndex < 0 || orderedPlaybackSongs.length === 0) {
       return null;
     }
 
     if (repeatMode === 'one') {
-      return songs[currentIndex];
+      return orderedPlaybackSongs[currentIndex];
     }
 
-    if (shuffleEnabled && songs.length > 1) {
+    if (shuffleEnabled && orderedPlaybackSongs.length > 1) {
       let nextIndex = currentIndex;
       while (nextIndex === currentIndex) {
-        nextIndex = Math.floor(Math.random() * songs.length);
+        nextIndex = Math.floor(Math.random() * orderedPlaybackSongs.length);
       }
-      return songs[nextIndex];
+      return orderedPlaybackSongs[nextIndex];
     }
 
-    const isLastSong = currentIndex >= songs.length - 1;
+    const isLastSong = currentIndex >= orderedPlaybackSongs.length - 1;
     if (isLastSong && repeatMode !== 'all') {
       return null;
     }
 
-    return songs[(currentIndex + 1) % songs.length];
+    return orderedPlaybackSongs[(currentIndex + 1) % orderedPlaybackSongs.length];
   }
 
   async function handleTrackEnded(path: string) {
-    const currentIndex = songs.findIndex((song) => song.path === path);
-    if (currentIndex < 0) {
-      return;
-    }
-
-    if (repeatMode === 'one') {
-      await chooseSong(songs[currentIndex]);
-      return;
-    }
-
-    if (shuffleEnabled && songs.length > 1) {
-      await playSongByOffset(1);
-      return;
-    }
-
-    const isLastSong = currentIndex >= songs.length - 1;
-    if (!isLastSong || repeatMode === 'all') {
-      await chooseSong(songs[(currentIndex + 1) % songs.length]);
+    const nextSong = pickNextSong(path);
+    if (nextSong) {
+      await chooseSong(nextSong);
     }
   }
 
@@ -387,6 +445,18 @@
     if (fullPlayerOpen && key === 'l' && !event.altKey && !event.ctrlKey && !event.metaKey && !isTextEntryTarget(event)) {
       event.preventDefault();
       fullPlayerLyricsOpen = !fullPlayerLyricsOpen;
+      return;
+    }
+
+    if (key === 'q' && !event.altKey && !event.ctrlKey && !event.metaKey && !isTextEntryTarget(event)) {
+      event.preventDefault();
+      toggleQueue();
+      return;
+    }
+
+    if (event.key === 'Escape' && queueOpen) {
+      event.preventDefault();
+      queueOpen = false;
       return;
     }
 
@@ -646,18 +716,18 @@
 
   async function playSongByOffset(offset: number) {
     const currentPath = playback.current_path ?? selectedPath;
-    const currentIndex = songs.findIndex((song) => song.path === currentPath);
-    if (currentIndex < 0 || songs.length === 0) {
+    const currentIndex = orderedPlaybackSongs.findIndex((song) => song.path === currentPath);
+    if (currentIndex < 0 || orderedPlaybackSongs.length === 0) {
       return;
     }
 
-    let nextIndex = (currentIndex + offset + songs.length) % songs.length;
-    if (shuffleEnabled && songs.length > 1) {
+    let nextIndex = (currentIndex + offset + orderedPlaybackSongs.length) % orderedPlaybackSongs.length;
+    if (shuffleEnabled && orderedPlaybackSongs.length > 1) {
       do {
-        nextIndex = Math.floor(Math.random() * songs.length);
+        nextIndex = Math.floor(Math.random() * orderedPlaybackSongs.length);
       } while (nextIndex === currentIndex);
     }
-    await chooseSong(songs[nextIndex]);
+    await chooseSong(orderedPlaybackSongs[nextIndex]);
   }
 
   async function playPreviousSong() {
@@ -792,6 +862,8 @@
         onSeek={seek}
         onVolume={changeVolume}
         onOpenFullPlayer={() => (fullPlayerOpen = true)}
+        {queueOpen}
+        onToggleQueue={toggleQueue}
       />
     </div>
     <FullPlayer
@@ -811,6 +883,8 @@
       onCycleRepeat={cycleRepeat}
       onSeek={seek}
       onSeekTo={seekToPosition}
+      {queueOpen}
+      onToggleQueue={toggleQueue}
     />
     <MetadataEditor
       open={Boolean(metadataEditorSong)}
@@ -820,6 +894,16 @@
       onSave={saveSongMetadata}
       onReplaceCover={replaceSongCover}
       onRemoveCover={clearSongCover}
+    />
+    <QueuePanel
+      open={queueOpen}
+      songs={queueSongs}
+      currentPath={playback.current_path}
+      {shuffleEnabled}
+      {repeatMode}
+      onClose={() => (queueOpen = false)}
+      onChooseSong={chooseSong}
+      onReorder={reorderQueueSong}
     />
   </div>
 </main>
