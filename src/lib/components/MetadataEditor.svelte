@@ -79,7 +79,7 @@
       on:click|stopPropagation
       on:keydown|stopPropagation
     >
-      <aside class="border-r border-white/8 bg-white/[0.025] p-5 max-lg:border-b max-lg:border-r-0">
+      <aside class="border-r border-white/10 bg-white/[0.025] p-5 max-lg:border-b max-lg:border-r-0">
         <div class="aspect-square overflow-hidden rounded-md bg-white/[0.06]">
           {#if artworkUrl(song.artwork)}
             <img class="h-full w-full object-cover" src={artworkUrl(song.artwork) ?? ''} alt="" />

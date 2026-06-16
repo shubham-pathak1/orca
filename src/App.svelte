@@ -81,6 +81,9 @@
   $: bottomRowSize = '96px';
   $: defaultAccentRgb = '245,245,245';
   $: effectiveAccentRgb = dynamicCoverAccent && sampledArtwork ? accentRgb : defaultAccentRgb;
+  $: if (playback.current_path) {
+    window.localStorage.setItem('orca.lastPlayedPath', playback.current_path);
+  }
 
   $: filteredSongs = songs.filter((song) => {
     const needle = query.trim().toLowerCase();
@@ -123,6 +126,11 @@
     showQualityInfo = readBooleanPreference('orca.showQualityInfo', true);
     shuffleEnabled = readBooleanPreference('orca.shuffleEnabled', false);
     repeatMode = readPreference('orca.repeatMode', 'off', ['off', 'all', 'one']);
+
+    const lastPlayedPath = window.localStorage.getItem('orca.lastPlayedPath');
+    if (lastPlayedPath) {
+      selectedPath = lastPlayedPath;
+    }
 
     void (async () => {
       const snapshot = await getLibrarySnapshot();
@@ -781,8 +789,11 @@
   <AppBackdrop {shellStyle} blurredBackground={blurredNowPlayingBackground} />
 
   <div
-    class={`relative grid h-full ${playerPlacement === 'right' ? 'grid-cols-[132px_minmax(0,1fr)_250px] grid-rows-[1fr] max-xl:grid-cols-[132px_minmax(0,1fr)]' : 'grid-cols-[132px_minmax(0,1fr)]'} max-md:grid-cols-1`}
-    style={playerPlacement === 'right' ? undefined : `grid-template-rows: minmax(0, 1fr) ${bottomRowSize};`}
+    class={`relative grid h-full ${
+      playerPlacement === 'right'
+        ? 'grid-cols-[132px_minmax(0,1fr)_250px] grid-rows-[minmax(0,1fr)_96px] xl:grid-rows-[1fr] max-xl:grid-cols-[132px_minmax(0,1fr)]'
+        : 'grid-cols-[132px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_96px]'
+    } max-md:grid-cols-1`}
   >
     <Sidebar {activeView} {isScanning} {folderCount} onSelect={(view) => (activeView = view)} onAddFolder={addFolder} onRefresh={refreshLibrary} />
     <LibraryView
@@ -846,7 +857,7 @@
     {/if}
     <div class={playerPlacement === 'bottom' ? 'contents' : 'hidden max-xl:contents'}>
       <PlayerBar
-        {nowPlaying}
+        nowPlaying={nowPlaying ?? selectedSong}
         {playback}
         {status}
         {seekbarStyle}

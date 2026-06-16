@@ -56,6 +56,7 @@
   let newPlaylistName = '';
   let isCreatingPlaylist = false;
   let contextMenu: { x: number; y: number; song: LocalSong } | null = null;
+  let playlistContextMenu: { x: number; y: number; playlist: Playlist } | null = null;
   let selectedPlaylistId: number | null = null;
   let selectedPlaylistSongIds: number[] = [];
   let editingPlaylistName = '';
@@ -303,6 +304,7 @@
 
   function closeFloatingUi() {
     contextMenu = null;
+    playlistContextMenu = null;
     sortMenuOpen = false;
   }
 
@@ -453,6 +455,44 @@
       y: Math.min(event.clientY, window.innerHeight - 230),
       song
     };
+  }
+
+  function openPlaylistMenu(event: MouseEvent, playlist: Playlist) {
+    event.preventDefault();
+    event.stopPropagation();
+    playlistContextMenu = {
+      x: Math.min(event.clientX, window.innerWidth - 200),
+      y: Math.min(event.clientY, window.innerHeight - 130),
+      playlist
+    };
+  }
+
+  async function renameContextPlaylist() {
+    const playlist = playlistContextMenu?.playlist;
+    playlistContextMenu = null;
+    if (!playlist) return;
+    const name = window.prompt('Rename playlist', playlist.name);
+    if (!name || name.trim() === playlist.name) return;
+    await onRenamePlaylist(playlist.id, name.trim());
+    if (selectedPlaylist?.id === playlist.id) {
+      editingPlaylistName = name.trim();
+    }
+  }
+
+  async function deleteContextPlaylist() {
+    const playlist = playlistContextMenu?.playlist;
+    playlistContextMenu = null;
+    if (!playlist) return;
+    if (!window.confirm(`Delete playlist "${playlist.name}"?`)) return;
+    if (selectedPlaylistId === playlist.id) closePlaylist();
+    await onDeletePlaylist(playlist.id);
+  }
+
+  async function addCoverContextPlaylist() {
+    const playlist = playlistContextMenu?.playlist;
+    playlistContextMenu = null;
+    if (!playlist) return;
+    await onChoosePlaylistCover(playlist.id);
   }
 
   function editContextSong() {
@@ -790,7 +830,7 @@
           {#if filteredPlaylists.length}
             <div class="scrollbar-none grid max-h-[calc(100%-60px)] grid-cols-5 gap-x-6 overflow-auto pr-2 max-2xl:grid-cols-4 max-lg:grid-cols-3 max-md:grid-cols-2">
               {#each filteredPlaylists as playlist}
-                <button class="flex min-w-0 items-center gap-3 border-b border-white/[0.04] px-2 py-4 text-left transition hover:bg-white/[0.035]" on:click={() => openPlaylist(playlist)}>
+                <button class="flex min-w-0 items-center gap-3 border-b border-white/[0.04] px-2 py-4 text-left transition hover:bg-white/[0.035]" on:click={() => openPlaylist(playlist)} on:contextmenu={(event) => openPlaylistMenu(event, playlist)}>
                   <span class="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-sm bg-white/[0.07] text-xs font-black text-white/40">
                     {#if artworkUrl(playlist.cover_path)}
                       <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={playlist.cover_path} alt="" />
@@ -1203,4 +1243,44 @@
       {/if}
     </div>
   {/if}
+
+  {#if playlistContextMenu}
+    <div
+      role="menu"
+      tabindex="-1"
+      class="fixed z-50 w-52 overflow-hidden rounded-md border border-white/10 bg-[#151515] py-1 text-sm shadow-[0_18px_70px_rgba(0,0,0,0.45)]"
+      style={`left: ${playlistContextMenu.x}px; top: ${playlistContextMenu.y}px;`}
+      on:click|stopPropagation
+      on:keydown|stopPropagation
+    >
+      <div class="border-b border-white/[0.06] px-3 py-2">
+        <p class="truncate text-xs font-bold text-white">{playlistContextMenu.playlist.name}</p>
+        <p class="truncate text-[11px] text-white/42">{playlistContextMenu.playlist.song_count} {playlistContextMenu.playlist.song_count === 1 ? 'song' : 'songs'}</p>
+      </div>
+      <button role="menuitem" class="flex h-9 w-full items-center gap-2.5 px-3 text-left text-xs font-semibold text-white/78 transition hover:bg-white/[0.08] hover:text-white" on:click={renameContextPlaylist}>
+        <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </svg>
+        Rename
+      </button>
+      <button role="menuitem" class="flex h-9 w-full items-center gap-2.5 px-3 text-left text-xs font-semibold text-white/78 transition hover:bg-white/[0.08] hover:text-white" on:click={addCoverContextPlaylist}>
+        <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <path d="m21 15-5-5L5 21" />
+        </svg>
+        Add Cover
+      </button>
+      <button role="menuitem" class="flex h-9 w-full items-center gap-2.5 px-3 text-left text-xs font-semibold text-red-100/72 transition hover:bg-red-500/10 hover:text-red-100" on:click={deleteContextPlaylist}>
+        <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 6h18" />
+          <path d="M8 6V4h8v2" />
+          <path d="M19 6l-1 14H6L5 6" />
+        </svg>
+        Delete
+      </button>
+    </div>
+  {/if}
+
 </section>

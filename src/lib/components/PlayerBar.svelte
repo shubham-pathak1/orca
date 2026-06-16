@@ -26,7 +26,7 @@
   export let alwaysVisible = false;
 </script>
 
-<footer class={`${alwaysVisible ? 'col-span-2' : 'col-span-3 max-xl:col-span-2'} grid grid-cols-[minmax(190px,280px)_1fr_116px] items-center gap-4 border-t border-white/8 bg-[#111315]/96 px-5 py-2 max-md:col-span-1 max-md:grid-cols-1 max-md:gap-2`}>
+<footer class={`${alwaysVisible ? 'col-start-2 col-span-1' : 'col-span-3 max-xl:col-start-2 max-xl:col-span-1'} max-md:col-start-1 max-md:col-span-1 grid grid-cols-[minmax(190px,280px)_1fr_116px] items-center gap-4 border-t border-white/10 bg-[#111315]/96 px-5 py-2 max-md:grid-cols-1 max-md:gap-2`}>
   <div class="flex min-w-0 items-center gap-3">
     <button
       class="h-11 w-11 shrink-0 overflow-hidden rounded-sm border border-transparent bg-white/10 text-left outline-none transition hover:border-[color:var(--accent)] focus-visible:border-[color:var(--accent)]"

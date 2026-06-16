@@ -379,6 +379,22 @@
           </button>
 
         </div>
+        <button
+          class:queue-toggle-button-active={queueOpen}
+          class="queue-toggle-button"
+          title={queueOpen ? 'Hide queue' : 'Show queue'}
+          aria-pressed={queueOpen}
+          on:click={onToggleQueue}
+        >
+          <svg class="queue-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 6h12" />
+            <path d="M8 12h12" />
+            <path d="M8 18h12" />
+            <path d="M4 6h.01" />
+            <path d="M4 12h.01" />
+            <path d="M4 18h.01" />
+          </svg>
+        </button>
       </header>
 
       {#if lyricsOpen}
@@ -405,22 +421,6 @@
             </div>
 
             <div class="player-controls-row mt-5 flex shrink-0 items-center justify-center gap-6">
-              <button
-                class:queue-toggle-button-active={queueOpen}
-                class="queue-toggle-button"
-                title={queueOpen ? 'Hide queue' : 'Show queue'}
-                aria-pressed={queueOpen}
-                on:click={onToggleQueue}
-              >
-                <svg class="queue-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M8 6h12" />
-                  <path d="M8 12h12" />
-                  <path d="M8 18h12" />
-                  <path d="M4 6h.01" />
-                  <path d="M4 12h.01" />
-                  <path d="M4 18h.01" />
-                </svg>
-              </button>
               <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
               <button
                 class:lyrics-toggle-button-active={lyricsOpen}
@@ -478,22 +478,6 @@
           <div class="lyrics-controls mx-auto hidden w-full max-w-2xl pb-0 max-lg:block">
             <SeekControl {song} {playback} variant={seekbarStyle} waveformLayout="stacked" waveformHeight={46} onSeek={onSeek} />
             <div class="player-controls-row mt-5 flex items-center justify-center gap-6">
-              <button
-                class:queue-toggle-button-active={queueOpen}
-                class="queue-toggle-button"
-                title={queueOpen ? 'Hide queue' : 'Show queue'}
-                aria-pressed={queueOpen}
-                on:click={onToggleQueue}
-              >
-                <svg class="queue-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M8 6h12" />
-                  <path d="M8 12h12" />
-                  <path d="M8 18h12" />
-                  <path d="M4 6h.01" />
-                  <path d="M4 12h.01" />
-                  <path d="M4 18h.01" />
-                </svg>
-              </button>
               <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
               <button
                 class:lyrics-toggle-button-active={lyricsOpen}
@@ -535,22 +519,6 @@
           </div>
 
           <div class="player-controls-row mt-5 flex shrink-0 items-center justify-center gap-6">
-            <button
-              class:queue-toggle-button-active={queueOpen}
-              class="queue-toggle-button"
-              title={queueOpen ? 'Hide queue' : 'Show queue'}
-              aria-pressed={queueOpen}
-              on:click={onToggleQueue}
-            >
-              <svg class="queue-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M8 6h12" />
-                <path d="M8 12h12" />
-                <path d="M8 18h12" />
-                <path d="M4 6h.01" />
-                <path d="M4 12h.01" />
-                <path d="M4 18h.01" />
-              </svg>
-            </button>
             <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
             <button
               class:lyrics-toggle-button-active={lyricsOpen}

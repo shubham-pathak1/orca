@@ -201,7 +201,6 @@
     justify-content: space-between;
     gap: 1rem;
     padding: 1.15rem 1.2rem 0.95rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .queue-header h2 {
@@ -249,8 +248,11 @@
     min-height: 0;
     overflow-y: auto;
     padding: 0.8rem;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+    scrollbar-width: none;
+  }
+
+  .queue-list::-webkit-scrollbar {
+    display: none;
   }
 
   .queue-item {

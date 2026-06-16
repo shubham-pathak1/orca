@@ -9,7 +9,7 @@
   export let onRefresh: () => void = () => {};
 </script>
 
-<aside class="flex min-h-0 flex-col border-r border-white/8 bg-black/70 px-3 py-4 max-md:hidden">
+<aside class="row-span-2 flex min-h-0 flex-col border-r border-white/10 bg-black/70 px-3 py-4 max-md:hidden">
   <div class="mb-6 flex items-center gap-2 px-1">
     <img class="h-6 w-6 rounded-sm object-cover" src="/orca_logo.png" alt="" />
     <span class="truncate text-base font-bold text-white">Orca</span>
@@ -29,7 +29,7 @@
     {/each}
   </nav>
 
-  <div class="mt-auto flex flex-col gap-2 border-t border-white/8 pt-4">
+  <div class="mt-auto flex flex-col gap-2 pt-4">
     <button class="sidebar-item flex items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-semibold text-white/58 hover:bg-white/[0.06] hover:text-white" disabled={isScanning} on:click={onAddFolder}>
       <span class="relative grid h-4 w-4 shrink-0 place-items-center">
         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
