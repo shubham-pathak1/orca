@@ -1,23 +1,7 @@
-<script lang="ts">
-  import { tick } from 'svelte';
-  import { formatDuration } from '../format';
-  import { waveformPeaks } from '../tauri';
-  import type { LocalSong, PlaybackState } from '../types';
-
-  export let song: LocalSong | null = null;
-  export let playback: PlaybackState;
-  export let variant: 'standard' | 'waveform' = 'standard';
-  export let waveformLayout: 'inline' | 'stacked' = 'inline';
-  export let waveformHeight = 28;
-  export let onSeek: (event: Event) => void = () => {};
-
-  let peaks: number[] = [];
-  let loadedPath: string | null = null;
-  let isLoadingWaveform = false;
-  let canvas: HTMLCanvasElement | null = null;
-  let drawFrame = 0;
+<script context="module" lang="ts">
   const WAVEFORM_CACHE_MAX = 96;
   const waveformCache = new Map<string, number[]>();
+  const pendingDecodes = new Map<string, Promise<number[]>>();
 
   function readWaveformCache(path: string): number[] | null {
     const cached = waveformCache.get(path);
@@ -46,8 +30,78 @@
       waveformCache.delete(oldest);
     }
   }
+</script>
 
-  $: progress = playback.duration_ms > 0 ? Math.min(Math.max(playback.position_ms / playback.duration_ms, 0), 1) : 0;
+<script lang="ts">
+  import { tick, onDestroy } from 'svelte';
+  import { formatDuration } from '../format';
+  import { waveformPeaks } from '../tauri';
+  import type { LocalSong, PlaybackState } from '../types';
+
+  export let song: LocalSong | null = null;
+  export let playback: PlaybackState;
+  export let variant: 'standard' | 'waveform' = 'standard';
+  export let waveformLayout: 'inline' | 'stacked' = 'inline';
+  export let waveformHeight = 28;
+  export let onSeek: (event: Event) => Promise<void> | void = () => {};
+
+  let peaks: number[] = [];
+  let loadedPath: string | null = null;
+  let isLoadingWaveform = false;
+  let canvas: HTMLCanvasElement | null = null;
+  let drawFrame = 0;
+
+  let isDragging = false;
+  let dragPositionMs = 0;
+
+  // Grace timer and optimistic position to prevent the seekbar from jumping back 
+  // to the old position before the backend updates.
+  let seekGraceTimer: any = null;
+  let optimisticPosition: number | null = null;
+
+  // Extrapolate position locally at 60fps when playing
+  let smoothPosition = 0;
+  let lastUpdateTime = 0;
+  let animationFrame = 0;
+
+  function updateSmoothPosition() {
+    if (!playback.is_playing || isDragging || optimisticPosition !== null) {
+      cancelAnimationFrame(animationFrame);
+      return;
+    }
+
+    const now = performance.now();
+    const elapsed = now - lastUpdateTime;
+    smoothPosition = Math.min(playback.position_ms + elapsed, playback.duration_ms || 0);
+    animationFrame = requestAnimationFrame(updateSmoothPosition);
+  }
+
+  $: if (playback) {
+    if (!isDragging && optimisticPosition === null) {
+      smoothPosition = playback.position_ms;
+      lastUpdateTime = performance.now();
+      if (playback.is_playing) {
+        cancelAnimationFrame(animationFrame);
+        animationFrame = requestAnimationFrame(updateSmoothPosition);
+      } else {
+        cancelAnimationFrame(animationFrame);
+      }
+    }
+  }
+
+  onDestroy(() => {
+    cancelAnimationFrame(animationFrame);
+    if (seekGraceTimer) {
+      clearTimeout(seekGraceTimer);
+    }
+  });
+
+  $: displayPosition = isDragging 
+    ? dragPositionMs 
+    : (optimisticPosition !== null ? optimisticPosition : smoothPosition);
+
+  $: progress = playback.duration_ms > 0 ? Math.min(Math.max(displayPosition / playback.duration_ms, 0), 1) : 0;
+
   $: if (variant === 'waveform' && canvas) {
     progress;
     peaks;
@@ -69,19 +123,37 @@
       return;
     }
 
-    writeWaveformCache(path, peaks);
+    let decodePromise = pendingDecodes.get(path);
+    if (!decodePromise) {
+      decodePromise = (async () => {
+        try {
+          const nextPeaks = await waveformPeaks(path, 720);
+          if (nextPeaks.some((peak) => peak > 0)) {
+            writeWaveformCache(path, nextPeaks);
+            return nextPeaks;
+          }
+        } catch (error) {
+          console.error('Waveform decode error for', path, error);
+        } finally {
+          pendingDecodes.delete(path);
+        }
+        return fallbackPeaks(path);
+      })();
+      pendingDecodes.set(path, decodePromise);
+    }
 
     try {
-      const nextPeaks = await waveformPeaks(path, 720);
-      if (nextPeaks.some((peak) => peak > 0)) {
-        writeWaveformCache(path, nextPeaks);
+      const nextPeaks = await decodePromise;
+      if (loadedPath === path) {
         peaks = nextPeaks;
         scheduleDraw();
       }
     } catch {
-      writeWaveformCache(path, peaks);
+      // Keep fallback
     } finally {
-      isLoadingWaveform = false;
+      if (loadedPath === path) {
+        isLoadingWaveform = false;
+      }
     }
   }
 
@@ -171,13 +243,42 @@
     ctx.fill();
   }
 
+  function handleInput(event: Event) {
+    isDragging = true;
+    const target = event.currentTarget as HTMLInputElement;
+    dragPositionMs = Number(target.value);
+  }
+
+  async function handleChange(event: Event) {
+    const target = event.currentTarget as HTMLInputElement;
+    const seekVal = Number(target.value);
+    optimisticPosition = seekVal;
+
+    if (seekGraceTimer) {
+      clearTimeout(seekGraceTimer);
+    }
+
+    try {
+      await onSeek(event);
+      seekGraceTimer = setTimeout(() => {
+        optimisticPosition = null;
+        smoothPosition = playback.position_ms;
+        lastUpdateTime = performance.now();
+      }, 800);
+    } catch {
+      optimisticPosition = null;
+    } finally {
+      isDragging = false;
+    }
+  }
+
 </script>
 
 <div class="w-full">
   {#if variant === 'waveform'}
     <label class={`group grid min-w-0 ${waveformLayout === 'stacked' ? 'gap-2' : 'grid-cols-[42px_minmax(0,1fr)_42px] items-center gap-3'}`}>
       {#if waveformLayout === 'inline'}
-        <span class="text-right text-xs font-medium text-white/52">{formatDuration(playback.position_ms)}</span>
+        <span class="text-right text-xs font-medium text-white/52">{formatDuration(displayPosition)}</span>
       {/if}
       <span
         class={`relative block min-w-0 overflow-hidden ${isLoadingWaveform ? 'opacity-70' : ''}`}
@@ -189,22 +290,23 @@
           type="range"
           min="0"
           max={playback.duration_ms || 0}
-          value={playback.position_ms}
-          on:input={onSeek}
+          value={displayPosition}
+          on:input={handleInput}
+          on:change={handleChange}
         />
       </span>
       {#if waveformLayout === 'inline'}
         <span class="text-xs font-medium text-white/52">{formatDuration(playback.duration_ms || song?.duration || 0)}</span>
       {:else}
         <span class="flex justify-between text-xs font-medium text-white/60">
-          <span>{formatDuration(playback.position_ms)}</span>
+          <span>{formatDuration(displayPosition)}</span>
           <span>{formatDuration(playback.duration_ms || song?.duration || 0)}</span>
         </span>
       {/if}
     </label>
   {:else}
     <label class="group grid min-w-0 grid-cols-[42px_minmax(0,1fr)_42px] items-center gap-3">
-      <span class="text-right text-xs font-medium text-white/60">{formatDuration(playback.position_ms)}</span>
+      <span class="text-right text-xs font-medium text-white/60">{formatDuration(displayPosition)}</span>
       <span class="standard-seek-track">
         <span class="standard-seek-progress" style={`width: ${progress * 100}%;`}></span>
         <span class="standard-seek-thumb" style={`left: ${progress * 100}%;`}></span>
@@ -213,8 +315,9 @@
           type="range"
           min="0"
           max={playback.duration_ms || 0}
-          value={playback.position_ms}
-          on:input={onSeek}
+          value={displayPosition}
+          on:input={handleInput}
+          on:change={handleChange}
         />
       </span>
       <span class="text-xs font-medium text-white/60">{formatDuration(playback.duration_ms || song?.duration || 0)}</span>

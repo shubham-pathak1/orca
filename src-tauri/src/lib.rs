@@ -438,7 +438,9 @@ fn pause_playback(state: State<'_, SharedOrcaState>) -> Result<PlaybackState, St
         .audio_tx
         .send(AudioCommand::Pause)
         .map_err(|error| error.to_string())?;
-    std::thread::sleep(Duration::from_millis(20));
+    if let Ok(mut playback) = state.playback_state.lock() {
+        playback.is_playing = false;
+    }
     Ok(playback_snapshot_from(&state))
 }
 
@@ -449,7 +451,9 @@ fn resume_playback(state: State<'_, SharedOrcaState>) -> Result<PlaybackState, S
         .audio_tx
         .send(AudioCommand::Resume)
         .map_err(|error| error.to_string())?;
-    std::thread::sleep(Duration::from_millis(20));
+    if let Ok(mut playback) = state.playback_state.lock() {
+        playback.is_playing = true;
+    }
     Ok(playback_snapshot_from(&state))
 }
 
@@ -460,7 +464,9 @@ fn seek_playback(position_ms: u64, state: State<'_, SharedOrcaState>) -> Result<
         .audio_tx
         .send(AudioCommand::Seek(Duration::from_millis(position_ms)))
         .map_err(|error| error.to_string())?;
-    std::thread::sleep(Duration::from_millis(30));
+    if let Ok(mut playback) = state.playback_state.lock() {
+        playback.position_ms = position_ms;
+    }
     Ok(playback_snapshot_from(&state))
 }
 
@@ -472,7 +478,9 @@ fn set_volume(volume: f32, state: State<'_, SharedOrcaState>) -> Result<Playback
         .audio_tx
         .send(AudioCommand::SetVolume(volume))
         .map_err(|error| error.to_string())?;
-    std::thread::sleep(Duration::from_millis(20));
+    if let Ok(mut playback) = state.playback_state.lock() {
+        playback.volume = volume;
+    }
     Ok(playback_snapshot_from(&state))
 }
 
