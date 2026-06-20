@@ -1,76 +1,101 @@
 # Orca
 
-Orca is a local music player for Windows, built with Svelte, Tauri, and Rust.
+Orca is a local music player for Windows built using Svelte 5, Tauri 2, and Rust.
 
-It is designed around fast browsing, editable metadata, playlists, lyrics, and playback controls that stay out of the way. The app is still early, so some parts are changing quickly.
+> [!IMPORTANT]
+> **Alpha Stage Release:** Orca is currently in active alpha. While it is fully ready for daily listening, it has not yet been benchmarked or stress-tested on libraries exceeding **5,000+ tracks**. If you encounter any visual quirks, bugs, or performance lags, please open an issue to help improve the project!
 
-Note: the light theme is still in development and currently disabled in the UI.
+---
 
-## Features
+## Key Features
 
-- Scan local music folders into a persistent library.
-- Browse by library, artist, album, and playlist.
-- Use list or grid views for the main library.
-- Play local files with seek, volume, shuffle, repeat, and keyboard controls.
-- Switch between a right-side player and a compact bottom player.
-- Open a full player with cover ambience, waveform seeking, and optional lyrics.
-- View synced LRC or plain lyrics, with click-to-seek on lyric lines.
-- Edit title, artist, album, album artist, year, track/disc number, genre, cover art, and lyrics.
-- Create and manage playlists.
+- **Fast Scanning**: Add local directories to scan and build your database instantly.
+- **Audio Engine**: Powered by `rodio` with crossfading support.
+- **Waveform Seekbars**: Smooth waveform seekbars generated from the track's audio channels.
+- **LRC Lyrics**: Sync with LRCLIB to fetch lyrics, with support for clicking lyric lines to seek.
+- **Metadata Editing**: Edit tags (title, artist, album, genre, cover art) directly in the app.
+- **Playlists**: Create and manage playlists, including custom playlist cover art.
+- **Layouts**: Ambient artwork color backgrounds, sidebar navigation, queue management, and toggleable layout modes.
+
+---
+
+## Screenshots
+
+**Library**: ![Library View](docs/screenshots/library.png)
+**Albums**: ![Albums View](docs/screenshots/albums.png)
+**Artists**: ![Artists View](docs/screenshots/artist.png)
+**Full Player**: ![Full Player](docs/screenshots/fullplayer.png)
+**Synced Lyrics**: ![Lyrics View](docs/screenshots/lyrics.png)
+**Metadata Editor**: ![Metadata Editor](docs/screenshots/metadata_editor.png)
+
+---
 
 ## Tech Stack
 
-- Svelte 5
-- TypeScript
-- Tailwind CSS
-- Tauri 2
-- Rust
-- SQLite
-- Rodio for playback
-- Lofty for metadata and tag editing
+* **Frontend**: Svelte 5 (Vite), TypeScript, Tailwind CSS, HTML5 Canvas
+* **Backend**: Rust, Tauri 2, SQLite (`rusqlite`)
+* **Audio Engine**: Rodio
+* **Tagging Library**: Lofty
 
-## Repository Layout
+---
+
+## Repository Structure
 
 ```text
-src/                 Svelte frontend
-src/lib/components/  UI components
-src-tauri/           Tauri app shell and commands
-crates/orca-core/    Library scanning, metadata, database, lyrics, and audio logic
-public/              Static assets
+src/                 Svelte frontend codebase
+src/lib/components/  UI components (Player, Waveform, Metadata, Queue)
+src-tauri/           Tauri application backend and command handlers
+crates/orca-core/    Core database structure, scanning engine, and audio thread logic
 ```
 
-## Requirements
+---
 
-- Bun
-- Rust stable
-- Tauri 2 system dependencies for Windows
+## Getting Started
 
-## Development
+### Prerequisites
 
+You will need the following tools installed on your Windows machine:
+1. [Rust](https://www.rust-lang.org/tools/install)
+2. [Bun](https://bun.sh/)
+3. [Tauri Windows Setup Requirements](https://v2.tauri.app/start/prerequisites/)
+
+### Development
+
+Clone the repository and install the dependencies:
 ```bash
 bun install
+```
+
+Start the development server with live reload:
+```bash
 bun run tauri:dev
 ```
 
-For a dev build with optimized Rust code:
-
+To run the dev server with Rust optimizations (release-level audio decoding speed):
 ```bash
 bun run tauri dev --release
 ```
 
-For a release bundle:
+---
 
+## Building a Release
+
+Orca uses **NSIS** to bundle a lightweight executable installer for Windows. Building MSI installers is disabled to simplify packaging.
+
+To build the NSIS installer:
 ```bash
 bun run tauri:build
 ```
+The output `.exe` installer will be located in `src-tauri/target/release/bundle/nsis/`.
 
-## Checks
+---
 
-```bash
-bun run check
-cargo check --manifest-path src-tauri/Cargo.toml
-```
+## Contributing & Support
+
+Thank you for checking out Orca! If you would like to help improve the player:
+* Feel free to report bugs or suggest features by opening a GitHub Issue.
+* Pull requests are always welcome!
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT License. See [LICENSE](LICENSE) for more details.
