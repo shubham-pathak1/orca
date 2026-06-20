@@ -58,8 +58,8 @@
   let queueOpen = false;
   let accentRgb = '245,245,245';
   let sampledArtwork: string | null = null;
-  let playerPlacement: 'right' | 'bottom' = 'right';
-  let seekbarStyle: 'standard' | 'waveform' = 'standard';
+  let playerPlacement: 'right' | 'bottom' = 'bottom';
+  let seekbarStyle: 'standard' | 'waveform' = 'waveform';
   let dynamicCoverAccent = true;
   let blurredNowPlayingBackground = true;
   let fontFamily = 'Plus Jakarta Sans';
@@ -116,8 +116,8 @@
   $: applyRootFontSize(fontSizePercent);
 
   onMount(() => {
-    playerPlacement = readPreference('orca.playerPlacement', 'right', ['right', 'bottom']);
-    seekbarStyle = readPreference('orca.seekbarStyle', 'standard', ['standard', 'waveform']);
+    playerPlacement = readPreference('orca.playerPlacement', 'bottom', ['right', 'bottom']);
+    seekbarStyle = readPreference('orca.seekbarStyle', 'waveform', ['standard', 'waveform']);
     theme = readPreference('orca.theme', 'default', ['default']);
     dynamicCoverAccent = readBooleanPreference('orca.dynamicCoverAccent', true);
     blurredNowPlayingBackground = readBooleanPreference('orca.blurredNowPlayingBackground', true);
