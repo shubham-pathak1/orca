@@ -11,11 +11,13 @@
   export let onClose: () => void = () => {};
   export let onChooseSong: (song: LocalSong) => Promise<void> | void = () => {};
   export let onReorder: (sourcePath: string, targetPath: string) => void = () => {};
+  export let onPlayNext: (path: string) => void = () => {};
+  export let onRemoveSong: (path: string) => void = () => {};
+  export let onClear: () => void = () => {};
 
-  const maxVisibleSongs = 10;
+  const maxVisibleSongs = 20;
   let draggedPath: string | null = null;
   let dragOverPath: string | null = null;
-  let pointerMovedQueueItem = false;
 
   $: visibleSongs = songs.slice(0, maxVisibleSongs);
   $: hiddenSongCount = Math.max(0, songs.length - visibleSongs.length);
@@ -31,7 +33,6 @@
       return;
     }
 
-    pointerMovedQueueItem = false;
     draggedPath = song.path === currentPath ? null : song.path;
     dragOverPath = null;
   }
@@ -41,44 +42,26 @@
       return;
     }
 
-    pointerMovedQueueItem = true;
     dragOverPath = song.path;
   }
 
   function finishQueuePointer(song: LocalSong) {
     const sourcePath = draggedPath;
-    const targetPath = dragOverPath ?? (pointerMovedQueueItem ? song.path : null);
+    const targetPath = dragOverPath ?? song.path;
 
     draggedPath = null;
     dragOverPath = null;
 
     if (sourcePath && targetPath && sourcePath !== targetPath) {
       onReorder(sourcePath, targetPath);
-      pointerMovedQueueItem = false;
-      return;
     }
-
-    if (!pointerMovedQueueItem) {
-      playQueuedSong(song);
-    }
-
-    pointerMovedQueueItem = false;
   }
 
   function cancelQueuePointer() {
     draggedPath = null;
     dragOverPath = null;
-    pointerMovedQueueItem = false;
   }
 
-  function handleQueueKeydown(event: KeyboardEvent, song: LocalSong) {
-    if (event.key !== 'Enter' && event.key !== ' ') {
-      return;
-    }
-
-    event.preventDefault();
-    playQueuedSong(song);
-  }
 </script>
 
 {#if open}
@@ -91,7 +74,7 @@
           <h2>Queue</h2>
           <p>
             {#if shuffleEnabled}
-              Shuffle is on — upcoming order may change
+              Shuffle is on - upcoming order may change
             {:else if repeatMode === 'one'}
               Repeating the current track
             {:else}
@@ -100,32 +83,44 @@
           </p>
         </div>
 
-        <button class="queue-close-button" type="button" aria-label="Close queue" on:click={onClose}>
-          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
-            <path d="m6 6 12 12" />
-            <path d="M18 6 6 18" />
-          </svg>
-        </button>
+        <div class="queue-header-actions">
+          <button class="queue-text-button" type="button" on:click={onClear} disabled={songs.length <= 1}>Clear</button>
+          <button class="queue-close-button" type="button" aria-label="Close queue" on:click={onClose}>
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+              <path d="m6 6 12 12" />
+              <path d="M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       {#if songs.length}
-        <div class="queue-list" data-no-swipe>
+        <div class="queue-list" role="list" data-no-swipe>
           {#each visibleSongs as queuedSong (queuedSong.path)}
             <div
               class:queue-item-current={queuedSong.path === currentPath}
               class:queue-item-dragging={draggedPath === queuedSong.path}
               class:queue-item-drop-target={dragOverPath === queuedSong.path}
               class="queue-item"
-              role="button"
-              tabindex="0"
-              title={`Play ${queuedSong.title}`}
+              role="listitem"
               aria-current={queuedSong.path === currentPath ? 'true' : undefined}
-              on:pointerdown={(event) => startQueuePointer(event, queuedSong)}
               on:pointerenter={() => enterQueueItem(queuedSong)}
               on:pointerup={() => finishQueuePointer(queuedSong)}
               on:pointercancel={cancelQueuePointer}
-              on:keydown={(event) => handleQueueKeydown(event, queuedSong)}
             >
+              <button
+                class="queue-drag-handle"
+                type="button"
+                title={queuedSong.path === currentPath ? 'Current track cannot be moved' : 'Drag to reorder'}
+                aria-label={queuedSong.path === currentPath ? 'Current track cannot be moved' : `Drag ${queuedSong.title}`}
+                disabled={queuedSong.path === currentPath}
+                on:pointerdown={(event) => startQueuePointer(event, queuedSong)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" />
+                </svg>
+              </button>
+
               <span class="queue-artwork">
                 <LazyArtwork
                   rootClass="h-full w-full"
@@ -135,12 +130,42 @@
                 />
               </span>
 
-              <span class="queue-copy">
+              <button
+                class="queue-copy"
+                type="button"
+                title={`Play ${queuedSong.title}`}
+                on:click={() => playQueuedSong(queuedSong)}
+              >
                 <span class="queue-title">{queuedSong.title}</span>
                 <span class="queue-artist">{queuedSong.artist}</span>
-              </span>
+              </button>
 
               <span class="queue-duration">{formatDuration(queuedSong.duration)}</span>
+
+              <span class="queue-item-actions">
+                <button
+                  class="queue-action-button"
+                  type="button"
+                  title="Play next"
+                  aria-label={`Play ${queuedSong.title} next`}
+                  disabled={queuedSong.path === currentPath}
+                  on:click={() => onPlayNext(queuedSong.path)}
+                >
+                  Next
+                </button>
+                <button
+                  class="queue-icon-button"
+                  type="button"
+                  title="Remove from queue"
+                  aria-label={`Remove ${queuedSong.title} from queue`}
+                  disabled={queuedSong.path === currentPath}
+                  on:click={() => onRemoveSong(queuedSong.path)}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  </svg>
+                </button>
+              </span>
             </div>
           {/each}
 
@@ -220,6 +245,41 @@
     white-space: nowrap;
   }
 
+  .queue-header-actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .queue-text-button {
+    height: 2.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    padding: 0 0.85rem;
+    color: rgba(255, 255, 255, 0.66);
+    font-size: 0.78rem;
+    font-weight: 850;
+    transition:
+      background 150ms ease,
+      color 150ms ease,
+      border-color 150ms ease;
+  }
+
+  .queue-text-button:hover:not(:disabled),
+  .queue-text-button:focus-visible {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+    outline: none;
+  }
+
+  .queue-text-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.34;
+  }
+
   .queue-close-button {
     display: grid;
     width: 2.25rem;
@@ -267,19 +327,14 @@
     padding: 0.56rem 0.68rem;
     color: white;
     text-align: left;
-    cursor: grab;
     transition:
       background 150ms ease,
       border-color 150ms ease,
       transform 150ms ease;
   }
 
-  .queue-item:active {
-    cursor: grabbing;
-  }
-
   .queue-item:hover,
-  .queue-item:focus-visible {
+  .queue-item:focus-within {
     border-color: rgba(255, 255, 255, 0.07);
     background: rgba(255, 255, 255, 0.055);
     outline: none;
@@ -302,6 +357,43 @@
     background: rgba(255, 255, 255, 0.08);
   }
 
+  .queue-drag-handle {
+    display: grid;
+    width: 1.7rem;
+    height: 2.5rem;
+    flex: 0 0 1.7rem;
+    place-items: center;
+    border: 0;
+    border-radius: 0.55rem;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.34);
+    cursor: grab;
+    transition:
+      background 150ms ease,
+      color 150ms ease;
+  }
+
+  .queue-drag-handle:hover:not(:disabled),
+  .queue-drag-handle:focus-visible {
+    background: rgba(255, 255, 255, 0.07);
+    color: rgba(255, 255, 255, 0.76);
+    outline: none;
+  }
+
+  .queue-drag-handle:active:not(:disabled) {
+    cursor: grabbing;
+  }
+
+  .queue-drag-handle:disabled {
+    cursor: default;
+    opacity: 0.24;
+  }
+
+  .queue-drag-handle svg {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+
   .queue-artwork {
     display: block;
     width: 3rem;
@@ -316,6 +408,17 @@
   .queue-copy {
     min-width: 0;
     flex: 1 1 auto;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    outline: none;
+  }
+
+  .queue-copy:focus-visible .queue-title {
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
+    text-underline-offset: 0.16em;
   }
 
   .queue-title,
@@ -345,6 +448,66 @@
     color: rgba(255, 255, 255, 0.48);
     font-size: 0.84rem;
     font-weight: 700;
+  }
+
+  .queue-item-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.35rem;
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+
+  .queue-item:hover .queue-item-actions,
+  .queue-item:focus-within .queue-item-actions {
+    opacity: 1;
+  }
+
+  .queue-action-button,
+  .queue-icon-button {
+    display: grid;
+    height: 1.9rem;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 0.7rem;
+    font-weight: 850;
+    transition:
+      background 150ms ease,
+      color 150ms ease,
+      border-color 150ms ease;
+  }
+
+  .queue-action-button {
+    padding: 0 0.65rem;
+  }
+
+  .queue-icon-button {
+    width: 1.9rem;
+  }
+
+  .queue-icon-button svg {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+
+  .queue-action-button:hover:not(:disabled),
+  .queue-action-button:focus-visible,
+  .queue-icon-button:hover:not(:disabled),
+  .queue-icon-button:focus-visible {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.09);
+    color: white;
+    outline: none;
+  }
+
+  .queue-action-button:disabled,
+  .queue-icon-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.28;
   }
 
   .queue-more-note {

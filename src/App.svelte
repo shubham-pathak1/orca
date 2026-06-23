@@ -69,6 +69,7 @@
   let shuffleEnabled = false;
   let repeatMode: 'off' | 'all' | 'one' = 'off';
   let queueOrderPaths: string[] = [];
+  let queueRemovedPaths: string[] = [];
   let metadataEditorSong: LocalSong | null = null;
   let isSavingMetadata = false;
   let folderCount = 0;
@@ -98,7 +99,12 @@
 
   $: nowPlaying = songs.find((song) => song.path === playback.current_path) ?? null;
   $: selectedSong = songs.find((song) => song.path === selectedPath) ?? nowPlaying ?? filteredSongs[0] ?? null;
-  $: orderedPlaybackSongs = orderSongsForQueue(songs, queueOrderPaths);
+  $: currentQueuePath = playback.current_path ?? selectedPath;
+  $: queueRemovedPathSet = new Set(queueRemovedPaths);
+  $: orderedPlaybackSongs = orderSongsForQueue(
+    songs.filter((song) => !queueRemovedPathSet.has(song.path) || song.path === currentQueuePath),
+    queueOrderPaths
+  );
   $: queueSongs = buildQueueSongs(orderedPlaybackSongs, playback.current_path ?? selectedPath, repeatMode);
   $: albumCount = new Set(songs.map((song) => `${song.album_artist}:${song.album}`)).size;
   $: artistCount = new Set(songs.map((song) => song.artist)).size;
@@ -325,12 +331,50 @@
     queueOrderPaths = nextOrder;
   }
 
+  function playQueueSongNext(path: string) {
+    const song = songs.find((item) => item.path === path);
+    if (!song) {
+      return;
+    }
+
+    const currentPath = playback.current_path ?? selectedPath;
+    if (!currentPath || path === currentPath) {
+      void chooseSong(song);
+      return;
+    }
+
+    queueRemovedPaths = queueRemovedPaths.filter((item) => item !== path);
+    const orderedPaths = orderSongsForQueue(songs, queueOrderPaths)
+      .map((item) => item.path)
+      .filter((item) => item !== path);
+    const currentIndex = orderedPaths.indexOf(currentPath);
+    const insertIndex = currentIndex >= 0 ? currentIndex + 1 : 0;
+    orderedPaths.splice(insertIndex, 0, path);
+    queueOrderPaths = orderedPaths;
+  }
+
+  function removeQueueSong(path: string) {
+    if (path === (playback.current_path ?? selectedPath)) {
+      return;
+    }
+
+    queueRemovedPaths = Array.from(new Set([...queueRemovedPaths, path]));
+  }
+
+  function clearQueue() {
+    const currentPath = playback.current_path ?? selectedPath;
+    queueRemovedPaths = songs
+      .map((song) => song.path)
+      .filter((path) => path !== currentPath);
+  }
+
   function applyLibrarySnapshot(snapshot: LibrarySnapshot) {
     songs = snapshot.songs;
     playlists = snapshot.playlists;
     playback = snapshot.playback;
     folderCount = snapshot.folder_count ?? folderCount;
     queueOrderPaths = queueOrderPaths.filter((path) => songs.some((song) => song.path === path));
+    queueRemovedPaths = queueRemovedPaths.filter((path) => songs.some((song) => song.path === path));
 
     if (metadataEditorSong) {
       metadataEditorSong = songs.find((song) => song.path === metadataEditorSong?.path) ?? metadataEditorSong;
@@ -729,6 +773,18 @@
       return;
     }
 
+    if (orderedPlaybackSongs.length === 1) {
+      return;
+    }
+
+    if (offset > 0 && repeatMode === 'off' && currentIndex >= orderedPlaybackSongs.length - 1) {
+      return;
+    }
+
+    if (offset < 0 && repeatMode === 'off' && currentIndex <= 0) {
+      return;
+    }
+
     let nextIndex = (currentIndex + offset + orderedPlaybackSongs.length) % orderedPlaybackSongs.length;
     if (shuffleEnabled && orderedPlaybackSongs.length > 1) {
       do {
@@ -915,6 +971,9 @@
       onClose={() => (queueOpen = false)}
       onChooseSong={chooseSong}
       onReorder={reorderQueueSong}
+      onPlayNext={playQueueSongNext}
+      onRemoveSong={removeQueueSong}
+      onClear={clearQueue}
     />
   </div>
 </main>
