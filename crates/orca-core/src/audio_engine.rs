@@ -237,7 +237,7 @@ fn create_track_source(
     eq_enabled: bool,
     eq_gains: [f32; 5],
     visualizer: &Arc<Mutex<std::collections::VecDeque<f32>>>,
-    on_start: Option<Box<dyn FnOnce() + Send>>,
+    on_start: Option<Box<dyn FnOnce(u64) + Send>>,
 ) -> Result<(u64, Box<dyn Source<Item = f32> + Send>), String> {
     let file = File::open(path).map_err(|e| format!("Failed to open '{path}': {e}"))?;
     let decoder = Decoder::try_from(file).map_err(|e| format!("Decode error for '{path}': {e}"))?;
@@ -256,7 +256,8 @@ fn create_track_source(
     };
 
     if let Some(cb) = on_start {
-        Ok((total_duration_ms, Box::new(TransitionSource::new(eq_source, cb))))
+        let duration_for_callback = total_duration_ms;
+        Ok((total_duration_ms, Box::new(TransitionSource::new(eq_source, move || cb(duration_for_callback)))))
     } else {
         Ok((total_duration_ms, eq_source))
     }
@@ -545,16 +546,14 @@ where
                     AudioCommand::QueueNext(path) => {
                         let thread_tx_inner = thread_tx.clone();
                         let path_inner = path.clone();
-                        
-                        match create_track_source(&path, Duration::from_millis(0), eq_enabled, eq_gains, &thread_vis, None) {
-                            Ok((duration, _)) => {
-                                let on_start = Box::new(move || {
-                                    let _ = thread_tx_inner.send(AudioCommand::UpdateMetadata(path_inner, duration));
-                                });
-                                // Re-create with callback
-                                if let Ok((_, source)) = create_track_source(&path, Duration::from_millis(0), eq_enabled, eq_gains, &thread_vis, Some(on_start)) {
-                                    primary.append(source);
-                                }
+
+                        let on_start = Box::new(move |duration| {
+                            let _ = thread_tx_inner.send(AudioCommand::UpdateMetadata(path_inner, duration));
+                        });
+
+                        match create_track_source(&path, Duration::from_millis(0), eq_enabled, eq_gains, &thread_vis, Some(on_start)) {
+                            Ok((_, source)) => {
+                                primary.append(source);
                             }
                             Err(e) => error!("Audio Engine: QueueNext error: {e}"),
                         }

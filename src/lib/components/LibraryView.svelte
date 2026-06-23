@@ -44,6 +44,8 @@
   export let onFontSizePercentChange: (size: number) => void = () => {};
   export let showQualityInfo = true;
   export let onShowQualityInfoChange: (enabled: boolean) => void = () => {};
+  export let gaplessPlayback = true;
+  export let onGaplessPlaybackChange: (enabled: boolean) => void = () => {};
   export let theme: 'default' = 'default';
   export let onThemeChange: (theme: 'default') => void = () => {};
 
@@ -696,6 +698,8 @@
         {onFontSizePercentChange}
         {showQualityInfo}
         {onShowQualityInfoChange}
+        {gaplessPlayback}
+        {onGaplessPlaybackChange}
         {theme}
         {onThemeChange}
       />

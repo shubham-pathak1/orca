@@ -16,6 +16,8 @@
   export let onFontSizePercentChange: (size: number) => void = () => {};
   export let showQualityInfo = true;
   export let onShowQualityInfoChange: (enabled: boolean) => void = () => {};
+  export let gaplessPlayback = true;
+  export let onGaplessPlaybackChange: (enabled: boolean) => void = () => {};
   export let theme: 'default' = 'default';
   export let onThemeChange: (theme: 'default') => void = () => {};
 
@@ -241,7 +243,7 @@
       </p>
     </section>
   {:else if activeTab === 'Audio'}
-    <section class="max-w-[820px]">
+    <section class="max-w-[820px] space-y-5">
       <div class="grid grid-cols-[1fr_44px] items-center gap-5">
         <div>
           <h3 class="text-sm font-bold text-white">Song quality info</h3>
@@ -253,6 +255,20 @@
           on:click={() => onShowQualityInfoChange(!showQualityInfo)}
         >
           <span class={`toggle-knob absolute top-1 h-4 w-4 rounded-full transition ${showQualityInfo ? 'left-6' : 'left-1'}`}></span>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-[1fr_44px] items-center gap-5 border-t border-white/10 pt-5">
+        <div>
+          <h3 class="text-sm font-bold text-white">Gapless playback</h3>
+          <p class="text-sm text-white/48">Preload the next track near the end for smoother transitions</p>
+        </div>
+        <button
+          class={`relative h-6 w-11 rounded-full border transition ${gaplessPlayback ? 'toggle-switch-on' : 'toggle-switch-off'}`}
+          title="Gapless playback"
+          on:click={() => onGaplessPlaybackChange(!gaplessPlayback)}
+        >
+          <span class={`toggle-knob absolute top-1 h-4 w-4 rounded-full transition ${gaplessPlayback ? 'left-6' : 'left-1'}`}></span>
         </button>
       </div>
     </section>

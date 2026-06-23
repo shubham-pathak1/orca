@@ -65,6 +65,7 @@
   let fontFamily = 'Plus Jakarta Sans';
   let fontSizePercent = 100;
   let showQualityInfo = true;
+  let gaplessPlayback = true;
   let theme: 'default' = 'default';
   let shuffleEnabled = false;
   let repeatMode: 'off' | 'all' | 'one' = 'off';
@@ -130,6 +131,7 @@
     fontFamily = readPreference('orca.fontFamily', 'Plus Jakarta Sans', ['Plus Jakarta Sans', 'System', 'Segoe UI']);
     fontSizePercent = readNumberPreference('orca.fontSizePercent', 100, 80, 120);
     showQualityInfo = readBooleanPreference('orca.showQualityInfo', true);
+    gaplessPlayback = readBooleanPreference('orca.gaplessPlayback', true);
     shuffleEnabled = readBooleanPreference('orca.shuffleEnabled', false);
     repeatMode = readPreference('orca.repeatMode', 'off', ['off', 'all', 'one']);
 
@@ -252,6 +254,15 @@
   function setShowQualityInfo(enabled: boolean) {
     showQualityInfo = enabled;
     window.localStorage.setItem('orca.showQualityInfo', String(enabled));
+  }
+
+  function setGaplessPlayback(enabled: boolean) {
+    gaplessPlayback = enabled;
+    window.localStorage.setItem('orca.gaplessPlayback', String(enabled));
+    if (!enabled) {
+      queuedNextForPath = null;
+      queuedNextPath = null;
+    }
   }
 
   function toggleShuffle() {
@@ -424,7 +435,7 @@
   }
 
   async function maybeQueueNextTrack(nextPlayback: PlaybackState) {
-    if (!nextPlayback.current_path || !nextPlayback.is_playing || nextPlayback.duration_ms <= 0) {
+    if (!gaplessPlayback || !nextPlayback.current_path || !nextPlayback.is_playing || nextPlayback.duration_ms <= 0) {
       return;
     }
 
@@ -889,6 +900,8 @@
       onFontSizePercentChange={setFontSizePercent}
       {showQualityInfo}
       onShowQualityInfoChange={setShowQualityInfo}
+      {gaplessPlayback}
+      onGaplessPlaybackChange={setGaplessPlayback}
       {theme}
       onThemeChange={setTheme}
     />
