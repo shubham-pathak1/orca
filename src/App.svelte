@@ -342,28 +342,6 @@
     queueOrderPaths = nextOrder;
   }
 
-  function playQueueSongNext(path: string) {
-    const song = songs.find((item) => item.path === path);
-    if (!song) {
-      return;
-    }
-
-    const currentPath = playback.current_path ?? selectedPath;
-    if (!currentPath || path === currentPath) {
-      void chooseSong(song);
-      return;
-    }
-
-    queueRemovedPaths = queueRemovedPaths.filter((item) => item !== path);
-    const orderedPaths = orderSongsForQueue(songs, queueOrderPaths)
-      .map((item) => item.path)
-      .filter((item) => item !== path);
-    const currentIndex = orderedPaths.indexOf(currentPath);
-    const insertIndex = currentIndex >= 0 ? currentIndex + 1 : 0;
-    orderedPaths.splice(insertIndex, 0, path);
-    queueOrderPaths = orderedPaths;
-  }
-
   function removeQueueSong(path: string) {
     if (path === (playback.current_path ?? selectedPath)) {
       return;
@@ -940,11 +918,11 @@
         onToggleShuffle={toggleShuffle}
         onCycleRepeat={cycleRepeat}
         onSeek={seek}
-        onVolume={changeVolume}
-        onOpenFullPlayer={() => (fullPlayerOpen = true)}
-        {queueOpen}
-        onToggleQueue={toggleQueue}
-      />
+      onVolume={changeVolume}
+      onOpenFullPlayer={() => (fullPlayerOpen = true)}
+      {queueOpen}
+      onToggleQueue={toggleQueue}
+    />
     </div>
     <FullPlayer
       open={fullPlayerOpen}
@@ -984,7 +962,6 @@
       onClose={() => (queueOpen = false)}
       onChooseSong={chooseSong}
       onReorder={reorderQueueSong}
-      onPlayNext={playQueueSongNext}
       onRemoveSong={removeQueueSong}
       onClear={clearQueue}
     />

@@ -379,22 +379,38 @@
           </button>
 
         </div>
-        <button
-          class:queue-toggle-button-active={queueOpen}
-          class="queue-toggle-button"
-          title={queueOpen ? 'Hide queue' : 'Show queue'}
-          aria-pressed={queueOpen}
-          on:click={onToggleQueue}
-        >
-          <svg class="queue-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M8 6h12" />
-            <path d="M8 12h12" />
-            <path d="M8 18h12" />
-            <path d="M4 6h.01" />
-            <path d="M4 12h.01" />
-            <path d="M4 18h.01" />
-          </svg>
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            class:lyrics-toggle-button-active={lyricsOpen}
+            class="lyrics-toggle-button"
+            title={lyricsOpen ? 'Hide lyrics' : 'Show lyrics'}
+            aria-pressed={lyricsOpen}
+            on:click={() => (lyricsOpen = !lyricsOpen)}
+          >
+            <svg class="lyrics-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6.75 5.75h10.5A2.25 2.25 0 0 1 19.5 8v6.25a2.25 2.25 0 0 1-2.25 2.25h-6.9L5.5 19.25V8a2.25 2.25 0 0 1 2.25-2.25Z" />
+              <path d="M8.75 9.25h6.5" />
+              <path d="M8.75 12h5.35" />
+              <path d="M8.75 14.75h3.8" />
+            </svg>
+          </button>
+          <button
+            class:queue-toggle-button-active={queueOpen}
+            class="queue-toggle-button"
+            title={queueOpen ? 'Hide queue' : 'Show queue'}
+            aria-pressed={queueOpen}
+            on:click={onToggleQueue}
+          >
+            <svg class="queue-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M8 6h12" />
+              <path d="M8 12h12" />
+              <path d="M8 18h12" />
+              <path d="M4 6h.01" />
+              <path d="M4 12h.01" />
+              <path d="M4 18h.01" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       {#if lyricsOpen}
@@ -423,22 +439,7 @@
             <div class="player-controls-row mt-5 flex shrink-0 items-center justify-center gap-2">
               <div class="w-10 shrink-0"></div>
               <PlaybackControls {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
-              <div class="w-10 shrink-0">
-                <button
-                  class:lyrics-toggle-button-active={lyricsOpen}
-                  class="lyrics-toggle-button"
-                  title={lyricsOpen ? 'Hide lyrics' : 'Show lyrics'}
-                  aria-pressed={lyricsOpen}
-                  on:click={() => (lyricsOpen = !lyricsOpen)}
-                >
-                  <svg class="lyrics-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M6.75 5.75h10.5A2.25 2.25 0 0 1 19.5 8v6.25a2.25 2.25 0 0 1-2.25 2.25h-6.9L5.5 19.25V8a2.25 2.25 0 0 1 2.25-2.25Z" />
-                    <path d="M8.75 9.25h6.5" />
-                    <path d="M8.75 12h5.35" />
-                    <path d="M8.75 14.75h3.8" />
-                  </svg>
-                </button>
-              </div>
+              <div class="w-10 shrink-0"></div>
             </div>
           </div>
 
@@ -483,22 +484,7 @@
             <div class="player-controls-row mt-5 flex items-center justify-center gap-6">
               <div class="w-10 shrink-0"></div>
               <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
-              <div class="w-10 shrink-0">
-                <button
-                  class:lyrics-toggle-button-active={lyricsOpen}
-                  class="lyrics-toggle-button"
-                  title={lyricsOpen ? 'Hide lyrics' : 'Show lyrics'}
-                  aria-pressed={lyricsOpen}
-                  on:click={() => (lyricsOpen = !lyricsOpen)}
-                >
-                  <svg class="lyrics-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M6.75 5.75h10.5A2.25 2.25 0 0 1 19.5 8v6.25a2.25 2.25 0 0 1-2.25 2.25h-6.9L5.5 19.25V8a2.25 2.25 0 0 1 2.25-2.25Z" />
-                    <path d="M8.75 9.25h6.5" />
-                    <path d="M8.75 12h5.35" />
-                    <path d="M8.75 14.75h3.8" />
-                  </svg>
-                </button>
-              </div>
+              <div class="w-10 shrink-0"></div>
             </div>
           </div>
         </div>
@@ -527,22 +513,7 @@
           <div class="player-controls-row mt-5 flex shrink-0 items-center justify-center gap-6">
             <div class="w-10 shrink-0"></div>
             <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
-            <div class="w-10 shrink-0">
-              <button
-                class:lyrics-toggle-button-active={lyricsOpen}
-                class="lyrics-toggle-button"
-                title={lyricsOpen ? 'Hide lyrics' : 'Show lyrics'}
-                aria-pressed={lyricsOpen}
-                on:click={() => (lyricsOpen = !lyricsOpen)}
-              >
-                <svg class="lyrics-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M6.75 5.75h10.5A2.25 2.25 0 0 1 19.5 8v6.25a2.25 2.25 0 0 1-2.25 2.25h-6.9L5.5 19.25V8a2.25 2.25 0 0 1 2.25-2.25Z" />
-                  <path d="M8.75 9.25h6.5" />
-                  <path d="M8.75 12h5.35" />
-                  <path d="M8.75 14.75h3.8" />
-                </svg>
-              </button>
-            </div>
+            <div class="w-10 shrink-0"></div>
           </div>
         </div>
       {/if}
