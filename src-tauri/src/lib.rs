@@ -122,12 +122,16 @@ fn common_ancestor(paths: &[PathBuf]) -> Option<PathBuf> {
     Some(common)
 }
 
-fn scan_roots(roots: Vec<PathBuf>, artwork_dir: PathBuf) -> Result<Vec<LocalSong>, String> {
+fn scan_roots(
+    roots: Vec<PathBuf>,
+    artwork_dir: PathBuf,
+    existing_map: std::collections::HashMap<String, (i64, u64, LocalSong)>,
+) -> Result<Vec<LocalSong>, String> {
     let mut songs = Vec::new();
     let mut seen_paths = HashSet::new();
 
     for root in roots {
-        let scanned = orca_core::library::scan_music_folder(&root, &artwork_dir)?;
+        let scanned = orca_core::library::scan_music_folder(&root, &artwork_dir, &existing_map)?;
         for song in scanned {
             if seen_paths.insert(song.path.clone()) {
                 songs.push(song);
@@ -207,18 +211,19 @@ fn library_scan_roots(state: State<'_, SharedOrcaState>) -> Result<Vec<String>, 
 #[tauri::command]
 async fn remove_library_scan_root(root: String, state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
     let target = normalize_path(PathBuf::from(root));
-    let (artwork_dir, roots) = {
+    let (artwork_dir, roots, existing_map) = {
         let state = state.0.lock().map_err(|error| error.to_string())?;
         let mut roots = load_scan_roots(&state);
         roots.retain(|candidate| normalize_path(candidate.clone()) != target);
-        (state.artwork_dir.clone(), roots)
+        let map = db::get_existing_songs_map(&state.db_conn)?;
+        (state.artwork_dir.clone(), roots, map)
     };
 
     let scanned = if roots.is_empty() {
         Vec::new()
     } else {
         let remaining_roots = roots.clone();
-        tauri::async_runtime::spawn_blocking(move || scan_roots(remaining_roots, artwork_dir))
+        tauri::async_runtime::spawn_blocking(move || scan_roots(remaining_roots, artwork_dir, existing_map))
             .await
             .map_err(|error| error.to_string())??
     };
@@ -364,13 +369,14 @@ async fn pick_and_scan_folder(state: State<'_, SharedOrcaState>) -> Result<Vec<L
         return Err("Folder selection cancelled".to_string());
     };
 
-    let (artwork_dir, roots) = {
+    let (artwork_dir, roots, existing_map) = {
         let state = state.0.lock().map_err(|error| error.to_string())?;
         let roots = add_scan_root(&state, folder)?;
-        (state.artwork_dir.clone(), roots)
+        let map = db::get_existing_songs_map(&state.db_conn)?;
+        (state.artwork_dir.clone(), roots, map)
     };
 
-    let scanned = tauri::async_runtime::spawn_blocking(move || scan_roots(roots, artwork_dir))
+    let scanned = tauri::async_runtime::spawn_blocking(move || scan_roots(roots, artwork_dir, existing_map))
     .await
     .map_err(|error| error.to_string())??;
 
@@ -382,7 +388,7 @@ async fn pick_and_scan_folder(state: State<'_, SharedOrcaState>) -> Result<Vec<L
 
 #[tauri::command]
 async fn rescan_library(state: State<'_, SharedOrcaState>) -> Result<Vec<LocalSong>, String> {
-    let (artwork_dir, roots) = {
+    let (artwork_dir, roots, existing_map) = {
         let state = state.0.lock().map_err(|error| error.to_string())?;
         let mut roots = load_scan_roots(&state);
 
@@ -397,10 +403,11 @@ async fn rescan_library(state: State<'_, SharedOrcaState>) -> Result<Vec<LocalSo
             return Err("No known library folder yet. Add a folder first.".to_string());
         }
 
-        (state.artwork_dir.clone(), roots)
+        let map = db::get_existing_songs_map(&state.db_conn)?;
+        (state.artwork_dir.clone(), roots, map)
     };
 
-    let scanned = tauri::async_runtime::spawn_blocking(move || scan_roots(roots, artwork_dir))
+    let scanned = tauri::async_runtime::spawn_blocking(move || scan_roots(roots, artwork_dir, existing_map))
         .await
         .map_err(|error| error.to_string())??;
 

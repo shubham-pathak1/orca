@@ -18,6 +18,8 @@ export type LocalSong = {
   bitrate: number | null;
   bit_depth: number | null;
   format: string | null;
+  modified_at?: number | null;
+  file_size?: number | null;
 };
 
 export type PlaybackState = {
