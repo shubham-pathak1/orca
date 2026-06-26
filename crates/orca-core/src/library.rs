@@ -39,6 +39,8 @@ pub struct LocalSong {
     pub bitrate: Option<u32>,
     pub bit_depth: Option<u8>,
     pub format: Option<String>,
+    pub modified_at: Option<i64>,
+    pub file_size: Option<u64>,
 }
 
 fn normalize_text(value: Option<String>, unknown: &str) -> String {
@@ -72,7 +74,11 @@ fn parse_tag_i32(value: Option<&str>) -> Option<i32> {
     first.parse::<i32>().ok().filter(|n| *n > 0)
 }
 
-pub fn scan_music_folder(folder_path: &Path, artwork_dir: &Path) -> Result<Vec<LocalSong>, String> {
+pub fn scan_music_folder(
+    folder_path: &Path,
+    artwork_dir: &Path,
+    existing_map: &std::collections::HashMap<String, (i64, u64, LocalSong)>,
+) -> Result<Vec<LocalSong>, String> {
     let mut songs = Vec::new();
 
     for entry in WalkDir::new(folder_path).into_iter().filter_map(|e| e.ok()) {
@@ -92,8 +98,30 @@ pub fn scan_music_folder(folder_path: &Path, artwork_dir: &Path) -> Result<Vec<L
             continue;
         }
 
-        if let Ok(song) = scan_music_file(path, artwork_dir) {
-            songs.push(song);
+        let path_str = path.to_string_lossy().to_string();
+        let mut reused = false;
+
+        if let Some((stored_mtime, stored_size, cached_song)) = existing_map.get(&path_str) {
+            if let Ok(metadata) = fs::metadata(path) {
+                let current_size = metadata.len();
+                let current_mtime = metadata
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0);
+
+                if current_size == *stored_size && current_mtime == *stored_mtime {
+                    songs.push(cached_song.clone());
+                    reused = true;
+                }
+            }
+        }
+
+        if !reused {
+            if let Ok(song) = scan_music_file(path, artwork_dir) {
+                songs.push(song);
+            }
         }
     }
 
@@ -181,6 +209,14 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
     let bit_depth = properties.bit_depth();
     let format = path.extension().map(|e| e.to_string_lossy().to_uppercase());
 
+    let file_metadata = fs::metadata(path).ok();
+    let file_size = file_metadata.as_ref().map(|m| m.len());
+    let modified_at = file_metadata
+        .as_ref()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64);
+
     Ok(LocalSong {
         id: None,
         path: path.to_string_lossy().to_string(),
@@ -201,6 +237,8 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
         bitrate,
         bit_depth,
         format,
+        modified_at,
+        file_size,
     })
 }
 

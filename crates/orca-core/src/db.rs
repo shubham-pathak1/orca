@@ -37,7 +37,9 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
             sample_rate INTEGER,
             bitrate INTEGER,
             bit_depth INTEGER,
-            format TEXT
+            format TEXT,
+            modified_at INTEGER,
+            file_size INTEGER
         )",
         [],
     )
@@ -153,6 +155,16 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
         let _ = conn.execute("ALTER TABLE songs ADD COLUMN bitrate INTEGER", []);
         let _ = conn.execute("ALTER TABLE songs ADD COLUMN bit_depth INTEGER", []);
         let _ = conn.execute("ALTER TABLE songs ADD COLUMN format TEXT", []);
+    }
+
+    let has_modified_at: bool = conn.prepare("SELECT modified_at FROM songs LIMIT 0").is_ok();
+    if !has_modified_at {
+        let _ = conn.execute("ALTER TABLE songs ADD COLUMN modified_at INTEGER", []);
+    }
+
+    let has_file_size: bool = conn.prepare("SELECT file_size FROM songs LIMIT 0").is_ok();
+    if !has_file_size {
+        let _ = conn.execute("ALTER TABLE songs ADD COLUMN file_size INTEGER", []);
     }
 
     enforce_song_path_uniqueness(&conn)?;
@@ -303,8 +315,8 @@ pub fn replace_songs_in_db(conn: &Connection, songs: &[LocalSong]) -> Result<(),
 
 fn upsert_song(conn: &Connection, song: &LocalSong) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO songs (title, artist, album_artist, album, year, track_number, disc_number, genre, path, duration, artwork_url, artwork_thumb_url, artwork_preview_url, lyrics, sample_rate, bitrate, bit_depth, format)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+        "INSERT INTO songs (title, artist, album_artist, album, year, track_number, disc_number, genre, path, duration, artwork_url, artwork_thumb_url, artwork_preview_url, lyrics, sample_rate, bitrate, bit_depth, format, modified_at, file_size)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
          ON CONFLICT DO UPDATE SET
              title = excluded.title,
              artist = excluded.artist,
@@ -323,7 +335,9 @@ fn upsert_song(conn: &Connection, song: &LocalSong) -> Result<(), String> {
              sample_rate = excluded.sample_rate,
              bitrate = excluded.bitrate,
              bit_depth = excluded.bit_depth,
-             format = excluded.format",
+             format = excluded.format,
+             modified_at = excluded.modified_at,
+             file_size = excluded.file_size",
         params![
             song.title,
             song.artist,
@@ -342,7 +356,9 @@ fn upsert_song(conn: &Connection, song: &LocalSong) -> Result<(), String> {
             song.sample_rate,
             song.bitrate,
             song.bit_depth,
-            song.format
+            song.format,
+            song.modified_at,
+            song.file_size
         ],
     )
     .map_err(|e| e.to_string())?;
@@ -351,7 +367,7 @@ fn upsert_song(conn: &Connection, song: &LocalSong) -> Result<(), String> {
 
 pub fn get_all_songs(conn: &Connection) -> Result<Vec<LocalSong>, String> {
     let mut stmt = conn
-        .prepare("SELECT id, title, artist, album_artist, album, year, track_number, disc_number, genre, path, duration, artwork_url, artwork_thumb_url, artwork_preview_url, lyrics, sample_rate, bitrate, bit_depth, format FROM songs")
+        .prepare("SELECT id, title, artist, album_artist, album, year, track_number, disc_number, genre, path, duration, artwork_url, artwork_thumb_url, artwork_preview_url, lyrics, sample_rate, bitrate, bit_depth, format, modified_at, file_size FROM songs")
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], |row| {
@@ -375,6 +391,8 @@ pub fn get_all_songs(conn: &Connection) -> Result<Vec<LocalSong>, String> {
                 bitrate: row.get(16)?,
                 bit_depth: row.get(17)?,
                 format: row.get(18)?,
+                modified_at: row.get(19)?,
+                file_size: row.get(20)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -385,6 +403,18 @@ pub fn get_all_songs(conn: &Connection) -> Result<Vec<LocalSong>, String> {
     }
     Ok(songs)
 }
+
+pub fn get_existing_songs_map(conn: &Connection) -> Result<std::collections::HashMap<String, (i64, u64, LocalSong)>, String> {
+    let songs = get_all_songs(conn)?;
+    let mut map = std::collections::HashMap::new();
+    for song in songs {
+        let mtime = song.modified_at.unwrap_or(0);
+        let size = song.file_size.unwrap_or(0);
+        map.insert(song.path.clone(), (mtime, size, song));
+    }
+    Ok(map)
+}
+
 
 pub fn migrate_legacy_songs_if_needed(
     conn: &Connection,
@@ -439,6 +469,8 @@ pub fn migrate_legacy_songs_if_needed(
                 bit_depth: None,
                 format: None,
                 id: None,
+                modified_at: None,
+                file_size: None,
             })
         })
         .map_err(|e| e.to_string())?;
