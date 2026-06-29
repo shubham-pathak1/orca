@@ -30,6 +30,8 @@ struct SharedOrcaState(Mutex<OrcaState>);
 struct LibrarySnapshot {
     songs: Vec<LocalSong>,
     playlists: Vec<db::Playlist>,
+    artists: Vec<db::ArtistEntry>,
+    albums: Vec<db::AlbumEntry>,
     playback: PlaybackState,
     folder_count: usize,
 }
@@ -154,6 +156,8 @@ fn snapshot_from_state(state: &OrcaState) -> Result<LibrarySnapshot, String> {
     Ok(LibrarySnapshot {
         songs: state.songs.clone(),
         playlists: db::get_playlists(&state.db_conn)?,
+        artists: db::get_artists(&state.db_conn)?,
+        albums: db::get_albums(&state.db_conn)?,
         playback: playback_snapshot_from(state),
         folder_count: load_scan_roots(state).len(),
     })
@@ -364,7 +368,7 @@ fn playback_snapshot(state: State<'_, SharedOrcaState>) -> Result<PlaybackState,
 }
 
 #[tauri::command]
-async fn pick_and_scan_folder(state: State<'_, SharedOrcaState>) -> Result<Vec<LocalSong>, String> {
+async fn pick_and_scan_folder(state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
     let Some(folder) = rfd::FileDialog::new().pick_folder() else {
         return Err("Folder selection cancelled".to_string());
     };
@@ -383,11 +387,11 @@ async fn pick_and_scan_folder(state: State<'_, SharedOrcaState>) -> Result<Vec<L
     let mut state = state.0.lock().map_err(|error| error.to_string())?;
     db::replace_songs_in_db(&state.db_conn, &scanned)?;
     state.songs = db::get_all_songs(&state.db_conn)?;
-    Ok(state.songs.clone())
+    snapshot_from_state(&state)
 }
 
 #[tauri::command]
-async fn rescan_library(state: State<'_, SharedOrcaState>) -> Result<Vec<LocalSong>, String> {
+async fn rescan_library(state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
     let (artwork_dir, roots, existing_map) = {
         let state = state.0.lock().map_err(|error| error.to_string())?;
         let mut roots = load_scan_roots(&state);
@@ -414,7 +418,7 @@ async fn rescan_library(state: State<'_, SharedOrcaState>) -> Result<Vec<LocalSo
     let mut state = state.0.lock().map_err(|error| error.to_string())?;
     db::replace_songs_in_db(&state.db_conn, &scanned)?;
     state.songs = db::get_all_songs(&state.db_conn)?;
-    Ok(state.songs.clone())
+    snapshot_from_state(&state)
 }
 
 #[tauri::command]

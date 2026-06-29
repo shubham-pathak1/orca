@@ -37,10 +37,12 @@
   } from './lib/tauri';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import type { ActiveView } from './lib/navigation';
-  import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate } from './lib/types';
+  import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate, ArtistEntry, AlbumEntry } from './lib/types';
 
   let songs: LocalSong[] = [];
   let playlists: Playlist[] = [];
+  let artists: ArtistEntry[] = [];
+  let albums: AlbumEntry[] = [];
   let playback: PlaybackState = {
     current_path: null,
     position_ms: 0,
@@ -107,8 +109,8 @@
     queueOrderPaths
   );
   $: queueSongs = buildQueueSongs(orderedPlaybackSongs, playback.current_path ?? selectedPath, repeatMode);
-  $: albumCount = new Set(songs.map((song) => `${song.album_artist}:${song.album}`)).size;
-  $: artistCount = new Set(songs.map((song) => song.artist)).size;
+  $: albumCount = albums.length;
+  $: artistCount = artists.length;
   $: ambientArtwork = artworkUrl((nowPlaying ?? selectedSong)?.artwork_preview ?? (nowPlaying ?? selectedSong)?.artwork ?? null);
   $: shellStyle = [
     `--cover-art: ${ambientArtwork ? `url("${ambientArtwork}")` : 'none'}`,
@@ -142,10 +144,7 @@
 
     void (async () => {
       const snapshot = await getLibrarySnapshot();
-      songs = snapshot.songs;
-      playlists = snapshot.playlists;
-      playback = snapshot.playback;
-      folderCount = snapshot.folder_count ?? 0;
+      applyLibrarySnapshot(snapshot);
       scanRoots = await libraryScanRoots();
       status = songs.length ? `${songs.length} tracks loaded` : 'Add a folder to build your library';
     })();
@@ -360,6 +359,8 @@
   function applyLibrarySnapshot(snapshot: LibrarySnapshot) {
     songs = snapshot.songs;
     playlists = snapshot.playlists;
+    artists = snapshot.artists ?? [];
+    albums = snapshot.albums ?? [];
     playback = snapshot.playback;
     folderCount = snapshot.folder_count ?? folderCount;
     queueOrderPaths = queueOrderPaths.filter((path) => songs.some((song) => song.path === path));
@@ -610,8 +611,8 @@
     isScanning = true;
     status = 'Scanning folder...';
     try {
-      songs = await pickAndScanFolder();
-      folderCount = await libraryFolderCount();
+      const snapshot = await pickAndScanFolder();
+      applyLibrarySnapshot(snapshot);
       scanRoots = await libraryScanRoots();
       status = `${songs.length} tracks loaded`;
     } catch (error) {
@@ -625,8 +626,8 @@
     isScanning = true;
     status = 'Refreshing library...';
     try {
-      songs = await rescanLibrary();
-      folderCount = await libraryFolderCount();
+      const snapshot = await rescanLibrary();
+      applyLibrarySnapshot(snapshot);
       scanRoots = await libraryScanRoots();
       status = `${songs.length} tracks loaded`;
     } catch (error) {
@@ -846,6 +847,8 @@
       {songs}
       {playlists}
       {filteredSongs}
+      {artists}
+      {albums}
       bind:query
       {selectedPath}
       currentPath={playback.current_path}

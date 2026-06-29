@@ -662,6 +662,75 @@ pub fn set_lyrics(conn: &Connection, song_path: &str, lyrics_text: &str) -> Resu
     .map_err(|e| e.to_string())?;
     Ok(())
 }
+#[derive(serde::Serialize, Debug)]
+pub struct ArtistEntry {
+    pub name: String,
+    pub song_count: i64,
+    pub artwork: Option<String>,
+}
+
+#[derive(serde::Serialize, Debug)]
+pub struct AlbumEntry {
+    pub key: String,
+    pub title: String,
+    pub artist: String,
+    pub song_count: i64,
+    pub duration: i64,
+    pub artwork: Option<String>,
+}
+
+pub fn get_artists(conn: &Connection) -> Result<Vec<ArtistEntry>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT artist, COUNT(*), COALESCE(MAX(artwork_preview_url), MAX(artwork_thumb_url))
+             FROM songs
+             GROUP BY artist
+             ORDER BY artist COLLATE NOCASE ASC"
+        )
+        .map_err(|e| e.to_string())?;
+    
+    let iter = stmt.query_map([], |row| {
+        Ok(ArtistEntry {
+            name: row.get(0)?,
+            song_count: row.get(1)?,
+            artwork: row.get(2)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut artists = Vec::new();
+    for a in iter {
+        artists.push(a.map_err(|e| e.to_string())?);
+    }
+    Ok(artists)
+}
+
+pub fn get_albums(conn: &Connection) -> Result<Vec<AlbumEntry>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT album_artist || ':' || album as key, album, album_artist, COUNT(*), SUM(duration), COALESCE(MAX(artwork_preview_url), MAX(artwork_thumb_url))
+             FROM songs
+             GROUP BY album_artist, album
+             ORDER BY album COLLATE NOCASE ASC"
+        )
+        .map_err(|e| e.to_string())?;
+    
+    let iter = stmt.query_map([], |row| {
+        Ok(AlbumEntry {
+            key: row.get(0)?,
+            title: row.get(1)?,
+            artist: row.get(2)?,
+            song_count: row.get(3)?,
+            duration: row.get(4)?,
+            artwork: row.get(5)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut albums = Vec::new();
+    for a in iter {
+        albums.push(a.map_err(|e| e.to_string())?);
+    }
+    Ok(albums)
+}
 
 #[derive(serde::Serialize, Debug)]
 pub struct Playlist {

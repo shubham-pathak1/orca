@@ -44,6 +44,8 @@ export async function getLibrarySnapshot(): Promise<LibrarySnapshot> {
   return invoke<LibrarySnapshot>('library_snapshot').catch(() => ({
     songs: [],
     playlists: [],
+    artists: [],
+    albums: [],
     playback: fallbackPlayback,
     folder_count: 0
   }));
@@ -61,12 +63,12 @@ export async function removeLibraryScanRoot(root: string): Promise<LibrarySnapsh
   return invoke<LibrarySnapshot>('remove_library_scan_root', { root });
 }
 
-export async function pickAndScanFolder(): Promise<LocalSong[]> {
-  return invoke<LocalSong[]>('pick_and_scan_folder');
+export async function pickAndScanFolder(): Promise<LibrarySnapshot> {
+  return invoke<LibrarySnapshot>('pick_and_scan_folder');
 }
 
-export async function rescanLibrary(): Promise<LocalSong[]> {
-  return invoke<LocalSong[]>('rescan_library');
+export async function rescanLibrary(): Promise<LibrarySnapshot> {
+  return invoke<LibrarySnapshot>('rescan_library');
 }
 
 export async function createPlaylist(name: string): Promise<Playlist[]> {

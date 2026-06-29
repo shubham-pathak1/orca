@@ -2,7 +2,7 @@
   import { onMount, tick } from 'svelte';
   import { artworkUrl } from '../tauri';
   import { formatDuration, formatQuality } from '../format';
-  import type { LocalSong, Playlist } from '../types';
+  import type { LocalSong, Playlist, ArtistEntry, AlbumEntry } from '../types';
   import type { ActiveView } from '../navigation';
   import AlphabetRail from './AlphabetRail.svelte';
   import LazyArtwork from './LazyArtwork.svelte';
@@ -12,6 +12,8 @@
   export let songs: LocalSong[] = [];
   export let playlists: Playlist[] = [];
   export let filteredSongs: LocalSong[] = [];
+  export let artists: ArtistEntry[] = [];
+  export let albums: AlbumEntry[] = [];
   export let query = '';
   export let selectedPath: string | null = null;
   export let currentPath: string | null = null;
@@ -99,23 +101,14 @@
     }
   });
 
-  type ArtistEntry = {
-    name: string;
-    songCount: number;
-    artwork: string | null;
-  };
-
-  type AlbumEntry = {
-    key: string;
-    title: string;
-    artist: string;
-    songCount: number;
-    duration: number;
-    artwork: string | null;
-  };
-
-  $: artistEntries = buildArtistEntries(songs, query);
-  $: albumEntries = buildAlbumEntries(songs, query);
+  $: artistEntries = artists.filter((artist) =>
+    !query || artist.name.toLowerCase().includes(query.trim().toLowerCase())
+  );
+  $: albumEntries = albums.filter((album) =>
+    !query ||
+    album.title.toLowerCase().includes(query.trim().toLowerCase()) ||
+    album.artist.toLowerCase().includes(query.trim().toLowerCase())
+  );
   $: sortedSongs = [...filteredSongs].sort((a, b) => compareSongs(a, b, sortKey));
   $: listVisibleStart = Math.max(0, Math.floor(songScrollTop / LIST_ROW_HEIGHT) - OVERSCAN_ROWS);
   $: listVisibleEnd = Math.min(
@@ -176,7 +169,7 @@
         name: selectedArtistName,
         songs: selectedArtistSongs,
         artwork: selectedArtistSongs.find((song) => previewArtwork(song))?.artwork_preview ?? null,
-        albums: buildAlbumEntries(selectedArtistSongs, '')
+        albums: albums.filter((album) => album.artist === selectedArtistName)
       }
     : null;
   $: selectedAlbum = selectedAlbumKey ? albumEntries.find((album) => album.key === selectedAlbumKey) ?? null : null;
@@ -212,58 +205,8 @@
     selectedPlaylistSongIds = [];
   }
 
-  function buildArtistEntries(sourceSongs: LocalSong[], searchQuery: string): ArtistEntry[] {
-    const needle = searchQuery.trim().toLowerCase();
-    const byArtist = new Map<string, LocalSong[]>();
 
-    for (const song of sourceSongs) {
-      if (needle && !song.artist.toLowerCase().includes(needle)) {
-        continue;
-      }
 
-      const existing = byArtist.get(song.artist) ?? [];
-      existing.push(song);
-      byArtist.set(song.artist, existing);
-    }
-
-    return Array.from(byArtist.entries())
-      .map(([name, artistSongs]) => ({
-        name,
-        songCount: artistSongs.length,
-        artwork: artistSongs.find((song) => previewArtwork(song))?.artwork_preview ?? null
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }
-
-  function buildAlbumEntries(sourceSongs: LocalSong[], searchQuery: string): AlbumEntry[] {
-    const needle = searchQuery.trim().toLowerCase();
-    const byAlbum = new Map<string, LocalSong>();
-
-    for (const song of sourceSongs) {
-      if (needle && !song.album.toLowerCase().includes(needle) && !song.album_artist.toLowerCase().includes(needle)) {
-        continue;
-      }
-
-      const key = `${song.album_artist}:${song.album}`;
-      const current = byAlbum.get(key);
-      if (!current || (!current.artwork_preview && previewArtwork(song))) {
-        byAlbum.set(key, song);
-      }
-    }
-
-    return Array.from(byAlbum.values())
-      .map((song) => ({
-        key: `${song.album_artist}:${song.album}`,
-        title: song.album,
-        artist: song.album_artist,
-        songCount: sourceSongs.filter((candidate) => `${candidate.album_artist}:${candidate.album}` === `${song.album_artist}:${song.album}`).length,
-        duration: sourceSongs
-          .filter((candidate) => `${candidate.album_artist}:${candidate.album}` === `${song.album_artist}:${song.album}`)
-          .reduce((total, candidate) => total + candidate.duration, 0),
-        artwork: previewArtwork(song)
-      }))
-      .sort((a, b) => a.title.localeCompare(b.title));
-  }
 
   function compareSongs(a: LocalSong, b: LocalSong, key: 'title' | 'artist' | 'album') {
     const primary = a[key].localeCompare(b[key], undefined, { sensitivity: 'base' });
@@ -992,7 +935,7 @@
               <div class="min-w-0">
                 <h2 class="truncate text-6xl font-black max-xl:text-5xl">{selectedAlbum.title}</h2>
                 <p class="mt-3 text-sm text-white/62">By {selectedAlbum.artist}</p>
-                <p class="mt-1 text-xs text-white/42">{selectedAlbum.songCount} {selectedAlbum.songCount === 1 ? 'track' : 'tracks'} / {formatDuration(selectedAlbum.duration)}</p>
+                <p class="mt-1 text-xs text-white/42">{selectedAlbum.song_count} {selectedAlbum.song_count === 1 ? 'track' : 'tracks'} / {formatDuration(selectedAlbum.duration)}</p>
                 <div class="mt-5 flex items-center gap-2">
                 <button class="grid h-11 w-11 place-items-center rounded-full bg-[var(--accent)] text-black transition hover:scale-105" title="Play album" on:click={() => playFirstSong(selectedAlbumVisibleSongs)}>
                   <svg class="ml-0.5 h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
@@ -1049,7 +992,7 @@
                       {/if}
                     </div>
                     <p class="mt-2 truncate text-xs font-bold">{album.title}</p>
-                    <p class="truncate text-[11px] text-white/40">{album.songCount} tracks</p>
+                    <p class="truncate text-[11px] text-white/40">{album.song_count} tracks</p>
                   </button>
                 {/each}
               </div>
@@ -1173,7 +1116,7 @@
                       {/if}
                     </div>
                     <p class="mt-2 truncate text-xs font-bold">{album.title}</p>
-                    <p class="truncate text-[11px] text-white/40">{album.songCount} {album.songCount === 1 ? 'song' : 'songs'}</p>
+                    <p class="truncate text-[11px] text-white/40">{album.song_count} {album.song_count === 1 ? 'song' : 'songs'}</p>
                   </button>
                 {/each}
               </div>
@@ -1195,7 +1138,7 @@
                 {/if}
                 <span class="min-w-0">
                   <span class="block truncate text-sm font-semibold">{artist.name}</span>
-                  <span class="text-xs text-white/36">{artist.songCount} {artist.songCount === 1 ? 'song' : 'songs'}</span>
+                  <span class="text-xs text-white/36">{artist.song_count} {artist.song_count === 1 ? 'song' : 'songs'}</span>
                 </span>
               </button>
               {/each}

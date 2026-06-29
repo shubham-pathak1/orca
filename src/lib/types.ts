@@ -37,9 +37,26 @@ export type Playlist = {
   song_count: number;
 };
 
+export type ArtistEntry = {
+  name: string;
+  song_count: number;
+  artwork: string | null;
+};
+
+export type AlbumEntry = {
+  key: string;
+  title: string;
+  artist: string;
+  song_count: number;
+  duration: number;
+  artwork: string | null;
+};
+
 export type LibrarySnapshot = {
   songs: LocalSong[];
   playlists: Playlist[];
+  artists: ArtistEntry[];
+  albums: AlbumEntry[];
   playback: PlaybackState;
   folder_count?: number;
 };
