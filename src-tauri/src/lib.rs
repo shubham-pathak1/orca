@@ -496,10 +496,35 @@ fn set_volume(volume: f32, state: State<'_, SharedOrcaState>) -> Result<Playback
 }
 
 #[tauri::command]
-async fn waveform_peaks(path: String, buckets: usize) -> Result<Vec<f32>, String> {
-    tauri::async_runtime::spawn_blocking(move || audio_engine::compute_waveform_peaks(&path, buckets))
-        .await
-        .map_err(|error| error.to_string())?
+async fn waveform_peaks(
+    path: String,
+    buckets: usize,
+    state: State<'_, SharedOrcaState>,
+) -> Result<Vec<f32>, String> {
+    // --- Cache read (lock briefly, then release) ---
+    {
+        let guard = state.0.lock().map_err(|e| e.to_string())?;
+        if let Ok(Some(cached)) = db::get_cached_waveform(&guard.db_conn, &path, buckets) {
+            return Ok(cached);
+        }
+    }
+
+    // --- Cache miss: decode on a blocking thread ---
+    let path_clone = path.clone();
+    let peaks = tauri::async_runtime::spawn_blocking(move || {
+        audio_engine::compute_waveform_peaks(&path_clone, buckets)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    // --- Persist so next call is instant ---
+    {
+        let guard = state.0.lock().map_err(|e| e.to_string())?;
+        // Non-fatal: if caching fails we still return the computed peaks.
+        let _ = db::save_waveform(&guard.db_conn, &path, buckets, &peaks);
+    }
+
+    Ok(peaks)
 }
 
 pub fn run() {

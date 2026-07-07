@@ -9,13 +9,14 @@ use base64::Engine;
 use image::codecs::webp::WebPEncoder;
 use image::imageops::FilterType;
 use image::ExtendedColorType;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::library::LocalSong;
 
 pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
     let db_path = app_dir.join("orca.db");
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("PRAGMA foreign_keys = ON;", []).map_err(|e| e.to_string())?;
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS songs (
@@ -166,6 +167,18 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
     if !has_file_size {
         let _ = conn.execute("ALTER TABLE songs ADD COLUMN file_size INTEGER", []);
     }
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS waveforms (
+            song_path TEXT,
+            buckets INTEGER,
+            peaks TEXT NOT NULL,
+            PRIMARY KEY(song_path, buckets),
+            FOREIGN KEY(song_path) REFERENCES songs(path) ON DELETE CASCADE
+        )",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
 
     enforce_song_path_uniqueness(&conn)?;
     enforce_playlist_name_uniqueness(&conn)?;
@@ -662,6 +675,58 @@ pub fn set_lyrics(conn: &Connection, song_path: &str, lyrics_text: &str) -> Resu
     .map_err(|e| e.to_string())?;
     Ok(())
 }
+
+/// Returns cached waveform peaks for `song_path` with the exact `buckets` resolution,
+/// or `None` if no entry exists yet.
+pub fn get_cached_waveform(
+    conn: &Connection,
+    song_path: &str,
+    buckets: usize,
+) -> Result<Option<Vec<f32>>, String> {
+    let row: Option<String> = conn
+        .query_row(
+            "SELECT peaks FROM waveforms WHERE song_path = ?1 AND buckets = ?2",
+            params![song_path, buckets as i64],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    match row {
+        None => Ok(None),
+        Some(s) => {
+            let peaks: Vec<f32> = s
+                .split(',')
+                .filter_map(|v| v.parse::<f32>().ok())
+                .collect();
+            Ok(Some(peaks))
+        }
+    }
+}
+
+/// Persists waveform peaks for `song_path` so future lookups are instant.
+pub fn save_waveform(
+    conn: &Connection,
+    song_path: &str,
+    buckets: usize,
+    peaks: &[f32],
+) -> Result<(), String> {
+    let peaks_str: String = peaks
+        .iter()
+        .map(|v| v.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+
+    conn.execute(
+        "INSERT INTO waveforms (song_path, buckets, peaks)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(song_path, buckets) DO UPDATE SET peaks = excluded.peaks",
+        params![song_path, buckets as i64, peaks_str],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[derive(serde::Serialize, Debug)]
 pub struct ArtistEntry {
     pub name: String,
