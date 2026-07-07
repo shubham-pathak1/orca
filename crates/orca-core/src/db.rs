@@ -17,6 +17,11 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
     let db_path = app_dir.join("orca.db");
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.execute("PRAGMA foreign_keys = ON;", []).map_err(|e| e.to_string())?;
+    // WAL allows concurrent reads during writes (e.g. scan + UI queries running together).
+    conn.execute("PRAGMA journal_mode = WAL;", []).map_err(|e| e.to_string())?;
+    // Keep 16 MB of pages in memory to reduce disk I/O for repeated aggregation queries.
+    conn.execute("PRAGMA cache_size = -16000;", []).map_err(|e| e.to_string())?;
+
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS songs (
