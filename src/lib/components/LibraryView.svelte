@@ -110,6 +110,14 @@
     album.artist.toLowerCase().includes(query.trim().toLowerCase())
   );
   $: sortedSongs = [...filteredSongs].sort((a, b) => compareSongs(a, b, sortKey));
+  // Reset the virtual-list scroll position whenever the visible song set changes
+  // so the window always starts from the top after a search or sort change.
+  $: {
+    filteredSongs;
+    sortKey;
+    songScrollTop = 0;
+    if (songListEl) songListEl.scrollTop = 0;
+  }
   $: listVisibleStart = Math.max(0, Math.floor(songScrollTop / LIST_ROW_HEIGHT) - OVERSCAN_ROWS);
   $: listVisibleEnd = Math.min(
     sortedSongs.length,
