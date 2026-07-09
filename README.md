@@ -9,7 +9,7 @@ Orca is a local music player for Windows built using Svelte 5, Tauri 2, and Rust
 
 ## Key Features
 
-- **Fast Scanning**: Add local directories to scan and build your database instantly.
+- **Fast Scanning**: Add local directories to scan and build your database instantly. Supports `MP3`, `FLAC`, `M4A`, `WAV`, `OGG`, `OPUS`, and `AIFF` / `AIF` audio files.
 - **Audio Engine**: Powered by `rodio` with crossfading support.
 - **Waveform Seekbars**: Smooth waveform seekbars generated from the track's audio channels.
 - **LRC Lyrics**: Sync with LRCLIB to fetch lyrics, with support for clicking lyric lines to seek.
