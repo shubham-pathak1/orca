@@ -21,7 +21,7 @@ pub fn fetch_lyrics(title: &str, artist: &str, _duration_ms: u64) -> Result<Stri
     );
 
     let req = ureq::get(&url)
-        .set("User-Agent", "Orca/0.1.0 (https://github.com/shubhampathak1/orca)");
+        .set("User-Agent", "Orca/0.1.1 (https://github.com/shubham-pathak1/orca)");
         
     let resp = req.call().map_err(|e| e.to_string())?;
 
@@ -61,7 +61,7 @@ fn fetch_lyrics_search(title: &str, artist: &str) -> Result<String, String> {
     );
 
     let req = ureq::get(&url)
-        .set("User-Agent", "Orca/0.1.0 (https://github.com/shubhampathak1/orca-desktop)");
+        .set("User-Agent", "Orca/0.1.1 (https://github.com/shubham-pathak1/orca)");
         
     let resp = req.call().map_err(|e| e.to_string())?;
     

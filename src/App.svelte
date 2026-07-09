@@ -145,6 +145,16 @@
     void (async () => {
       const snapshot = await getLibrarySnapshot();
       applyLibrarySnapshot(snapshot);
+
+      // Restore saved volume so the app doesn't blast at 100% after a restart
+      const savedVolume = window.localStorage.getItem('orca.volume');
+      if (savedVolume !== null) {
+        const vol = Number(savedVolume);
+        if (!isNaN(vol) && vol >= 0 && vol <= 1) {
+          playback = await setVolume(vol);
+        }
+      }
+
       scanRoots = await libraryScanRoots();
       status = songs.length ? `${songs.length} tracks loaded` : 'Add a folder to build your library';
     })();
@@ -822,6 +832,7 @@
   async function changeVolume(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
     playback = await setVolume(Number(target.value));
+    window.localStorage.setItem('orca.volume', target.value);
   }
 </script>
 
