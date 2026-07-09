@@ -839,7 +839,7 @@
       playerPlacement === 'right'
         ? 'grid-cols-[132px_minmax(0,1fr)_250px] grid-rows-[minmax(0,1fr)_96px] xl:grid-rows-[1fr] max-xl:grid-cols-[132px_minmax(0,1fr)]'
         : 'grid-cols-[132px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_96px]'
-    } max-md:grid-cols-1`}
+    } max-md:grid-cols-[64px_minmax(0,1fr)]`}
   >
     <Sidebar {activeView} {isScanning} {folderCount} onSelect={(view) => (activeView = view)} onAddFolder={addFolder} onRefresh={refreshLibrary} />
     <LibraryView

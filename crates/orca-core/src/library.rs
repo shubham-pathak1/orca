@@ -129,10 +129,51 @@ pub fn scan_music_folder(
 }
 
 pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, String> {
-    let tagged_file = Probe::open(path)
-        .map_err(|e| e.to_string())?
-        .read()
-        .map_err(|e| e.to_string())?;
+    let tagged_file = match Probe::open(path)
+        .map_err(|e| e.to_string())
+        .and_then(|p| p.read().map_err(|e| e.to_string()))
+    {
+        Ok(tf) => tf,
+        Err(_) => {
+            // File couldn't be parsed by lofty (e.g. truly tagless or malformed).
+            // Still index it using the filename so it shows up in the library.
+            let title = normalize_text(
+                path.file_stem().map(|f| f.to_string_lossy().to_string()),
+                "Unknown Title",
+            );
+            let file_metadata = fs::metadata(path).ok();
+            let file_size = file_metadata.as_ref().map(|m| m.len());
+            let modified_at = file_metadata
+                .as_ref()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs() as i64);
+            let format = path.extension().map(|e| e.to_string_lossy().to_uppercase().to_string());
+            return Ok(LocalSong {
+                id: None,
+                path: path.to_string_lossy().to_string(),
+                title,
+                artist: "Unknown Artist".to_string(),
+                album_artist: "Unknown Artist".to_string(),
+                album: "Unknown Album".to_string(),
+                year: None,
+                track_number: None,
+                disc_number: None,
+                genre: None,
+                duration: 0,
+                artwork: None,
+                artwork_thumb: None,
+                artwork_preview: None,
+                lyrics: None,
+                sample_rate: None,
+                bitrate: None,
+                bit_depth: None,
+                format,
+                modified_at,
+                file_size,
+            });
+        }
+    };
 
     let tag = tagged_file
         .primary_tag()
@@ -143,7 +184,7 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
     let (title, artist, album_artist, album, year, track_number, disc_number, genre) = if let Some(t) = tag {
         let title = normalize_text(
             t.title().map(|a| a.to_string()).or_else(|| {
-                path.file_name()
+                path.file_stem()
                     .map(|f| f.to_string_lossy().to_string())
             }),
             "Unknown Title",
@@ -180,7 +221,7 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
     } else {
         (
             normalize_text(Some(
-                path.file_name()
+                path.file_stem()
                     .unwrap_or_default()
                     .to_string_lossy()
                     .to_string(),
@@ -207,7 +248,7 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
     let sample_rate = properties.sample_rate();
     let bitrate = properties.audio_bitrate();
     let bit_depth = properties.bit_depth();
-    let format = path.extension().map(|e| e.to_string_lossy().to_uppercase());
+    let format = path.extension().map(|e| e.to_string_lossy().to_uppercase().to_string());
 
     let file_metadata = fs::metadata(path).ok();
     let file_size = file_metadata.as_ref().map(|m| m.len());
@@ -241,6 +282,7 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
         file_size,
     })
 }
+
 
 #[derive(Deserialize)]
 pub struct SongMetadataUpdate {

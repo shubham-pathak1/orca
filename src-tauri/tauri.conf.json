@@ -15,8 +15,8 @@
         "title": "Orca",
         "width": 1280,
         "height": 820,
-        "minWidth": 980,
-        "minHeight": 680,
+        "minWidth": 500,
+        "minHeight": 600,
         "resizable": true
       }
     ],
