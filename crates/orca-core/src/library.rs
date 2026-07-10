@@ -74,11 +74,15 @@ fn parse_tag_i32(value: Option<&str>) -> Option<i32> {
     first.parse::<i32>().ok().filter(|n| *n > 0)
 }
 
-pub fn scan_music_folder(
+pub fn scan_music_folder<F>(
     folder_path: &Path,
     artwork_dir: &Path,
     existing_map: &std::collections::HashMap<String, (i64, u64, LocalSong)>,
-) -> Result<Vec<LocalSong>, String> {
+    on_progress: F,
+) -> Result<Vec<LocalSong>, String>
+where
+    F: Fn() + Send + Sync,
+{
     let mut songs = Vec::new();
 
     for entry in WalkDir::new(folder_path).into_iter().filter_map(|e| e.ok()) {
@@ -114,6 +118,7 @@ pub fn scan_music_folder(
                 if current_size == *stored_size && current_mtime == *stored_mtime {
                     songs.push(cached_song.clone());
                     reused = true;
+                    on_progress();
                 }
             }
         }
@@ -121,6 +126,7 @@ pub fn scan_music_folder(
         if !reused {
             if let Ok(song) = scan_music_file(path, artwork_dir) {
                 songs.push(song);
+                on_progress();
             }
         }
     }

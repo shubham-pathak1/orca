@@ -1,7 +1,10 @@
 use std::{
     collections::HashSet,
     path::PathBuf,
-    sync::{mpsc, Arc, Mutex},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        mpsc, Arc, Mutex,
+    },
     time::Duration,
 };
 
@@ -10,7 +13,7 @@ use orca_core::{
     db,
     library::{LocalSong, SongMetadataUpdate},
 };
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 
 const SETTING_LIBRARY_SCAN_ROOTS: &str = "library_scan_roots";
 
@@ -124,16 +127,20 @@ fn common_ancestor(paths: &[PathBuf]) -> Option<PathBuf> {
     Some(common)
 }
 
-fn scan_roots(
+fn scan_roots<F>(
     roots: Vec<PathBuf>,
     artwork_dir: PathBuf,
     existing_map: std::collections::HashMap<String, (i64, u64, LocalSong)>,
-) -> Result<Vec<LocalSong>, String> {
+    on_progress: F,
+) -> Result<Vec<LocalSong>, String>
+where
+    F: Fn() + Send + Sync + Clone,
+{
     let mut songs = Vec::new();
     let mut seen_paths = HashSet::new();
 
     for root in roots {
-        let scanned = orca_core::library::scan_music_folder(&root, &artwork_dir, &existing_map)?;
+        let scanned = orca_core::library::scan_music_folder(&root, &artwork_dir, &existing_map, on_progress.clone())?;
         for song in scanned {
             if seen_paths.insert(song.path.clone()) {
                 songs.push(song);
@@ -213,7 +220,7 @@ fn library_scan_roots(state: State<'_, SharedOrcaState>) -> Result<Vec<String>, 
 }
 
 #[tauri::command]
-async fn remove_library_scan_root(root: String, state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
+async fn remove_library_scan_root(root: String, app: tauri::AppHandle, state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
     let target = normalize_path(PathBuf::from(root));
     let (artwork_dir, roots, existing_map) = {
         let state = state.0.lock().map_err(|error| error.to_string())?;
@@ -227,7 +234,14 @@ async fn remove_library_scan_root(root: String, state: State<'_, SharedOrcaState
         Vec::new()
     } else {
         let remaining_roots = roots.clone();
-        tauri::async_runtime::spawn_blocking(move || scan_roots(remaining_roots, artwork_dir, existing_map))
+        let progress = Arc::new(AtomicUsize::new(0));
+        let progress_clone = Arc::clone(&progress);
+        let app_clone = app.clone();
+        let on_progress = move || {
+            let n = progress_clone.fetch_add(1, Ordering::Relaxed) + 1;
+            app_clone.emit("scan-progress", n).ok();
+        };
+        tauri::async_runtime::spawn_blocking(move || scan_roots(remaining_roots, artwork_dir, existing_map, on_progress))
             .await
             .map_err(|error| error.to_string())??
     };
@@ -368,7 +382,7 @@ fn playback_snapshot(state: State<'_, SharedOrcaState>) -> Result<PlaybackState,
 }
 
 #[tauri::command]
-async fn pick_and_scan_folder(state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
+async fn pick_and_scan_folder(app: tauri::AppHandle, state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
     let Some(folder) = rfd::FileDialog::new().pick_folder() else {
         return Err("Folder selection cancelled".to_string());
     };
@@ -380,9 +394,16 @@ async fn pick_and_scan_folder(state: State<'_, SharedOrcaState>) -> Result<Libra
         (state.artwork_dir.clone(), roots, map)
     };
 
-    let scanned = tauri::async_runtime::spawn_blocking(move || scan_roots(roots, artwork_dir, existing_map))
-    .await
-    .map_err(|error| error.to_string())??;
+    let progress = Arc::new(AtomicUsize::new(0));
+    let progress_clone = Arc::clone(&progress);
+    let app_clone = app.clone();
+    let on_progress = move || {
+        let n = progress_clone.fetch_add(1, Ordering::Relaxed) + 1;
+        app_clone.emit("scan-progress", n).ok();
+    };
+    let scanned = tauri::async_runtime::spawn_blocking(move || scan_roots(roots, artwork_dir, existing_map, on_progress))
+        .await
+        .map_err(|error| error.to_string())??;
 
     let mut state = state.0.lock().map_err(|error| error.to_string())?;
     db::replace_songs_in_db(&state.db_conn, &scanned)?;
@@ -391,7 +412,7 @@ async fn pick_and_scan_folder(state: State<'_, SharedOrcaState>) -> Result<Libra
 }
 
 #[tauri::command]
-async fn rescan_library(state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
+async fn rescan_library(app: tauri::AppHandle, state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
     let (artwork_dir, roots, existing_map) = {
         let state = state.0.lock().map_err(|error| error.to_string())?;
         let mut roots = load_scan_roots(&state);
@@ -411,7 +432,14 @@ async fn rescan_library(state: State<'_, SharedOrcaState>) -> Result<LibrarySnap
         (state.artwork_dir.clone(), roots, map)
     };
 
-    let scanned = tauri::async_runtime::spawn_blocking(move || scan_roots(roots, artwork_dir, existing_map))
+    let progress = Arc::new(AtomicUsize::new(0));
+    let progress_clone = Arc::clone(&progress);
+    let app_clone = app.clone();
+    let on_progress = move || {
+        let n = progress_clone.fetch_add(1, Ordering::Relaxed) + 1;
+        app_clone.emit("scan-progress", n).ok();
+    };
+    let scanned = tauri::async_runtime::spawn_blocking(move || scan_roots(roots, artwork_dir, existing_map, on_progress))
         .await
         .map_err(|error| error.to_string())??;
 
@@ -423,6 +451,9 @@ async fn rescan_library(state: State<'_, SharedOrcaState>) -> Result<LibrarySnap
 
 #[tauri::command]
 fn play_song(path: String, state: State<'_, SharedOrcaState>) -> Result<PlaybackState, String> {
+    if !std::path::Path::new(&path).exists() {
+        return Err("File not found. Your music folder may have moved — try rescanning.".to_string());
+    }
     let state = state.0.lock().map_err(|error| error.to_string())?;
     state
         .audio_tx
@@ -434,6 +465,9 @@ fn play_song(path: String, state: State<'_, SharedOrcaState>) -> Result<Playback
 
 #[tauri::command]
 fn queue_next_playback(path: String, state: State<'_, SharedOrcaState>) -> Result<PlaybackState, String> {
+    if !std::path::Path::new(&path).exists() {
+        return Err("File not found. Your music folder may have moved — try rescanning.".to_string());
+    }
     let state = state.0.lock().map_err(|error| error.to_string())?;
     state
         .audio_tx
