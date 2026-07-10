@@ -24,6 +24,7 @@
   export let lyricsOpen = false;
   export let queueOpen = false;
   export let onToggleQueue: () => void = () => {};
+  export let onVolume: (event: Event) => void = () => {};
 
   let lyricsViewport: HTMLDivElement | null = null;
   let centeredLyricIndex = -1;
@@ -57,12 +58,8 @@
     : -1;
   $: if (open && song?.path !== lastOpenSongPath) {
     lastOpenSongPath = song?.path ?? null;
-    lyricsOpen = false;
     centeredLyricIndex = -1;
     centeredSongPath = null;
-  }
-  $: if (!open) {
-    lyricsOpen = false;
   }
   $: if (open && lyricsOpen && lyricsViewport && activeLyricIndex >= 0 && (activeLyricIndex !== centeredLyricIndex || song?.path !== centeredSongPath)) {
     centeredLyricIndex = activeLyricIndex;
@@ -441,6 +438,8 @@
               <PlaybackControls {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
               <div class="w-10 shrink-0"></div>
             </div>
+
+            
           </div>
 
           <div class="lyrics-viewport-shell min-h-0">
@@ -486,6 +485,8 @@
               <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
               <div class="w-10 shrink-0"></div>
             </div>
+
+            
           </div>
         </div>
       {:else}
@@ -515,8 +516,35 @@
             <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
             <div class="w-10 shrink-0"></div>
           </div>
+
+          <!-- inline volume control removed; using fixed bottom-right control instead -->
         </div>
       {/if}
+      <!-- fixed bottom-right volume control (matches PlayerBar) -->
+      <div class="absolute right-6 bottom-6 z-40">
+        <div class="group relative">
+          <button class="grid h-10 w-10 place-items-center rounded-md border border-white/10 text-white/64 transition hover:bg-white/[0.08] hover:text-white focus:bg-white/[0.08] focus:text-white" type="button" aria-label="Volume">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+              <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+              <path d="M18.4 5.6a9 9 0 0 1 0 12.8" />
+            </svg>
+          </button>
+          <div class="pointer-events-none absolute bottom-full right-0 mb-2 grid h-36 w-12 translate-y-1 place-items-center rounded-md border border-white/10 bg-[#171719] py-3 opacity-0 shadow-[0_18px_60px_rgba(0,0,0,0.36)] transition group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
+            <input
+              class="h-28 w-3 [direction:rtl] [writing-mode:vertical-lr]"
+              style={`accent-color: var(--accent)`}
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={playback.volume}
+              on:input={onVolume}
+              aria-label="Volume level"
+            />
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 {/if}

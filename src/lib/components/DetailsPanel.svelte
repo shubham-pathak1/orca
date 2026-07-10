@@ -7,7 +7,6 @@
 
   export let song: LocalSong | null = null;
   export let playback: PlaybackState;
-  export let status = 'Ready';
   export let seekbarStyle: 'standard' | 'waveform' = 'standard';
   export let showQualityInfo = true;
   export let shuffleEnabled = false;
@@ -63,7 +62,7 @@
 
       </div>
     {:else}
-      <div class="grid h-full place-items-center text-center text-sm text-white/40">{status}</div>
+      <div class="grid h-full place-items-center text-center text-sm text-white/40">No track selected</div>
     {/if}
   </div>
 </aside>

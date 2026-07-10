@@ -8,7 +8,6 @@
 
   export let nowPlaying: LocalSong | null = null;
   export let playback: PlaybackState;
-  export let status = 'Ready';
   export let seekbarStyle: 'standard' | 'waveform' = 'standard';
   export let showQualityInfo = true;
   export let shuffleEnabled = false;
@@ -24,6 +23,28 @@
   export let queueOpen = false;
   export let onToggleQueue: () => void = () => {};
   export let alwaysVisible = false;
+
+  const PLACEHOLDER_DURATION_MS = 180_000; // 3 minutes
+  const PLACEHOLDER_PATH = '__placeholder__';
+
+  const placeholderSong: LocalSong = {
+    id: null,
+    title: 'No track playing',
+    artist: 'Ready',
+    album: '',
+    path: PLACEHOLDER_PATH,
+    duration: PLACEHOLDER_DURATION_MS,
+    format: null,
+    sample_rate: null,
+    bitrate: null,
+    artwork: null,
+    artwork_preview: null,
+    artwork_thumb: null,
+  };
+
+  $: displaySong = nowPlaying ?? placeholderSong;
+  $: displayPlayback = nowPlaying ? playback : { ...playback, duration_ms: PLACEHOLDER_DURATION_MS, position_ms: 0 };
+  $: displayVariant = nowPlaying ? seekbarStyle : 'waveform';
 </script>
 
 <footer class={`${alwaysVisible ? 'col-start-2 col-span-1' : 'col-span-3 max-xl:col-start-2 max-xl:col-span-1'} max-md:col-start-1 max-md:col-span-1 grid grid-cols-[minmax(190px,280px)_1fr_116px] items-center gap-4 border-t border-white/10 bg-[#111315]/96 px-5 py-2 max-md:grid-cols-1 max-md:gap-2`}>
@@ -44,7 +65,7 @@
     </button>
     <div class="min-w-0">
       <p class="truncate text-sm font-bold">{nowPlaying?.title ?? 'No track playing'}</p>
-      <p class="truncate text-xs text-white/42">{nowPlaying?.artist ?? status}</p>
+      <p class="truncate text-xs text-white/42">{nowPlaying?.artist ?? 'Ready'}</p>
       {#if nowPlaying && showQualityInfo}
         <p class="mt-0.5 truncate text-[10px] font-bold uppercase text-white/32">{formatQuality(nowPlaying.format, nowPlaying.sample_rate, nowPlaying.bitrate)}</p>
       {/if}
@@ -53,7 +74,7 @@
 
   <div class="grid min-w-0 grid-rows-[34px_36px] items-center justify-items-center gap-1">
     <div class="w-full max-w-[840px] self-end">
-      <SeekControl song={nowPlaying} {playback} variant={seekbarStyle} onSeek={onSeek} />
+      <SeekControl song={displaySong} playback={displayPlayback} variant={displayVariant} onSeek={onSeek} waveformLayout={displayVariant === 'waveform' ? 'inline' : 'inline'} />
     </div>
     <div class="self-start">
       <PlaybackControls compact {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
