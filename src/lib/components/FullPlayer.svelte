@@ -558,6 +558,7 @@
     opacity: 0.68;
     transform: scale(1.08);
     filter: blur(3.25rem) saturate(1.18) contrast(1.04);
+    pointer-events: none;
   }
 
   .full-player-wash {
@@ -566,6 +567,7 @@
       radial-gradient(circle at 20% 48%, rgba(0, 0, 0, 0.18) 0%, transparent 24rem),
       linear-gradient(90deg, rgba(0, 0, 0, 0.94) 0%, rgba(0, 0, 0, 0.74) 36%, rgba(0, 0, 0, 0.46) 68%, rgba(0, 0, 0, 0.72) 100%),
       linear-gradient(180deg, rgba(0, 0, 0, 0.74) 0%, transparent 26%, transparent 68%, rgba(0, 0, 0, 0.82) 100%);
+      pointer-events: none;
   }
 
   .full-player-spotlight {
@@ -711,9 +713,8 @@
 
   /* Make large transparent lyrics containers ignore pointer events so
      they don't intercept clicks near the header/left buttons. Only the
-     actual lyric lines should be interactive. */
+     actual lyric lines and the player controls should be interactive. */
   .lyrics-player-layout,
-  .lyrics-side-player,
   .lyrics-viewport-shell,
   .lyrics-stack,
   .lyrics-open {
@@ -721,6 +722,13 @@
   }
 
   .lyric-line {
+    pointer-events: auto;
+  }
+
+  /* Ensure controls in the lyrics-side area remain interactive */
+  .lyrics-side-player,
+  .player-controls-row,
+  .lyrics-controls {
     pointer-events: auto;
   }
 
