@@ -36,6 +36,7 @@
     updateSongMetadata
   } from './lib/tauri';
   import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { listen } from '@tauri-apps/api/event';
   import type { ActiveView } from './lib/navigation';
   import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate, ArtistEntry, AlbumEntry } from './lib/types';
 
@@ -123,6 +124,9 @@
     void sampleAccent(ambientArtwork);
   }
   $: applyRootFontSize(fontSizePercent);
+  $: if (typeof window !== 'undefined') {
+    window.localStorage.setItem('orca.fullPlayerLyricsOpen', String(fullPlayerLyricsOpen));
+  }
 
   onMount(() => {
     playerPlacement = readPreference('orca.playerPlacement', 'bottom', ['right', 'bottom']);
@@ -136,15 +140,21 @@
     gaplessPlayback = readBooleanPreference('orca.gaplessPlayback', true);
     shuffleEnabled = readBooleanPreference('orca.shuffleEnabled', false);
     repeatMode = readPreference('orca.repeatMode', 'off', ['off', 'all', 'one']);
+    fullPlayerLyricsOpen = readBooleanPreference('orca.fullPlayerLyricsOpen', false);
 
     const lastPlayedPath = window.localStorage.getItem('orca.lastPlayedPath');
     if (lastPlayedPath) {
       selectedPath = lastPlayedPath;
     }
 
+
+
     void (async () => {
       const snapshot = await getLibrarySnapshot();
       applyLibrarySnapshot(snapshot);
+
+      // Show accurate library count from the snapshot
+      status = snapshot.songs && snapshot.songs.length ? `${snapshot.songs.length} tracks loaded` : 'Add a folder to build your library';
 
       // Restore saved volume so the app doesn't blast at 100% after a restart
       const savedVolume = window.localStorage.getItem('orca.volume');
@@ -156,7 +166,6 @@
       }
 
       scanRoots = await libraryScanRoots();
-      status = songs.length ? `${songs.length} tracks loaded` : 'Add a folder to build your library';
     })();
 
     const timer = window.setInterval(async () => {
@@ -174,9 +183,16 @@
 
     window.addEventListener('keydown', handleKeydown);
 
+    const unlisten = listen<number>('scan-progress', (event) => {
+      if (isScanning) {
+        status = `Scanning... ${event.payload} songs found`;
+      }
+    });
+
     return () => {
       window.clearInterval(timer);
       window.removeEventListener('keydown', handleKeydown);
+      void unlisten.then((fn) => fn());
     };
   });
 
@@ -624,7 +640,7 @@
       const snapshot = await pickAndScanFolder();
       applyLibrarySnapshot(snapshot);
       scanRoots = await libraryScanRoots();
-      status = `${songs.length} tracks loaded`;
+      status = `${snapshot.songs.length} tracks loaded`;
     } catch (error) {
       status = error instanceof Error ? error.message : 'Scan cancelled';
     } finally {
@@ -639,7 +655,7 @@
       const snapshot = await rescanLibrary();
       applyLibrarySnapshot(snapshot);
       scanRoots = await libraryScanRoots();
-      status = `${songs.length} tracks loaded`;
+      status = `${snapshot.songs.length} tracks loaded`;
     } catch (error) {
       status = error instanceof Error ? error.message : 'Refresh failed';
     } finally {
@@ -758,12 +774,20 @@
     status = `Removed ${song.title} from playlist`;
   }
 
-  async function chooseSong(song: LocalSong) {
+  async function chooseSong(song: LocalSong, contextSongs?: LocalSong[]) {
     handledEndedPath = null;
     queuedNextForPath = null;
     queuedNextPath = null;
     selectedPath = song.path;
-    playback = await playSong(song.path);
+    if (contextSongs && contextSongs.length) {
+      queueOrderPaths = contextSongs.map((s) => s.path);
+      queueRemovedPaths = [];
+    }
+    try {
+      playback = await playSong(song.path);
+    } catch (error) {
+      status = error instanceof Error ? error.message : String(error);
+    }
   }
 
   async function playSongByOffset(offset: number) {
@@ -896,12 +920,12 @@
       onGaplessPlaybackChange={setGaplessPlayback}
       {theme}
       onThemeChange={setTheme}
+      {status}
     />
     {#if playerPlacement === 'right'}
       <DetailsPanel
         song={nowPlaying ?? selectedSong}
         {playback}
-        {status}
         {seekbarStyle}
         {showQualityInfo}
         {shuffleEnabled}
@@ -920,7 +944,6 @@
       <PlayerBar
         nowPlaying={nowPlaying ?? selectedSong}
         {playback}
-        {status}
         {seekbarStyle}
         {showQualityInfo}
         {shuffleEnabled}
@@ -957,6 +980,7 @@
       onSeekTo={seekToPosition}
       {queueOpen}
       onToggleQueue={toggleQueue}
+      onVolume={changeVolume}
     />
     <MetadataEditor
       open={Boolean(metadataEditorSong)}
