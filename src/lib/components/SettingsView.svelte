@@ -41,6 +41,8 @@
     { keys: ['F11'], action: 'Toggle full screen' }
   ];
 
+  import ConfirmDialog from './ConfirmDialog.svelte';
+
   function updateFontSize(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
     onFontSizePercentChange(Number(target.value));
@@ -49,13 +51,25 @@
   function folderName(path: string) {
     return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
   }
+  let showRemoveFolderConfirm = false;
+  let folderToRemove: string | null = null;
 
-  async function removeFolder(root: string) {
-    if (!window.confirm(`Remove "${folderName(root)}" from Orca? Songs from this folder will be removed from the library.`)) {
-      return;
-    }
+  function removeFolder(root: string) {
+    folderToRemove = root;
+    showRemoveFolderConfirm = true;
+  }
 
+  async function confirmRemoveFolder() {
+    const root = folderToRemove;
+    showRemoveFolderConfirm = false;
+    folderToRemove = null;
+    if (!root) return;
     await onRemoveScanRoot(root);
+  }
+
+  function cancelRemoveFolder() {
+    showRemoveFolderConfirm = false;
+    folderToRemove = null;
   }
 </script>
 
@@ -86,6 +100,15 @@
             </button>
           {/each}
         </div>
+        <ConfirmDialog
+          open={showRemoveFolderConfirm}
+          title="Remove folder"
+          message={folderToRemove ? `Remove "${folderName(folderToRemove)}" from Orca? Songs from this folder will be removed from the library.` : ''}
+          confirmLabel="Remove"
+          cancelLabel="Cancel"
+          onConfirm={confirmRemoveFolder}
+          onCancel={cancelRemoveFolder}
+        />
       </div>
 
       <div class="mb-7 grid grid-cols-[1fr_152px] items-center gap-5 border-t border-white/10 pt-5 max-md:grid-cols-1">

@@ -7,6 +7,7 @@
   import AlphabetRail from './AlphabetRail.svelte';
   import LazyArtwork from './LazyArtwork.svelte';
   import SettingsView from './SettingsView.svelte';
+  import ConfirmDialog from './ConfirmDialog.svelte';
 
   export let activeView: ActiveView = 'songs';
   export let songs: LocalSong[] = [];
@@ -19,7 +20,7 @@
   export let currentPath: string | null = null;
   export let artistCount = 0;
   export let albumCount = 0;
-  export let onChooseSong: (song: LocalSong) => void = () => {};
+  export let onChooseSong: (song: LocalSong, contextSongs?: LocalSong[]) => void = () => {};
   export let onCreatePlaylist: (name: string) => Promise<void> | void = () => {};
   export let onAddSongToPlaylist: (playlistId: number, song: LocalSong) => Promise<void> | void = () => {};
   export let onLoadPlaylistSongIds: (playlistId: number) => Promise<number[]> = async () => [];
@@ -50,6 +51,7 @@
   export let onGaplessPlaybackChange: (enabled: boolean) => void = () => {};
   export let theme: 'default' = 'default';
   export let onThemeChange: (theme: 'default') => void = () => {};
+  export let status = 'Ready';
 
   let songListEl: HTMLDivElement;
   let artistListEl: HTMLDivElement;
@@ -68,6 +70,8 @@
   let isEditingPlaylistName = false;
   let isLoadingPlaylist = false;
   let isRenamingPlaylist = false;
+  let showDeletePlaylistConfirm = false;
+  let playlistToDelete: Playlist | null = null;
   let selectedArtistName: string | null = null;
   let selectedAlbumKey: string | null = null;
   let songLayout: 'list' | 'grid' = 'list';
@@ -267,13 +271,22 @@
     }
   }
 
+  let savedArtistScrollTop = 0;
+  let savedAlbumScrollTop = 0;
+
   function openArtist(name: string) {
+    if (artistListEl) {
+      savedArtistScrollTop = artistListEl.scrollTop;
+    }
     selectedArtistName = name;
     query = '';
     detailQuery = '';
   }
 
   function openAlbum(key: string) {
+    if (albumListEl) {
+      savedAlbumScrollTop = albumListEl.scrollTop;
+    }
     selectedAlbumKey = key;
     query = '';
     detailQuery = '';
@@ -282,7 +295,7 @@
   function playFirstSong(sourceSongs: LocalSong[]) {
     const firstSong = sourceSongs[0];
     if (firstSong) {
-      onChooseSong(firstSong);
+      onChooseSong(firstSong, sourceSongs);
     }
   }
 
@@ -323,11 +336,21 @@
   function closeArtist() {
     selectedArtistName = null;
     detailQuery = '';
+    void tick().then(() => {
+      if (artistListEl) {
+        artistListEl.scrollTop = savedArtistScrollTop;
+      }
+    });
   }
 
   function closeAlbum() {
     selectedAlbumKey = null;
     detailQuery = '';
+    void tick().then(() => {
+      if (albumListEl) {
+        albumListEl.scrollTop = savedAlbumScrollTop;
+      }
+    });
   }
 
   async function savePlaylistName() {
@@ -371,13 +394,9 @@
   }
 
   async function deleteSelectedPlaylist() {
-    if (!selectedPlaylist || !window.confirm(`Delete playlist "${selectedPlaylist.name}"?`)) {
-      return;
-    }
-
-    const playlistId = selectedPlaylist.id;
-    closePlaylist();
-    await onDeletePlaylist(playlistId);
+    if (!selectedPlaylist) return;
+    playlistToDelete = selectedPlaylist;
+    showDeletePlaylistConfirm = true;
   }
 
   async function chooseSelectedPlaylistCover() {
@@ -436,9 +455,22 @@
     const playlist = playlistContextMenu?.playlist;
     playlistContextMenu = null;
     if (!playlist) return;
-    if (!window.confirm(`Delete playlist "${playlist.name}"?`)) return;
+    playlistToDelete = playlist;
+    showDeletePlaylistConfirm = true;
+  }
+
+  async function confirmDeletePlaylist() {
+    const playlist = playlistToDelete;
+    showDeletePlaylistConfirm = false;
+    playlistToDelete = null;
+    if (!playlist) return;
     if (selectedPlaylistId === playlist.id) closePlaylist();
     await onDeletePlaylist(playlist.id);
+  }
+
+  function cancelDeletePlaylist() {
+    showDeletePlaylistConfirm = false;
+    playlistToDelete = null;
   }
 
   async function addCoverContextPlaylist() {
@@ -539,9 +571,10 @@
   {#if !detailMode}
   <div class={`mb-4 grid items-center gap-4 max-lg:grid-cols-1 ${activeView === 'settings' || activeView === 'playlists' ? 'grid-cols-[minmax(200px,1fr)_minmax(260px,420px)]' : activeView === 'songs' ? 'grid-cols-[minmax(200px,1fr)_minmax(220px,380px)_84px_140px]' : 'grid-cols-[minmax(200px,1fr)_minmax(220px,300px)_140px]'}`}>
     <div>
-      <h1 class="text-2xl font-bold tracking-normal">{pageTitle}</h1>
-      <p class="mt-1 text-xs text-white/42">{pageSubtitle}</p>
-    </div>
+        <h1 class="text-2xl font-bold tracking-normal">{pageTitle}</h1>
+        <p class="mt-1 text-xs text-white/42">{pageSubtitle}</p>
+        
+      </div>
     {#if activeView === 'settings'}
       <label>
         <span class="sr-only">Search settings</span>
@@ -744,8 +777,8 @@
             </div>
             {#each selectedPlaylistVisibleSongs as song, index}
               <div class={`grid min-h-11 w-full grid-cols-[48px_minmax(220px,1fr)_minmax(140px,0.6fr)_72px] items-center gap-3 border-b border-white/[0.035] px-2 text-left transition max-lg:grid-cols-[40px_minmax(180px,1fr)_72px] ${song.path === currentPath ? 'bg-[var(--accent-soft)]' : 'hover:bg-white/[0.035]'}`} on:contextmenu={(event) => openSongMenu(event, song)} role="presentation">
-                <button class="text-left text-sm text-white/36" on:click={() => onChooseSong(song)}>{index + 1}</button>
-                <button class="flex min-w-0 items-center gap-2 text-left" on:click={() => onChooseSong(song)}>
+                <button class="text-left text-sm text-white/36" on:click={() => onChooseSong(song, selectedPlaylistVisibleSongs)}>{index + 1}</button>
+                <button class="flex min-w-0 items-center gap-2 text-left" on:click={() => onChooseSong(song, selectedPlaylistVisibleSongs)}>
                   {#if artworkUrl(song.artwork)}
                     <LazyArtwork rootClass="h-8 w-8 shrink-0 rounded-sm overflow-hidden" imageClass="h-full w-full object-cover" path={rowArtwork(song)} alt="" />
                   {:else}
@@ -835,7 +868,7 @@
                 data-letter={initialFromText(song.title)}
                 class={`absolute left-0 grid min-h-10 w-full grid-cols-[minmax(240px,1.35fr)_minmax(130px,0.7fr)_minmax(130px,0.8fr)_72px] items-center gap-3 border-b border-white/[0.035] px-2 text-left transition max-lg:grid-cols-[minmax(220px,1fr)_90px] ${song.path === currentPath ? 'bg-[var(--accent-soft)]' : selectedPath === song.path ? 'bg-white/[0.055]' : 'hover:bg-white/[0.045]'}`}
                 style={`height: ${LIST_ROW_HEIGHT}px; transform: translateY(${(listVisibleStart + index) * LIST_ROW_HEIGHT}px);`}
-                on:click={() => onChooseSong(song)}
+                on:click={() => onChooseSong(song, sortedSongs)}
                 on:contextmenu={(event) => openSongMenu(event, song)}
               >
                 <span class="flex min-w-0 items-center gap-2">
@@ -855,11 +888,18 @@
               {/each}
               </div>
             {:else}
-              <div class="mx-auto flex min-h-[320px] max-w-xl flex-col items-center justify-center text-center px-2">
-                <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
-                <h2 class="mt-3 text-4xl font-black tracking-normal">Oops, no such song found :(</h2>
-                <p class="mt-3 text-sm leading-6 text-white/48">Try another title, artist, album, or format.</p>
-              </div>
+              {#if songs.length === 0 && !query.trim()}
+                <div class="mx-auto flex min-h-[320px] max-w-xl flex-col items-center justify-center text-center px-2">
+                  <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
+                  <h2 class="mt-3 text-4xl font-black tracking-normal">{status}</h2>
+                </div>
+              {:else}
+                <div class="mx-auto flex min-h-[320px] max-w-xl flex-col items-center justify-center text-center px-2">
+                  <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
+                  <h2 class="mt-3 text-4xl font-black tracking-normal">Oops, no such song found :(</h2>
+                  <p class="mt-3 text-sm leading-6 text-white/48">Try another title, artist, album, or format.</p>
+                </div>
+              {/if}
             {/if}
           </div>
           <AlphabetRail onJump={jumpToSongLetter} />
@@ -883,7 +923,7 @@
                 data-letter={initialFromText(song.title)}
                 class={`absolute min-w-0 text-left transition ${song.path === currentPath ? 'opacity-100' : selectedPath === song.path ? 'opacity-90' : 'opacity-76 hover:opacity-100'}`}
                 style={`width: ${gridItemWidth}px; transform: translate(${column * (gridItemWidth + GRID_GAP)}px, ${row * gridRowHeight}px);`}
-                on:click={() => onChooseSong(song)}
+                on:click={() => onChooseSong(song, sortedSongs)}
                 on:contextmenu={(event) => openSongMenu(event, song)}
               >
                 <span class={`relative block aspect-square overflow-hidden rounded-md bg-white/[0.07] ${song.path === currentPath ? 'ring-2 ring-[var(--accent)]' : ''}`}>
@@ -897,11 +937,18 @@
               {/each}
               </div>
             {:else}
-              <div class="col-span-full mx-auto flex min-h-[320px] max-w-xl flex-col items-center justify-center text-center">
-                <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
-                <h2 class="mt-3 text-4xl font-black tracking-normal">Oops, no such song found :(</h2>
-                <p class="mt-3 text-sm leading-6 text-white/48">Try another title, artist, album, or format.</p>
-              </div>
+              {#if songs.length === 0 && !query.trim()}
+                <div class="col-span-full mx-auto flex min-h-[320px] max-w-xl flex-col items-center justify-center text-center">
+                  <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
+                  <h2 class="mt-3 text-4xl font-black tracking-normal">{status}</h2>
+                </div>
+              {:else}
+                <div class="col-span-full mx-auto flex min-h-[320px] max-w-xl flex-col items-center justify-center text-center">
+                  <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
+                  <h2 class="mt-3 text-4xl font-black tracking-normal">Oops, no such song found :(</h2>
+                  <p class="mt-3 text-sm leading-6 text-white/48">Try another title, artist, album, or format.</p>
+                </div>
+              {/if}
             {/if}
           </div>
           <AlphabetRail onJump={jumpToSongLetter} />
@@ -963,7 +1010,7 @@
                 <span class="text-right">Duration</span>
               </div>
               {#each selectedAlbumVisibleSongs as song, index}
-                <button class={`grid min-h-11 w-full grid-cols-[48px_minmax(240px,1fr)_72px] items-center gap-3 border-b border-white/[0.035] px-2 text-left transition ${song.path === currentPath ? 'bg-[var(--accent-soft)]' : 'hover:bg-white/[0.045]'}`} on:click={() => onChooseSong(song)} on:contextmenu={(event) => openSongMenu(event, song)}>
+                <button class={`grid min-h-11 w-full grid-cols-[48px_minmax(240px,1fr)_72px] items-center gap-3 border-b border-white/[0.035] px-2 text-left transition ${song.path === currentPath ? 'bg-[var(--accent-soft)]' : 'hover:bg-white/[0.045]'}`} on:click={() => onChooseSong(song, selectedAlbumVisibleSongs)} on:contextmenu={(event) => openSongMenu(event, song)}>
                   <span class="text-sm text-white/36">{song.track_number ?? index + 1}</span>
                   <span class="flex min-w-0 items-center gap-2">
                     {#if artworkUrl(song.artwork)}
@@ -1092,7 +1139,7 @@
                 <span class="text-right">Duration</span>
               </div>
               {#each selectedArtistVisibleSongs as song, index}
-                <button class={`grid min-h-11 w-full grid-cols-[48px_minmax(240px,1fr)_minmax(140px,0.6fr)_72px] items-center gap-3 border-b border-white/[0.035] px-2 text-left transition ${song.path === currentPath ? 'bg-[var(--accent-soft)]' : 'hover:bg-white/[0.045]'}`} on:click={() => onChooseSong(song)} on:contextmenu={(event) => openSongMenu(event, song)}>
+                <button class={`grid min-h-11 w-full grid-cols-[48px_minmax(240px,1fr)_minmax(140px,0.6fr)_72px] items-center gap-3 border-b border-white/[0.035] px-2 text-left transition ${song.path === currentPath ? 'bg-[var(--accent-soft)]' : 'hover:bg-white/[0.045]'}`} on:click={() => onChooseSong(song, selectedArtistVisibleSongs)} on:contextmenu={(event) => openSongMenu(event, song)}>
                   <span class="text-sm text-white/36">{index + 1}</span>
                   <span class="flex min-w-0 items-center gap-2">
                     {#if artworkUrl(song.artwork)}
@@ -1237,5 +1284,15 @@
       </button>
     </div>
   {/if}
+
+  <ConfirmDialog
+    open={showDeletePlaylistConfirm}
+    title="Delete playlist"
+    message={playlistToDelete ? `Delete playlist "${playlistToDelete.name}"?` : ''}
+    confirmLabel="Delete"
+    cancelLabel="Cancel"
+    onConfirm={confirmDeletePlaylist}
+    onCancel={cancelDeletePlaylist}
+  />
 
 </section>
