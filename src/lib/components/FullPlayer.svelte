@@ -523,7 +523,7 @@
       <!-- fixed bottom-right volume control (matches PlayerBar) -->
       <div class="absolute right-6 bottom-6 z-40">
         <div class="group relative">
-          <button class="grid h-10 w-10 place-items-center rounded-md border border-white/10 text-white/64 transition hover:bg-white/[0.08] hover:text-white focus:bg-white/[0.08] focus:text-white" type="button" aria-label="Volume">
+          <button class="grid h-10 w-10 place-items-center rounded-md text-white/64 transition hover:text-white" type="button" aria-label="Volume">
             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
               <path d="M11 5 6 9H3v6h3l5 4V5Z" />
               <path d="M15.5 8.5a5 5 0 0 1 0 7" />
@@ -644,6 +644,8 @@
       color 160ms ease,
       filter 160ms ease,
       transform 160ms ease;
+    z-index: 40;
+    pointer-events: auto;
   }
 
   .lyrics-toggle-button::before {
@@ -652,7 +654,7 @@
     inset: 0;
     z-index: 0;
     border-radius: inherit;
-    padding: 2px;
+    padding: 0;
     background-image:
       var(--cover-art),
       linear-gradient(135deg, var(--accent-mid), var(--accent-soft));
@@ -666,6 +668,7 @@
       linear-gradient(#000 0 0) content-box,
       linear-gradient(#000 0 0);
     mask-composite: exclude;
+    pointer-events: none;
   }
 
   .lyrics-toggle-icon {
@@ -703,6 +706,22 @@
     width: min(880px, 100%);
     margin-inline: auto;
     transform: translateX(clamp(-1.8rem, -2.2vw, -0.75rem));
+    pointer-events: none;
+  }
+
+  /* Make large transparent lyrics containers ignore pointer events so
+     they don't intercept clicks near the header/left buttons. Only the
+     actual lyric lines should be interactive. */
+  .lyrics-player-layout,
+  .lyrics-side-player,
+  .lyrics-viewport-shell,
+  .lyrics-stack,
+  .lyrics-open {
+    pointer-events: none;
+  }
+
+  .lyric-line {
+    pointer-events: auto;
   }
 
   .lyrics-player-layout {
@@ -731,6 +750,17 @@
     box-shadow:
       0 2rem 5rem rgba(0, 0, 0, 0.52),
       0 0 0 1px rgba(255, 255, 255, 0.11);
+    -webkit-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+
+  .full-player-cover img {
+    -webkit-user-drag: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    pointer-events: none;
   }
 
   .no-lyrics-state {
