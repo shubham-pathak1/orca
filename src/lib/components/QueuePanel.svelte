@@ -308,6 +308,7 @@
     text-align: left;
     user-select: none;
     -webkit-user-select: none;
+    touch-action: none;
     transition:
       background 150ms ease,
       border-color 150ms ease,
