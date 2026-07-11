@@ -22,7 +22,7 @@
   export let onThemeChange: (theme: 'default') => void = () => {};
 
   let activeTab = 'Appearance';
-  const tabs = ['Appearance', 'Interface', 'Library', 'Audio'];
+  const tabs = ['Appearance', 'Interface', 'Library', 'Audio', 'About'];
   const themes: { id: 'default'; label: string }[] = [{ id: 'default', label: 'Default' }];
   const fontOptions = ['Plus Jakarta Sans', 'System', 'Segoe UI'];
   const playerPlacements: { id: 'right' | 'bottom'; title: string; description: string }[] = [
@@ -41,7 +41,10 @@
     { keys: ['F11'], action: 'Toggle full screen' }
   ];
 
+  import { openUrl } from '@tauri-apps/plugin-opener';
   import ConfirmDialog from './ConfirmDialog.svelte';
+
+  const releaseLabel = 'v0.1.2-alpha';
 
   function updateFontSize(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
@@ -70,6 +73,10 @@
   function cancelRemoveFolder() {
     showRemoveFolderConfirm = false;
     folderToRemove = null;
+  }
+
+  function openFeedback() {
+    void openUrl('https://github.com/shubham-pathak1/orca/issues');
   }
 </script>
 
@@ -292,6 +299,24 @@
           on:click={() => onGaplessPlaybackChange(!gaplessPlayback)}
         >
           <span class={`toggle-knob absolute top-1 h-4 w-4 rounded-full transition ${gaplessPlayback ? 'left-6' : 'left-1'}`}></span>
+        </button>
+      </div>
+    </section>
+  {:else if activeTab === 'About'}
+    <section class="max-w-[620px]">
+      <div class="flex items-baseline gap-2.5">
+        <h3 class="text-xl font-black tracking-[-0.04em] text-white">Orca</h3>
+        <span class="text-sm font-semibold text-white/42">{releaseLabel}</span>
+      </div>
+      <p class="mt-2 text-sm text-white/52">Local-first music player, built for listening to the library you already own.</p>
+
+      <div class="mt-7 flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-5">
+        <p class="text-sm text-white/58">Found a bug or have an idea? Feedback helps shape Orca.</p>
+        <button class="inline-flex h-9 items-center gap-2 rounded-md border border-white/12 bg-white/[0.055] px-3.5 text-xs font-bold text-white transition hover:border-white/30 hover:bg-white/[0.1]" type="button" on:click={openFeedback}>
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 2C6.477 2 2 6.477 2 12a10 10 0 0 0 6.838 9.488c.5.092.682-.217.682-.483 0-.237-.009-.866-.014-1.7-2.782.604-3.369-1.34-3.369-1.34-.455-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.004.07 1.532 1.03 1.532 1.03.892 1.529 2.341 1.087 2.91.831.091-.646.349-1.087.635-1.337-2.22-.253-4.555-1.11-4.555-4.943 0-1.092.39-1.986 1.029-2.686-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.026A9.55 9.55 0 0 1 12 6.8a9.55 9.55 0 0 1 2.504.337c1.91-1.295 2.748-1.026 2.748-1.026.546 1.377.203 2.394.1 2.647.64.7 1.028 1.594 1.028 2.686 0 3.842-2.339 4.687-4.566 4.935.359.31.678.92.678 1.852 0 1.337-.012 2.417-.012 2.747 0 .268.18.58.688.482A10.002 10.002 0 0 0 22 12c0-5.523-4.477-10-10-10Z" />
+          </svg>
+          Report on GitHub
         </button>
       </div>
     </section>
