@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { artworkUrl } from '../tauri';
   import { formatQuality } from '../format';
   import type { LocalSong, PlaybackState } from '../types';
@@ -25,6 +25,58 @@
   export let queueOpen = false;
   export let onToggleQueue: () => void = () => {};
   export let onVolume: (event: Event) => void = () => {};
+  export let onToggleMute: () => void = () => {};
+  export let onAdjustVolume: (amount: number) => void = () => {};
+
+  let volumeOpen = false;
+  let volumeGroup: HTMLDivElement;
+  let volumeHideTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function handleVolumeWheel(event: WheelEvent) {
+    const change = event.deltaY < 0 ? 0.05 : -0.05;
+    onAdjustVolume(change);
+  }
+
+  function showVolume() {
+    if (volumeHideTimer) {
+      clearTimeout(volumeHideTimer);
+      volumeHideTimer = undefined;
+    }
+    volumeOpen = true;
+  }
+
+  function hideVolume() {
+    volumeHideTimer = setTimeout(() => {
+      volumeOpen = false;
+      volumeHideTimer = undefined;
+    }, 800);
+  }
+
+  function handleVolumeClick() {
+    onToggleMute();
+    showVolume();
+  }
+
+  function handleClickOutside(event: MouseEvent) {
+    if (volumeGroup && !volumeGroup.contains(event.target as Node)) {
+      volumeOpen = false;
+      if (volumeHideTimer) {
+        clearTimeout(volumeHideTimer);
+        volumeHideTimer = undefined;
+      }
+    }
+  }
+
+  onMount(() => {
+    window.addEventListener('click', handleClickOutside);
+  });
+
+  onDestroy(() => {
+    window.removeEventListener('click', handleClickOutside);
+    if (volumeHideTimer) {
+      clearTimeout(volumeHideTimer);
+    }
+  });
 
   let lyricsViewport: HTMLDivElement | null = null;
   let centeredLyricIndex = -1;
@@ -516,33 +568,51 @@
             <PlaybackControls large {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
             <div class="w-10 shrink-0"></div>
           </div>
-
-          <!-- inline volume control removed; using fixed bottom-right control instead -->
+      <!-- inline volume control removed; using fixed bottom-right control instead -->
         </div>
       {/if}
       <!-- fixed bottom-right volume control (matches PlayerBar) -->
-      <div class="absolute right-6 bottom-6 z-40">
+      <div class="absolute right-6 bottom-6 z-40" bind:this={volumeGroup} on:wheel|preventDefault|stopPropagation={handleVolumeWheel} on:mouseenter={showVolume} on:mouseleave={hideVolume}>
         <div class="group relative">
-          <button class="grid h-10 w-10 place-items-center rounded-md text-white/64 transition hover:text-white" type="button" aria-label="Volume">
-            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M11 5 6 9H3v6h3l5 4V5Z" />
-              <path d="M15.5 8.5a5 5 0 0 1 0 7" />
-              <path d="M18.4 5.6a9 9 0 0 1 0 12.8" />
-            </svg>
+          <button class="grid h-8 w-8 place-items-center rounded-md text-white/64 transition hover:text-white" type="button" aria-label="Volume" on:click={handleVolumeClick}>
+            {#if playback.volume === 0}
+              <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+                <line x1="22" y1="9" x2="16" y2="15" />
+                <line x1="16" y1="9" x2="22" y2="15" />
+              </svg>
+            {:else if playback.volume < 0.5}
+              <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+                <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+              </svg>
+            {:else}
+              <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+                <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+                <path d="M18.4 5.6a9 9 0 0 1 0 12.8" />
+              </svg>
+            {/if}
           </button>
-          <div class="pointer-events-none absolute bottom-full right-0 mb-2 grid h-36 w-12 translate-y-1 place-items-center rounded-md border border-white/10 bg-[#171719] py-3 opacity-0 shadow-[0_18px_60px_rgba(0,0,0,0.36)] transition group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
-            <input
-              class="h-28 w-3 [direction:rtl] [writing-mode:vertical-lr]"
-              style={`accent-color: var(--accent)`}
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={playback.volume}
-              on:input={onVolume}
-              aria-label="Volume level"
-            />
+          {#if volumeOpen}
+          <div class="pointer-events-auto absolute bottom-full right-0 mb-2 z-20 animate-in fade-in-0 zoom-in-95 duration-150">
+            <div class="bg-[#171719]/90 backdrop-blur-md border border-white/8 rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.45)] p-3">
+              <input
+                class="h-28 w-3 [direction:rtl] [writing-mode:vertical-lr]"
+                style={`accent-color: var(--accent)`}
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={playback.volume}
+                on:input={onVolume}
+                aria-label="Volume level"
+                on:mouseenter={showVolume}
+                on:mouseleave={hideVolume}
+              />
+            </div>
           </div>
+          {/if}
         </div>
       </div>
     </div>
