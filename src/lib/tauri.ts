@@ -1,6 +1,6 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { invoke } from '@tauri-apps/api/core';
-import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate } from './types';
+import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate, ArtistEntry, AlbumEntry } from './types';
 
 const fallbackPlayback: PlaybackState = {
   current_path: null,
@@ -101,6 +101,22 @@ export async function choosePlaylistCover(playlistId: number): Promise<Playlist[
 
 export async function removePlaylistCover(playlistId: number): Promise<Playlist[]> {
   return invoke<Playlist[]>('remove_playlist_cover', { playlistId });
+}
+
+export async function chooseArtistCover(artistName: string): Promise<ArtistEntry[]> {
+  return invoke<ArtistEntry[]>('choose_artist_cover', { artistName });
+}
+
+export async function removeArtistCover(artistName: string): Promise<ArtistEntry[]> {
+  return invoke<ArtistEntry[]>('remove_artist_cover', { artistName });
+}
+
+export async function chooseAlbumCover(albumKey: string): Promise<AlbumEntry[]> {
+  return invoke<AlbumEntry[]>('choose_album_cover', { albumKey });
+}
+
+export async function removeAlbumCover(albumKey: string): Promise<AlbumEntry[]> {
+  return invoke<AlbumEntry[]>('remove_album_cover', { albumKey });
 }
 
 export async function updateSongMetadata(update: SongMetadataUpdate): Promise<LibrarySnapshot> {

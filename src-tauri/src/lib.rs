@@ -332,6 +332,48 @@ fn remove_playlist_cover(playlist_id: i64, state: State<'_, SharedOrcaState>) ->
 }
 
 #[tauri::command]
+fn choose_artist_cover(artist_name: String, state: State<'_, SharedOrcaState>) -> Result<Vec<db::ArtistEntry>, String> {
+    let Some(image_path) = rfd::FileDialog::new()
+        .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
+        .pick_file()
+    else {
+        return Err("Cover selection cancelled".to_string());
+    };
+
+    let state = state.0.lock().map_err(|error| error.to_string())?;
+    db::update_artist_artwork(&state.db_conn, &artist_name, Some(&image_path.to_string_lossy()))?;
+    db::get_artists(&state.db_conn)
+}
+
+#[tauri::command]
+fn remove_artist_cover(artist_name: String, state: State<'_, SharedOrcaState>) -> Result<Vec<db::ArtistEntry>, String> {
+    let state = state.0.lock().map_err(|error| error.to_string())?;
+    db::remove_artist_artwork(&state.db_conn, &artist_name)?;
+    db::get_artists(&state.db_conn)
+}
+
+#[tauri::command]
+fn choose_album_cover(album_key: String, state: State<'_, SharedOrcaState>) -> Result<Vec<db::AlbumEntry>, String> {
+    let Some(image_path) = rfd::FileDialog::new()
+        .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
+        .pick_file()
+    else {
+        return Err("Cover selection cancelled".to_string());
+    };
+
+    let state = state.0.lock().map_err(|error| error.to_string())?;
+    db::update_album_artwork(&state.db_conn, &album_key, Some(&image_path.to_string_lossy()))?;
+    db::get_albums(&state.db_conn)
+}
+
+#[tauri::command]
+fn remove_album_cover(album_key: String, state: State<'_, SharedOrcaState>) -> Result<Vec<db::AlbumEntry>, String> {
+    let state = state.0.lock().map_err(|error| error.to_string())?;
+    db::remove_album_artwork(&state.db_conn, &album_key)?;
+    db::get_albums(&state.db_conn)
+}
+
+#[tauri::command]
 async fn update_song_metadata(update: SongMetadataUpdate, state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
     let path = PathBuf::from(&update.path);
     let edit_path = path.clone();
@@ -584,6 +626,10 @@ pub fn run() {
             playlist_song_ids,
             choose_playlist_cover,
             remove_playlist_cover,
+            choose_artist_cover,
+            remove_artist_cover,
+            choose_album_cover,
+            remove_album_cover,
             update_song_metadata,
             choose_song_cover,
             remove_song_cover,

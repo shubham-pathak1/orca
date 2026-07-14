@@ -156,6 +156,24 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
     )
     .map_err(|e| e.to_string())?;
 
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS artist_artworks (
+            artist_name TEXT PRIMARY KEY,
+            artwork_path TEXT
+        )",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS album_artworks (
+            album_key TEXT PRIMARY KEY,
+            artwork_path TEXT
+        )",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+
     let has_quality: bool = conn.prepare("SELECT sample_rate FROM songs LIMIT 0").is_ok();
     if !has_quality {
         let _ = conn.execute("ALTER TABLE songs ADD COLUMN sample_rate INTEGER", []);
@@ -753,10 +771,11 @@ pub struct AlbumEntry {
 pub fn get_artists(conn: &Connection) -> Result<Vec<ArtistEntry>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT artist, COUNT(*), COALESCE(MAX(artwork_preview_url), MAX(artwork_thumb_url))
-             FROM songs
-             GROUP BY artist
-             ORDER BY artist COLLATE NOCASE ASC"
+            "SELECT s.artist, COUNT(*), COALESCE(aa.artwork_path, COALESCE(MAX(s.artwork_preview_url), MAX(s.artwork_thumb_url)))
+             FROM songs s
+             LEFT JOIN artist_artworks aa ON s.artist = aa.artist_name
+             GROUP BY s.artist
+             ORDER BY s.artist COLLATE NOCASE ASC"
         )
         .map_err(|e| e.to_string())?;
     
@@ -778,8 +797,9 @@ pub fn get_artists(conn: &Connection) -> Result<Vec<ArtistEntry>, String> {
 pub fn get_albums(conn: &Connection) -> Result<Vec<AlbumEntry>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT album_artist || ':' || album as key, album, album_artist, COUNT(*), SUM(duration), COALESCE(MAX(artwork_preview_url), MAX(artwork_thumb_url))
-             FROM songs
+            "SELECT album_artist || ':' || album as key, album, album_artist, COUNT(*), SUM(duration), COALESCE(awa.artwork_path, COALESCE(MAX(s.artwork_preview_url), MAX(s.artwork_thumb_url)))
+             FROM songs s
+             LEFT JOIN album_artworks awa ON (s.album_artist || ':' || s.album) = awa.album_key
              GROUP BY album_artist, album
              ORDER BY album COLLATE NOCASE ASC"
         )
@@ -824,6 +844,42 @@ pub fn update_playlist_cover(conn: &Connection, playlist_id: i64, cover_path: Op
     conn.execute(
         "UPDATE playlists SET cover_path = ?1 WHERE id = ?2",
         params![cover_path, playlist_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn update_artist_artwork(conn: &Connection, artist_name: &str, artwork_path: Option<&str>) -> Result<(), String> {
+    conn.execute(
+        "INSERT INTO artist_artworks (artist_name, artwork_path) VALUES (?1, ?2) ON CONFLICT(artist_name) DO UPDATE SET artwork_path = excluded.artwork_path",
+        params![artist_name, artwork_path],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn remove_artist_artwork(conn: &Connection, artist_name: &str) -> Result<(), String> {
+    conn.execute(
+        "DELETE FROM artist_artworks WHERE artist_name = ?1",
+        params![artist_name],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn update_album_artwork(conn: &Connection, album_key: &str, artwork_path: Option<&str>) -> Result<(), String> {
+    conn.execute(
+        "INSERT INTO album_artworks (album_key, artwork_path) VALUES (?1, ?2) ON CONFLICT(album_key) DO UPDATE SET artwork_path = excluded.artwork_path",
+        params![album_key, artwork_path],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn remove_album_artwork(conn: &Connection, album_key: &str) -> Result<(), String> {
+    conn.execute(
+        "DELETE FROM album_artworks WHERE album_key = ?1",
+        params![album_key],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
