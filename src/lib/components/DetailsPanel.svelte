@@ -18,7 +18,14 @@
   export let onCycleRepeat: () => void = () => {};
   export let onSeek: (event: Event) => void = () => {};
   export let onVolume: (event: Event) => void = () => {};
+  export let onToggleMute: () => void = () => {};
+  export let onAdjustVolume: (amount: number) => void = () => {};
   export let onOpenFullPlayer: () => void = () => {};
+
+  function handleVolumeWheel(event: WheelEvent) {
+    const change = event.deltaY < 0 ? 0.05 : -0.05;
+    onAdjustVolume(change);
+  }
 </script>
 
 <aside class="relative min-h-0 overflow-hidden border-l border-white/8 bg-black/45 px-5 py-5 max-xl:hidden">
@@ -36,8 +43,8 @@
         {/if}
       </button>
       <div class="mt-5 text-center">
-        <h2 class="truncate text-2xl font-bold">{song.title}</h2>
-        <p class="mt-1 truncate text-base text-white/68">{song.artist}</p>
+        <h2 class="truncate w-full text-2xl font-bold">{song.title}</h2>
+        <p class="mt-1 truncate w-full text-base text-white/68">{song.artist}</p>
         {#if showQualityInfo}
           <p class="mt-4 inline-flex rounded-sm bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase text-white/66">
             {formatQuality(song.format, song.sample_rate, song.bitrate) || 'Local audio'}
@@ -52,11 +59,27 @@
 
         <PlaybackControls compact {shuffleEnabled} {repeatMode} isPlaying={playback.is_playing} onToggle={onToggle} onPrevious={onPrevious} onNext={onNext} {onToggleShuffle} {onCycleRepeat} />
 
-        <div class="grid grid-cols-[32px_1fr] items-center gap-3">
-          <svg class="h-4 w-4 text-white/42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M11 5 6 9H2v6h4l5 4V5Z" />
-            <path d="M15.5 8.5a5 5 0 0 1 0 7" />
-          </svg>
+        <div class="grid grid-cols-[32px_1fr] items-center gap-3" on:wheel|preventDefault|stopPropagation={handleVolumeWheel}>
+          <button type="button" class="grid place-items-center h-8 w-8 rounded-md transition hover:bg-white/[0.08]" aria-label="Toggle mute" on:click={onToggleMute}>
+            {#if playback.volume === 0}
+              <svg class="h-4 w-4 text-white/42 hover:text-white transition" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+                <line x1="22" y1="9" x2="16" y2="15" />
+                <line x1="16" y1="9" x2="22" y2="15" />
+              </svg>
+            {:else if playback.volume < 0.5}
+              <svg class="h-4 w-4 text-white/42 hover:text-white transition" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+                <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+              </svg>
+            {:else}
+              <svg class="h-4 w-4 text-white/42 hover:text-white transition" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+                <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+                <path d="M18.4 5.6a9 9 0 0 1 0 12.8" />
+              </svg>
+            {/if}
+          </button>
           <input class="w-full" style={`accent-color: var(--accent)`} type="range" min="0" max="1" step="0.01" value={playback.volume} on:input={onVolume} />
         </div>
 

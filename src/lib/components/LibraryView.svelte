@@ -28,6 +28,10 @@
   export let onDeletePlaylist: (playlistId: number) => Promise<void> | void = () => {};
   export let onChoosePlaylistCover: (playlistId: number) => Promise<void> | void = () => {};
   export let onRemovePlaylistCover: (playlistId: number) => Promise<void> | void = () => {};
+  export let onChooseArtistCover: (artistName: string) => Promise<void> | void = () => {};
+  export let onRemoveArtistCover: (artistName: string) => Promise<void> | void = () => {};
+  export let onChooseAlbumCover: (albumKey: string) => Promise<void> | void = () => {};
+  export let onRemoveAlbumCover: (albumKey: string) => Promise<void> | void = () => {};
   export let onRemoveSongFromPlaylist: (playlistId: number, song: LocalSong) => Promise<void> | void = () => {};
   export let onEditSong: (song: LocalSong) => void = () => {};
   export let playerPlacement: 'right' | 'bottom' = 'right';
@@ -408,6 +412,30 @@
   async function removeSelectedPlaylistCover() {
     if (selectedPlaylist) {
       await onRemovePlaylistCover(selectedPlaylist.id);
+    }
+  }
+
+  async function chooseSelectedAlbumCover() {
+    if (selectedAlbum) {
+      await onChooseAlbumCover(selectedAlbum.key);
+    }
+  }
+
+  async function removeSelectedAlbumCover() {
+    if (selectedAlbum) {
+      await onRemoveAlbumCover(selectedAlbum.key);
+    }
+  }
+
+  async function chooseSelectedArtistCover() {
+    if (selectedArtist) {
+      await onChooseArtistCover(selectedArtist.name);
+    }
+  }
+
+  async function removeSelectedArtistCover() {
+    if (selectedArtist) {
+      await onRemoveArtistCover(selectedArtist.name);
     }
   }
 
@@ -982,10 +1010,26 @@
               </label>
             </div>
             <div class="relative grid grid-cols-[148px_minmax(0,1fr)] items-end gap-5 max-md:grid-cols-1">
-              <div class="aspect-square w-[148px] shrink-0 overflow-hidden rounded-md bg-white/8 shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
+              <div class="group relative aspect-square w-[148px] shrink-0 overflow-hidden rounded-md bg-white/8 shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
                 {#if artworkUrl(selectedAlbum.artwork)}
                   <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={selectedAlbum.artwork} alt="" />
                 {/if}
+                <div class="absolute inset-x-2 bottom-2 flex justify-end gap-2 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+                  <button class="grid h-8 w-8 place-items-center rounded-full bg-white text-black shadow-[0_10px_28px_rgba(0,0,0,0.36)] backdrop-blur-md" type="button" title="Change cover" aria-label="Change cover" on:click={chooseSelectedAlbumCover}>
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                    </svg>
+                  </button>
+                  <button class="grid h-8 w-8 place-items-center rounded-full bg-black text-white shadow-[0_10px_28px_rgba(0,0,0,0.36)] backdrop-blur-md" type="button" title="Remove cover" aria-label="Remove cover" on:click={removeSelectedAlbumCover}>
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M3 6h18" />
+                      <path d="M8 6V4h8v2" />
+                      <path d="M19 6l-1 14H6L5 6" />
+                      <path d="M10 11v5M14 11v5" />
+                    </svg>
+                  </button>
+                </div>
               </div>
               <div class="min-w-0">
                 <h2 class="truncate text-6xl font-black max-xl:text-5xl">{selectedAlbum.title}</h2>
@@ -1108,15 +1152,31 @@
               </label>
             </div>
             <div class="relative grid grid-cols-[148px_minmax(0,1fr)] items-end gap-5 max-md:grid-cols-1">
-              <div class="aspect-square w-[148px] shrink-0 overflow-hidden rounded-full bg-white/8 shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
+              <div class="group relative aspect-square w-[148px] shrink-0 overflow-hidden rounded-full bg-white/8 shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
                 {#if artworkUrl(selectedArtist.artwork)}
                   <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={selectedArtist.artwork} alt="" />
                 {:else}
                   <span class="grid h-full w-full place-items-center text-5xl font-black text-white/28">{selectedArtist.name.charAt(0).toUpperCase()}</span>
                 {/if}
+                <div class="absolute inset-x-2 bottom-2 flex justify-end gap-2 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+                  <button class="grid h-8 w-8 place-items-center rounded-full bg-white text-black shadow-[0_10px_28px_rgba(0,0,0,0.36)] backdrop-blur-md" type="button" title="Change cover" aria-label="Change cover" on:click={chooseSelectedArtistCover}>
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                    </svg>
+                  </button>
+                  <button class="grid h-8 w-8 place-items-center rounded-full bg-black text-white shadow-[0_10px_28px_rgba(0,0,0,0.36)] backdrop-blur-md" type="button" title="Remove cover" aria-label="Remove cover" on:click={removeSelectedArtistCover}>
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M3 6h18" />
+                      <path d="M8 6V4h8v2" />
+                      <path d="M19 6l-1 14H6L5 6" />
+                      <path d="M10 11v5M14 11v5" />
+                    </svg>
+                  </button>
+                </div>
               </div>
               <div class="min-w-0">
-                <h2 class="truncate text-6xl font-black max-xl:text-5xl">{selectedArtist.name}</h2>
+                <h2 class="truncate text-6xl font-black max-xl:text-5xl leading-normal">{selectedArtist.name}</h2>
                 <p class="mt-3 text-sm text-white/62">{selectedArtist.songs.length} {selectedArtist.songs.length === 1 ? 'song' : 'songs'} / {selectedArtist.albums.length} {selectedArtist.albums.length === 1 ? 'album' : 'albums'}</p>
                 <div class="mt-5 flex items-center gap-2">
                 <button class="grid h-11 w-11 place-items-center rounded-full bg-[var(--accent)] text-black transition hover:scale-105" title="Play artist" on:click={() => playFirstSong(selectedArtistVisibleSongs)}>
@@ -1131,7 +1191,6 @@
 
           <div class="grid grid-cols-[minmax(0,1fr)_340px] gap-8 max-2xl:grid-cols-1">
             <div>
-              <h3 class="mb-3 text-base font-black">Popular</h3>
               <div class="grid h-8 grid-cols-[48px_minmax(240px,1fr)_minmax(140px,0.6fr)_72px] items-center border-b border-white/8 px-2 text-[11px] font-bold uppercase text-white/36">
                 <span>#</span>
                 <span>Title</span>
