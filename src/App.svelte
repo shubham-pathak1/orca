@@ -13,6 +13,10 @@
     artworkUrl,
     chooseSongCover,
     choosePlaylistCover,
+    chooseArtistCover,
+    removeArtistCover,
+    chooseAlbumCover,
+    removeAlbumCover,
     createPlaylist,
     deletePlaylist,
     getLibrarySnapshot,
@@ -510,9 +514,14 @@
       return;
     }
 
-    if (fullPlayerOpen && key === 'l' && !event.altKey && !event.ctrlKey && !event.metaKey && !isTextEntryTarget(event)) {
+    if (key === 'l' && !event.altKey && !event.ctrlKey && !event.metaKey && !isTextEntryTarget(event)) {
       event.preventDefault();
-      fullPlayerLyricsOpen = !fullPlayerLyricsOpen;
+      if (!fullPlayerOpen) {
+        fullPlayerOpen = true;
+        fullPlayerLyricsOpen = true;
+      } else {
+        fullPlayerLyricsOpen = !fullPlayerLyricsOpen;
+      }
       return;
     }
 
@@ -528,10 +537,6 @@
       return;
     }
 
-    if (shouldIgnorePlaybackShortcut(event)) {
-      return;
-    }
-
     if (event.altKey && key === 'n') {
       event.preventDefault();
       await playNextSong();
@@ -544,9 +549,20 @@
       return;
     }
 
-    if (event.code === 'Space' && !event.altKey && !event.ctrlKey && !event.metaKey) {
+    if (event.code === 'Space' && !event.altKey && !event.ctrlKey && !event.metaKey && !isTextEntryTarget(event)) {
       event.preventDefault();
       await togglePlayback();
+      return;
+    }
+
+    if (key === 'm' && !event.altKey && !event.ctrlKey && !event.metaKey && !isTextEntryTarget(event)) {
+      event.preventDefault();
+      await toggleMute();
+      return;
+    }
+
+    if (shouldIgnorePlaybackShortcut(event)) {
+      return;
     }
   }
 
@@ -702,6 +718,26 @@
     status = 'Removed playlist cover';
   }
 
+  async function chooseExistingArtistCover(artistName: string) {
+    artists = await chooseArtistCover(artistName);
+    status = 'Updated artist cover';
+  }
+
+  async function clearExistingArtistCover(artistName: string) {
+    artists = await removeArtistCover(artistName);
+    status = 'Removed artist cover';
+  }
+
+  async function chooseExistingAlbumCover(albumKey: string) {
+    albums = await chooseAlbumCover(albumKey);
+    status = 'Updated album cover';
+  }
+
+  async function clearExistingAlbumCover(albumKey: string) {
+    albums = await removeAlbumCover(albumKey);
+    status = 'Removed album cover';
+  }
+
   async function loadPlaylistSongs(playlistId: number) {
     return playlistSongIds(playlistId);
   }
@@ -853,10 +889,39 @@
     playback = await seekPlayback(positionMs);
   }
 
+  let preMuteVolume = Number(window.localStorage.getItem('orca.volume') || '1.0');
+  if (preMuteVolume <= 0) {
+    preMuteVolume = 1.0;
+  }
+
   async function changeVolume(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
-    playback = await setVolume(Number(target.value));
-    window.localStorage.setItem('orca.volume', target.value);
+    const vol = Number(target.value);
+    playback = await setVolume(vol);
+    window.localStorage.setItem('orca.volume', String(vol));
+    if (vol > 0) {
+      preMuteVolume = vol;
+    }
+  }
+
+  async function toggleMute() {
+    if (playback.volume > 0) {
+      preMuteVolume = playback.volume;
+      playback = await setVolume(0);
+      window.localStorage.setItem('orca.volume', '0');
+    } else {
+      playback = await setVolume(preMuteVolume);
+      window.localStorage.setItem('orca.volume', String(preMuteVolume));
+    }
+  }
+
+  async function adjustVolumeByAmount(amount: number) {
+    const newVolume = Math.min(1, Math.max(0, playback.volume + amount));
+    playback = await setVolume(newVolume);
+    window.localStorage.setItem('orca.volume', String(newVolume));
+    if (newVolume > 0) {
+      preMuteVolume = newVolume;
+    }
   }
 </script>
 
@@ -897,6 +962,10 @@
       onDeletePlaylist={deleteExistingPlaylist}
       onChoosePlaylistCover={chooseExistingPlaylistCover}
       onRemovePlaylistCover={clearExistingPlaylistCover}
+      onChooseArtistCover={chooseExistingArtistCover}
+      onRemoveArtistCover={clearExistingArtistCover}
+      onChooseAlbumCover={chooseExistingAlbumCover}
+      onRemoveAlbumCover={clearExistingAlbumCover}
       onRemoveSongFromPlaylist={removeFromPlaylist}
       onEditSong={editSongMetadata}
       {playerPlacement}
@@ -937,6 +1006,8 @@
         onCycleRepeat={cycleRepeat}
         onSeek={seek}
         onVolume={changeVolume}
+        onToggleMute={toggleMute}
+        onAdjustVolume={adjustVolumeByAmount}
         onOpenFullPlayer={() => (fullPlayerOpen = true)}
       />
     {/if}
@@ -956,6 +1027,8 @@
         onCycleRepeat={cycleRepeat}
         onSeek={seek}
       onVolume={changeVolume}
+      onToggleMute={toggleMute}
+      onAdjustVolume={adjustVolumeByAmount}
       onOpenFullPlayer={() => (fullPlayerOpen = true)}
       {queueOpen}
       onToggleQueue={toggleQueue}
@@ -981,6 +1054,8 @@
       {queueOpen}
       onToggleQueue={toggleQueue}
       onVolume={changeVolume}
+      onToggleMute={toggleMute}
+      onAdjustVolume={adjustVolumeByAmount}
     />
     <MetadataEditor
       open={Boolean(metadataEditorSong)}
