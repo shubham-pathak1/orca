@@ -45,7 +45,7 @@
   import { openUrl } from '@tauri-apps/plugin-opener';
   import ConfirmDialog from './ConfirmDialog.svelte';
 
-  const releaseLabel = 'v0.1.2-alpha';
+  const releaseLabel = 'v0.1.3-alpha';
 
   function updateFontSize(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
