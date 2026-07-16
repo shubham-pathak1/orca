@@ -102,6 +102,17 @@
 
   $: progress = playback.duration_ms > 0 ? Math.min(Math.max(displayPosition / playback.duration_ms, 0), 1) : 0;
 
+  // Toggle between total duration and remaining time
+  let showRemaining = localStorage.getItem('seekbar-show-remaining') === 'true';
+  function toggleRemaining() {
+    showRemaining = !showRemaining;
+    localStorage.setItem('seekbar-show-remaining', String(showRemaining));
+  }
+
+  $: totalMs = playback.duration_ms || song?.duration || 0;
+  $: remainingMs = Math.max(0, totalMs - displayPosition);
+  $: rightLabel = showRemaining ? `-${formatDuration(remainingMs)}` : formatDuration(totalMs);
+
   $: if (variant === 'waveform' && canvas) {
     progress;
     peaks;
@@ -296,11 +307,19 @@
         />
       </span>
       {#if waveformLayout === 'inline'}
-        <span class="text-xs font-medium text-white/52">{formatDuration(playback.duration_ms || song?.duration || 0)}</span>
+        <button
+          class="w-[42px] text-left text-xs font-medium text-white/52 transition hover:text-white/80 cursor-pointer"
+          title={showRemaining ? 'Show total duration' : 'Show remaining time'}
+          on:click={toggleRemaining}
+        >{rightLabel}</button>
       {:else}
         <span class="flex justify-between text-xs font-medium text-white/60">
           <span>{formatDuration(displayPosition)}</span>
-          <span>{formatDuration(playback.duration_ms || song?.duration || 0)}</span>
+          <button
+            class="transition hover:text-white/80 cursor-pointer"
+            title={showRemaining ? 'Show total duration' : 'Show remaining time'}
+            on:click={toggleRemaining}
+          >{rightLabel}</button>
         </span>
       {/if}
     </label>
@@ -320,7 +339,11 @@
           on:change={handleChange}
         />
       </span>
-      <span class="text-xs font-medium text-white/60">{formatDuration(playback.duration_ms || song?.duration || 0)}</span>
+      <button
+        class="w-[42px] text-right text-xs font-medium text-white/60 transition hover:text-white/80 cursor-pointer"
+        title={showRemaining ? 'Show total duration' : 'Show remaining time'}
+        on:click={toggleRemaining}
+      >{rightLabel}</button>
     </label>
   {/if}
 </div>
