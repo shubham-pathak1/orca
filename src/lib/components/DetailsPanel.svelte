@@ -21,6 +21,8 @@
   export let onToggleMute: () => void = () => {};
   export let onAdjustVolume: (amount: number) => void = () => {};
   export let onOpenFullPlayer: () => void = () => {};
+  export let onReplaceCover: ((song: LocalSong) => Promise<void> | void) | undefined = undefined;
+  export let onRemoveCover: ((song: LocalSong) => Promise<void> | void) | undefined = undefined;
 
   function handleVolumeWheel(event: WheelEvent) {
     const change = event.deltaY < 0 ? 0.05 : -0.05;
@@ -33,15 +35,33 @@
   <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/45 via-black/70 to-black/88"></div>
   <div class="relative flex h-full flex-col">
     {#if song}
-      <button
-        class="group mx-auto aspect-square w-full max-w-[272px] overflow-hidden rounded-md bg-white/8 text-left outline-none transition hover:scale-[1.01] focus-visible:ring-2 focus-visible:ring-white/32"
-        title="Open full player"
-        on:click={onOpenFullPlayer}
-      >
-        {#if artworkUrl(song.artwork)}
-          <img class="h-full w-full object-cover transition group-hover:brightness-110" src={artworkUrl(song.artwork) ?? ''} alt="" />
-        {/if}
-      </button>
+      <div class="group relative mx-auto aspect-square w-full max-w-[272px]">
+        <button
+          class="block h-full w-full overflow-hidden rounded-md bg-white/8 text-left outline-none transition hover:scale-[1.01] focus-visible:ring-2 focus-visible:ring-white/32"
+          title="Open full player"
+          on:click={onOpenFullPlayer}
+        >
+          {#if artworkUrl(song.artwork)}
+            <img class="h-full w-full object-cover transition group-hover:brightness-110" src={artworkUrl(song.artwork) ?? ''} alt="" />
+          {/if}
+        </button>
+        <div class="absolute inset-x-2 bottom-2 flex justify-end gap-2 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+          <button class="grid h-8 w-8 place-items-center rounded-full bg-white text-black shadow-[0_10px_28px_rgba(0,0,0,0.36)] backdrop-blur-md" type="button" title="Change cover" aria-label="Change cover" on:click|stopPropagation={() => onReplaceCover?.(song)}>
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+          </button>
+          <button class="grid h-8 w-8 place-items-center rounded-full bg-black text-white shadow-[0_10px_28px_rgba(0,0,0,0.36)] backdrop-blur-md" type="button" title="Remove cover" aria-label="Remove cover" on:click|stopPropagation={() => onRemoveCover?.(song)}>
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18" />
+              <path d="M8 6V4h8v2" />
+              <path d="M19 6l-1 14H6L5 6" />
+              <path d="M10 11v5M14 11v5" />
+            </svg>
+          </button>
+        </div>
+      </div>
       <div class="mt-5 text-center">
         <h2 class="truncate w-full text-2xl font-bold">{song.title}</h2>
         <p class="mt-1 truncate w-full text-base text-white/68">{song.artist}</p>

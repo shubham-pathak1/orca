@@ -448,7 +448,7 @@ fn persist_artwork(
     fs::create_dir_all(artwork_dir).map_err(|e| e.to_string())?;
 
     let ext = artwork_extension_from_mime(mime.unwrap_or("image/jpeg"));
-    let hash = hash_song_path(song_path);
+    let hash = artwork_hash(song_path, bytes);
     let original_path = artwork_dir.join(format!("art_{}.{}", hash, ext));
     let thumb_path = artwork_dir.join(format!("thumb_{}_80.webp", hash));
     let preview_path = artwork_dir.join(format!("preview_{}_256.webp", hash));
@@ -492,9 +492,13 @@ fn write_webp_derivative(
     fs::write(output_path, &output).map_err(|error| error.to_string())
 }
 
-fn hash_song_path(path: &Path) -> u64 {
+// Hash combines the song path with the artwork bytes so the generated
+// filename changes whenever the embedded cover changes. This busts the
+// browser/file cache so a swapped cover shows up immediately.
+fn artwork_hash(song_path: &Path, bytes: &[u8]) -> u64 {
     let mut hasher = DefaultHasher::new();
-    path.to_string_lossy().hash(&mut hasher);
+    song_path.to_string_lossy().hash(&mut hasher);
+    bytes.hash(&mut hasher);
     hasher.finish()
 }
 

@@ -771,7 +771,7 @@ pub struct AlbumEntry {
 pub fn get_artists(conn: &Connection) -> Result<Vec<ArtistEntry>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT s.artist, COUNT(*), COALESCE(aa.artwork_path, COALESCE(MAX(s.artwork_preview_url), MAX(s.artwork_thumb_url)))
+            "SELECT s.artist, COUNT(*), aa.artwork_path
              FROM songs s
              LEFT JOIN artist_artworks aa ON s.artist = aa.artist_name
              GROUP BY s.artist
