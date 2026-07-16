@@ -118,7 +118,7 @@
   $: artistCount = artists.length;
   $: ambientArtwork = artworkUrl((nowPlaying ?? selectedSong)?.artwork_preview ?? (nowPlaying ?? selectedSong)?.artwork ?? null);
   $: shellStyle = [
-    `--cover-art: ${ambientArtwork ? `url("${ambientArtwork}")` : 'none'}`,
+    `--cover-art: ${ambientArtwork ? `url("${ambientArtwork}")` : 'url("/default_cover.png")'}`,
     `--accent: rgb(${effectiveAccentRgb})`,
     `--accent-soft: rgba(${effectiveAccentRgb}, 0.18)`,
     `--accent-mid: rgba(${effectiveAccentRgb}, 0.34)`,

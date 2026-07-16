@@ -123,6 +123,8 @@
           path={nowPlaying.artwork_thumb ?? nowPlaying.artwork_preview ?? nowPlaying.artwork}
           alt=""
         />
+      {:else}
+        <img src="/default_cover.png" class="h-full w-full object-cover" alt="" />
       {/if}
     </button>
     <div class="min-w-0">
@@ -161,7 +163,7 @@
       </svg>
     </button>
 
-    <div class="group relative" bind:this={volumeGroup} on:wheel|preventDefault|stopPropagation={handleVolumeWheel} on:mouseenter={showVolume} on:mouseleave={hideVolume}>
+    <div class="group relative" role="group" bind:this={volumeGroup} on:wheel|preventDefault|stopPropagation={handleVolumeWheel} on:mouseenter={showVolume} on:mouseleave={hideVolume}>
       <button class="grid h-8 w-8 place-items-center rounded-md text-white/64 transition hover:text-white" type="button" aria-label="Volume" on:click={handleVolumeClick}>
         {#if playback.volume === 0}
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">

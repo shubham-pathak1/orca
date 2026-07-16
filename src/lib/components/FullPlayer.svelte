@@ -468,6 +468,8 @@
             <button class="full-player-cover aspect-square w-full max-w-[min(340px,38vh)] shrink-0 overflow-hidden rounded-lg bg-white/10" title="Show player" on:click={() => (lyricsOpen = false)}>
               {#if song && artworkUrl(song.artwork)}
                 <img class="h-full w-full object-cover" src={artworkUrl(song.artwork) ?? ''} alt="" />
+              {:else}
+                <img src="/default_cover.png" class="h-full w-full object-cover" alt="" />
               {/if}
             </button>
 
@@ -546,6 +548,8 @@
           <div class="full-player-cover aspect-square w-full max-w-[min(420px,48vh)] shrink-0 overflow-hidden rounded-lg bg-white/10">
             {#if song && artworkUrl(song.artwork)}
               <img class="h-full w-full object-cover" src={artworkUrl(song.artwork) ?? ''} alt="" />
+            {:else}
+              <img src="/default_cover.png" class="h-full w-full object-cover" alt="" />
             {/if}
           </div>
 
