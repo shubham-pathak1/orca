@@ -125,6 +125,12 @@
   async function loadPeaks(path: string) {
     loadedPath = path;
     peaks = fallbackPeaks(path);
+
+    if (path === '__placeholder__') {
+      isLoadingWaveform = false;
+      return;
+    }
+
     isLoadingWaveform = true;
 
     const cached = readWaveformCache(path);

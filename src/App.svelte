@@ -41,6 +41,7 @@
   } from './lib/tauri';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen } from '@tauri-apps/api/event';
+  import { register, unregister } from '@tauri-apps/plugin-global-shortcut';
   import type { ActiveView } from './lib/navigation';
   import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate, ArtistEntry, AlbumEntry } from './lib/types';
 
@@ -187,6 +188,22 @@
 
     window.addEventListener('keydown', handleKeydown);
 
+    register('MediaPlayPause', (event) => {
+      if (event.state === 'Pressed') {
+        void togglePlayback();
+      }
+    }).catch(e => console.error('Failed to register MediaPlayPause:', e));
+    register('MediaTrackNext', (event) => {
+      if (event.state === 'Pressed') {
+        void playNextSong();
+      }
+    }).catch(e => console.error('Failed to register MediaTrackNext:', e));
+    register('MediaTrackPrevious', (event) => {
+      if (event.state === 'Pressed') {
+        void playPreviousSong();
+      }
+    }).catch(e => console.error('Failed to register MediaTrackPrevious:', e));
+
     const unlisten = listen<number>('scan-progress', (event) => {
       if (isScanning) {
         status = `Scanning... ${event.payload} songs found`;
@@ -196,6 +213,9 @@
     return () => {
       window.clearInterval(timer);
       window.removeEventListener('keydown', handleKeydown);
+      void unregister('MediaPlayPause');
+      void unregister('MediaTrackNext');
+      void unregister('MediaTrackPrevious');
       void unlisten.then((fn) => fn());
     };
   });

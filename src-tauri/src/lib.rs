@@ -94,7 +94,11 @@ fn add_scan_root(state: &OrcaState, folder: PathBuf) -> Result<Vec<PathBuf>, Str
 fn infer_scan_roots(songs: &[LocalSong]) -> Vec<PathBuf> {
     let mut dirs = songs
         .iter()
-        .filter_map(|song| PathBuf::from(&song.path).parent().map(|path| normalize_path(path.to_path_buf())))
+        .filter_map(|song| {
+            PathBuf::from(&song.path)
+                .parent()
+                .map(|path| normalize_path(path.to_path_buf()))
+        })
         .filter(|path| path.exists() && path.is_dir())
         .collect::<Vec<_>>();
 
@@ -140,7 +144,12 @@ where
     let mut seen_paths = HashSet::new();
 
     for root in roots {
-        let scanned = orca_core::library::scan_music_folder(&root, &artwork_dir, &existing_map, on_progress.clone())?;
+        let scanned = orca_core::library::scan_music_folder(
+            &root,
+            &artwork_dir,
+            &existing_map,
+            on_progress.clone(),
+        )?;
         for song in scanned {
             if seen_paths.insert(song.path.clone()) {
                 songs.push(song);
@@ -186,7 +195,8 @@ fn load_state() -> Result<OrcaState, String> {
     let conn = db::init_db(app_dir)?;
     db::migrate_inline_artwork_to_files(&conn, &artwork_dir)?;
     let songs = db::get_all_songs(&conn)?;
-    let (audio_tx, playback_state, visualizer_data) = audio_engine::spawn_audio_thread::<fn(&str, u64)>(None);
+    let (audio_tx, playback_state, visualizer_data) =
+        audio_engine::spawn_audio_thread::<fn(&str, u64)>(None);
 
     Ok(OrcaState {
         db_conn: conn,
@@ -220,7 +230,11 @@ fn library_scan_roots(state: State<'_, SharedOrcaState>) -> Result<Vec<String>, 
 }
 
 #[tauri::command]
-async fn remove_library_scan_root(root: String, app: tauri::AppHandle, state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
+async fn remove_library_scan_root(
+    root: String,
+    app: tauri::AppHandle,
+    state: State<'_, SharedOrcaState>,
+) -> Result<LibrarySnapshot, String> {
     let target = normalize_path(PathBuf::from(root));
     let (artwork_dir, roots, existing_map) = {
         let state = state.0.lock().map_err(|error| error.to_string())?;
@@ -241,9 +255,11 @@ async fn remove_library_scan_root(root: String, app: tauri::AppHandle, state: St
             let n = progress_clone.fetch_add(1, Ordering::Relaxed) + 1;
             app_clone.emit("scan-progress", n).ok();
         };
-        tauri::async_runtime::spawn_blocking(move || scan_roots(remaining_roots, artwork_dir, existing_map, on_progress))
-            .await
-            .map_err(|error| error.to_string())??
+        tauri::async_runtime::spawn_blocking(move || {
+            scan_roots(remaining_roots, artwork_dir, existing_map, on_progress)
+        })
+        .await
+        .map_err(|error| error.to_string())??
     };
 
     let mut state = state.0.lock().map_err(|error| error.to_string())?;
@@ -260,7 +276,10 @@ fn list_playlists(state: State<'_, SharedOrcaState>) -> Result<Vec<db::Playlist>
 }
 
 #[tauri::command]
-fn create_playlist(name: String, state: State<'_, SharedOrcaState>) -> Result<Vec<db::Playlist>, String> {
+fn create_playlist(
+    name: String,
+    state: State<'_, SharedOrcaState>,
+) -> Result<Vec<db::Playlist>, String> {
     let name = name.trim();
     if name.is_empty() {
         return Err("Playlist name cannot be empty".to_string());
@@ -272,7 +291,11 @@ fn create_playlist(name: String, state: State<'_, SharedOrcaState>) -> Result<Ve
 }
 
 #[tauri::command]
-fn rename_playlist(playlist_id: i64, name: String, state: State<'_, SharedOrcaState>) -> Result<Vec<db::Playlist>, String> {
+fn rename_playlist(
+    playlist_id: i64,
+    name: String,
+    state: State<'_, SharedOrcaState>,
+) -> Result<Vec<db::Playlist>, String> {
     let name = name.trim();
     if name.is_empty() {
         return Err("Playlist name cannot be empty".to_string());
@@ -284,34 +307,51 @@ fn rename_playlist(playlist_id: i64, name: String, state: State<'_, SharedOrcaSt
 }
 
 #[tauri::command]
-fn delete_playlist(playlist_id: i64, state: State<'_, SharedOrcaState>) -> Result<Vec<db::Playlist>, String> {
+fn delete_playlist(
+    playlist_id: i64,
+    state: State<'_, SharedOrcaState>,
+) -> Result<Vec<db::Playlist>, String> {
     let state = state.0.lock().map_err(|error| error.to_string())?;
     db::delete_playlist(&state.db_conn, playlist_id)?;
     db::get_playlists(&state.db_conn)
 }
 
 #[tauri::command]
-fn add_song_to_playlist(playlist_id: i64, song_id: i64, state: State<'_, SharedOrcaState>) -> Result<Vec<db::Playlist>, String> {
+fn add_song_to_playlist(
+    playlist_id: i64,
+    song_id: i64,
+    state: State<'_, SharedOrcaState>,
+) -> Result<Vec<db::Playlist>, String> {
     let state = state.0.lock().map_err(|error| error.to_string())?;
     db::add_to_playlist(&state.db_conn, playlist_id, song_id)?;
     db::get_playlists(&state.db_conn)
 }
 
 #[tauri::command]
-fn remove_song_from_playlist(playlist_id: i64, song_id: i64, state: State<'_, SharedOrcaState>) -> Result<Vec<db::Playlist>, String> {
+fn remove_song_from_playlist(
+    playlist_id: i64,
+    song_id: i64,
+    state: State<'_, SharedOrcaState>,
+) -> Result<Vec<db::Playlist>, String> {
     let state = state.0.lock().map_err(|error| error.to_string())?;
     db::remove_from_playlist(&state.db_conn, playlist_id, song_id)?;
     db::get_playlists(&state.db_conn)
 }
 
 #[tauri::command]
-fn playlist_song_ids(playlist_id: i64, state: State<'_, SharedOrcaState>) -> Result<Vec<i64>, String> {
+fn playlist_song_ids(
+    playlist_id: i64,
+    state: State<'_, SharedOrcaState>,
+) -> Result<Vec<i64>, String> {
     let state = state.0.lock().map_err(|error| error.to_string())?;
     db::get_playlist_song_ids(&state.db_conn, playlist_id)
 }
 
 #[tauri::command]
-fn choose_playlist_cover(playlist_id: i64, state: State<'_, SharedOrcaState>) -> Result<Vec<db::Playlist>, String> {
+fn choose_playlist_cover(
+    playlist_id: i64,
+    state: State<'_, SharedOrcaState>,
+) -> Result<Vec<db::Playlist>, String> {
     let Some(path) = rfd::FileDialog::new()
         .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
         .pick_file()
@@ -325,14 +365,20 @@ fn choose_playlist_cover(playlist_id: i64, state: State<'_, SharedOrcaState>) ->
 }
 
 #[tauri::command]
-fn remove_playlist_cover(playlist_id: i64, state: State<'_, SharedOrcaState>) -> Result<Vec<db::Playlist>, String> {
+fn remove_playlist_cover(
+    playlist_id: i64,
+    state: State<'_, SharedOrcaState>,
+) -> Result<Vec<db::Playlist>, String> {
     let state = state.0.lock().map_err(|error| error.to_string())?;
     db::update_playlist_cover(&state.db_conn, playlist_id, None)?;
     db::get_playlists(&state.db_conn)
 }
 
 #[tauri::command]
-fn choose_artist_cover(artist_name: String, state: State<'_, SharedOrcaState>) -> Result<Vec<db::ArtistEntry>, String> {
+fn choose_artist_cover(
+    artist_name: String,
+    state: State<'_, SharedOrcaState>,
+) -> Result<Vec<db::ArtistEntry>, String> {
     let Some(image_path) = rfd::FileDialog::new()
         .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
         .pick_file()
@@ -341,19 +387,29 @@ fn choose_artist_cover(artist_name: String, state: State<'_, SharedOrcaState>) -
     };
 
     let state = state.0.lock().map_err(|error| error.to_string())?;
-    db::update_artist_artwork(&state.db_conn, &artist_name, Some(&image_path.to_string_lossy()))?;
+    db::update_artist_artwork(
+        &state.db_conn,
+        &artist_name,
+        Some(&image_path.to_string_lossy()),
+    )?;
     db::get_artists(&state.db_conn)
 }
 
 #[tauri::command]
-fn remove_artist_cover(artist_name: String, state: State<'_, SharedOrcaState>) -> Result<Vec<db::ArtistEntry>, String> {
+fn remove_artist_cover(
+    artist_name: String,
+    state: State<'_, SharedOrcaState>,
+) -> Result<Vec<db::ArtistEntry>, String> {
     let state = state.0.lock().map_err(|error| error.to_string())?;
     db::remove_artist_artwork(&state.db_conn, &artist_name)?;
     db::get_artists(&state.db_conn)
 }
 
 #[tauri::command]
-fn choose_album_cover(album_key: String, state: State<'_, SharedOrcaState>) -> Result<Vec<db::AlbumEntry>, String> {
+fn choose_album_cover(
+    album_key: String,
+    state: State<'_, SharedOrcaState>,
+) -> Result<Vec<db::AlbumEntry>, String> {
     let Some(image_path) = rfd::FileDialog::new()
         .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
         .pick_file()
@@ -362,19 +418,29 @@ fn choose_album_cover(album_key: String, state: State<'_, SharedOrcaState>) -> R
     };
 
     let state = state.0.lock().map_err(|error| error.to_string())?;
-    db::update_album_artwork(&state.db_conn, &album_key, Some(&image_path.to_string_lossy()))?;
+    db::update_album_artwork(
+        &state.db_conn,
+        &album_key,
+        Some(&image_path.to_string_lossy()),
+    )?;
     db::get_albums(&state.db_conn)
 }
 
 #[tauri::command]
-fn remove_album_cover(album_key: String, state: State<'_, SharedOrcaState>) -> Result<Vec<db::AlbumEntry>, String> {
+fn remove_album_cover(
+    album_key: String,
+    state: State<'_, SharedOrcaState>,
+) -> Result<Vec<db::AlbumEntry>, String> {
     let state = state.0.lock().map_err(|error| error.to_string())?;
     db::remove_album_artwork(&state.db_conn, &album_key)?;
     db::get_albums(&state.db_conn)
 }
 
 #[tauri::command]
-async fn update_song_metadata(update: SongMetadataUpdate, state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
+async fn update_song_metadata(
+    update: SongMetadataUpdate,
+    state: State<'_, SharedOrcaState>,
+) -> Result<LibrarySnapshot, String> {
     let path = PathBuf::from(&update.path);
     let edit_path = path.clone();
 
@@ -387,7 +453,10 @@ async fn update_song_metadata(update: SongMetadataUpdate, state: State<'_, Share
 }
 
 #[tauri::command]
-async fn choose_song_cover(path: String, state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
+async fn choose_song_cover(
+    path: String,
+    state: State<'_, SharedOrcaState>,
+) -> Result<LibrarySnapshot, String> {
     let Some(image_path) = rfd::FileDialog::new()
         .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
         .pick_file()
@@ -397,16 +466,21 @@ async fn choose_song_cover(path: String, state: State<'_, SharedOrcaState>) -> R
 
     let song_path = PathBuf::from(path);
     let edit_path = song_path.clone();
-    tauri::async_runtime::spawn_blocking(move || orca_core::library::replace_song_cover(&song_path, &image_path))
-        .await
-        .map_err(|error| error.to_string())??;
+    tauri::async_runtime::spawn_blocking(move || {
+        orca_core::library::replace_song_cover(&song_path, &image_path)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
 
     let mut state = state.0.lock().map_err(|error| error.to_string())?;
     refresh_edited_song(&mut state, edit_path)
 }
 
 #[tauri::command]
-async fn remove_song_cover(path: String, state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
+async fn remove_song_cover(
+    path: String,
+    state: State<'_, SharedOrcaState>,
+) -> Result<LibrarySnapshot, String> {
     let song_path = PathBuf::from(path);
     let edit_path = song_path.clone();
     tauri::async_runtime::spawn_blocking(move || orca_core::library::remove_song_cover(&song_path))
@@ -424,7 +498,10 @@ fn playback_snapshot(state: State<'_, SharedOrcaState>) -> Result<PlaybackState,
 }
 
 #[tauri::command]
-async fn pick_and_scan_folder(app: tauri::AppHandle, state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
+async fn pick_and_scan_folder(
+    app: tauri::AppHandle,
+    state: State<'_, SharedOrcaState>,
+) -> Result<LibrarySnapshot, String> {
     let Some(folder) = rfd::FileDialog::new().pick_folder() else {
         return Err("Folder selection cancelled".to_string());
     };
@@ -443,9 +520,11 @@ async fn pick_and_scan_folder(app: tauri::AppHandle, state: State<'_, SharedOrca
         let n = progress_clone.fetch_add(1, Ordering::Relaxed) + 1;
         app_clone.emit("scan-progress", n).ok();
     };
-    let scanned = tauri::async_runtime::spawn_blocking(move || scan_roots(roots, artwork_dir, existing_map, on_progress))
-        .await
-        .map_err(|error| error.to_string())??;
+    let scanned = tauri::async_runtime::spawn_blocking(move || {
+        scan_roots(roots, artwork_dir, existing_map, on_progress)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
 
     let mut state = state.0.lock().map_err(|error| error.to_string())?;
     db::replace_songs_in_db(&state.db_conn, &scanned)?;
@@ -454,7 +533,10 @@ async fn pick_and_scan_folder(app: tauri::AppHandle, state: State<'_, SharedOrca
 }
 
 #[tauri::command]
-async fn rescan_library(app: tauri::AppHandle, state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
+async fn rescan_library(
+    app: tauri::AppHandle,
+    state: State<'_, SharedOrcaState>,
+) -> Result<LibrarySnapshot, String> {
     let (artwork_dir, roots, existing_map) = {
         let state = state.0.lock().map_err(|error| error.to_string())?;
         let mut roots = load_scan_roots(&state);
@@ -481,9 +563,11 @@ async fn rescan_library(app: tauri::AppHandle, state: State<'_, SharedOrcaState>
         let n = progress_clone.fetch_add(1, Ordering::Relaxed) + 1;
         app_clone.emit("scan-progress", n).ok();
     };
-    let scanned = tauri::async_runtime::spawn_blocking(move || scan_roots(roots, artwork_dir, existing_map, on_progress))
-        .await
-        .map_err(|error| error.to_string())??;
+    let scanned = tauri::async_runtime::spawn_blocking(move || {
+        scan_roots(roots, artwork_dir, existing_map, on_progress)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
 
     let mut state = state.0.lock().map_err(|error| error.to_string())?;
     db::replace_songs_in_db(&state.db_conn, &scanned)?;
@@ -494,7 +578,9 @@ async fn rescan_library(app: tauri::AppHandle, state: State<'_, SharedOrcaState>
 #[tauri::command]
 fn play_song(path: String, state: State<'_, SharedOrcaState>) -> Result<PlaybackState, String> {
     if !std::path::Path::new(&path).exists() {
-        return Err("File not found. Your music folder may have moved — try rescanning.".to_string());
+        return Err(
+            "File not found. Your music folder may have moved — try rescanning.".to_string(),
+        );
     }
     let state = state.0.lock().map_err(|error| error.to_string())?;
     state
@@ -506,9 +592,14 @@ fn play_song(path: String, state: State<'_, SharedOrcaState>) -> Result<Playback
 }
 
 #[tauri::command]
-fn queue_next_playback(path: String, state: State<'_, SharedOrcaState>) -> Result<PlaybackState, String> {
+fn queue_next_playback(
+    path: String,
+    state: State<'_, SharedOrcaState>,
+) -> Result<PlaybackState, String> {
     if !std::path::Path::new(&path).exists() {
-        return Err("File not found. Your music folder may have moved — try rescanning.".to_string());
+        return Err(
+            "File not found. Your music folder may have moved — try rescanning.".to_string(),
+        );
     }
     let state = state.0.lock().map_err(|error| error.to_string())?;
     state
@@ -545,7 +636,10 @@ fn resume_playback(state: State<'_, SharedOrcaState>) -> Result<PlaybackState, S
 }
 
 #[tauri::command]
-fn seek_playback(position_ms: u64, state: State<'_, SharedOrcaState>) -> Result<PlaybackState, String> {
+fn seek_playback(
+    position_ms: u64,
+    state: State<'_, SharedOrcaState>,
+) -> Result<PlaybackState, String> {
     let state = state.0.lock().map_err(|error| error.to_string())?;
     state
         .audio_tx
@@ -605,6 +699,7 @@ async fn waveform_peaks(
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let state = load_state().map_err(|error| Box::<dyn std::error::Error>::from(error))?;
