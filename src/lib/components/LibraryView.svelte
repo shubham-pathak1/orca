@@ -810,7 +810,7 @@
                   {#if artworkUrl(song.artwork)}
                     <LazyArtwork rootClass="h-8 w-8 shrink-0 rounded-sm overflow-hidden" imageClass="h-full w-full object-cover" path={rowArtwork(song)} alt="" />
                   {:else}
-                    <img src="/default_cover.png" class="h-8 w-8 shrink-0 rounded-sm object-cover" alt="" />
+                    <img src="/cover.png" class="h-8 w-8 shrink-0 rounded-sm object-cover" alt="" />
                   {/if}
                   <span class="min-w-0">
                     <span class="block truncate text-sm font-semibold text-white">{song.title}</span>
@@ -903,7 +903,7 @@
                   {#if artworkUrl(song.artwork)}
                     <LazyArtwork rootClass="h-7 w-7 shrink-0 rounded-sm overflow-hidden" imageClass="h-full w-full object-cover" path={rowArtwork(song)} alt="" />
                   {:else}
-                    <img src="/default_cover.png" class="h-7 w-7 shrink-0 rounded-sm object-cover" alt="" />
+                    <img src="/cover.png" class="h-7 w-7 shrink-0 rounded-sm object-cover" alt="" />
                   {/if}
                   <span class="min-w-0">
                     <span class="block truncate text-sm font-semibold text-white">{song.title}</span>
@@ -954,11 +954,11 @@
                 on:click={() => onChooseSong(song, sortedSongs)}
                 on:contextmenu={(event) => openSongMenu(event, song)}
               >
-                <span class={`relative block aspect-square overflow-hidden rounded-md bg-white/[0.07] ${song.path === currentPath ? 'ring-2 ring-[var(--accent)]' : ''}`}>
+                <span class={`relative block aspect-square overflow-hidden rounded-md ${artworkUrl(song.artwork) ? 'bg-white/[0.07]' : ''} ${song.path === currentPath ? 'ring-2 ring-[var(--accent)]' : ''}`}>
                   {#if artworkUrl(song.artwork)}
                     <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={previewArtwork(song)} alt="" />
                   {:else}
-                    <img src="/default_cover.png" class="h-full w-full object-cover" alt="" />
+                    <img src="/cover.png" class="h-full w-full object-cover" alt="" />
                   {/if}
                 </span>
                 <span class="mt-2 block truncate text-sm font-bold text-white">{song.title}</span>
@@ -1062,7 +1062,7 @@
                     {#if artworkUrl(song.artwork)}
                       <LazyArtwork rootClass="h-8 w-8 shrink-0 rounded-sm overflow-hidden" imageClass="h-full w-full object-cover" path={rowArtwork(song)} alt="" />
                     {:else}
-                      <img src="/default_cover.png" class="h-8 w-8 shrink-0 rounded-sm object-cover" alt="" />
+                      <img src="/cover.png" class="h-8 w-8 shrink-0 rounded-sm object-cover" alt="" />
                     {/if}
                     <span class="min-w-0">
                       <span class="block truncate text-sm font-semibold text-white">{song.title}</span>
@@ -1091,7 +1091,7 @@
                       {#if artworkUrl(album.artwork)}
                         <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={album.artwork} alt="" />
                       {:else}
-                        <img src="/default_cover.png" class="h-full w-full object-cover" alt="" />
+                        <img src="/cover.png" class="h-full w-full object-cover" alt="" />
                       {/if}
                     </div>
                     <p class="mt-2 truncate text-xs font-bold">{album.title}</p>
@@ -1108,11 +1108,11 @@
             {#if albumEntries.length}
               {#each albumEntries as album}
               <button data-letter={initialFromText(album.title)} class="text-left opacity-82 transition hover:opacity-100" on:click={() => openAlbum(album.key)}>
-                <div class="aspect-square overflow-hidden rounded-md bg-white/8">
+                <div class={`relative aspect-square overflow-hidden rounded-md ${artworkUrl(album.artwork) ? 'bg-white/[0.07]' : ''}`}>
                   {#if artworkUrl(album.artwork)}
                     <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={album.artwork} alt="" />
                   {:else}
-                    <img src="/default_cover.png" class="h-full w-full object-cover" alt="" />
+                    <img src="/cover.png" class="h-full w-full object-cover" alt="" />
                   {/if}
                 </div>
                 <p class="mt-2 truncate text-sm font-semibold">{album.title}</p>
@@ -1234,7 +1234,7 @@
                       {#if artworkUrl(album.artwork)}
                         <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={album.artwork} alt="" />
                       {:else}
-                        <img src="/default_cover.png" class="h-full w-full object-cover" alt="" />
+                        <img src="/cover.png" class="h-full w-full object-cover" alt="" />
                       {/if}
                     </div>
                     <p class="mt-2 truncate text-xs font-bold">{album.title}</p>
@@ -1251,14 +1251,12 @@
             {#if artistEntries.length}
               {#each artistEntries as artist}
               <button data-letter={initialFromText(artist.name)} class="flex min-w-0 items-center gap-3 border-b border-white/[0.04] px-2 py-3 text-left transition hover:bg-white/[0.035]" on:click={() => openArtist(artist.name)}>
-                {#if !textOnlyMode}
-                  {#if artworkUrl(artist.artwork)}
-                    <LazyArtwork rootClass="h-10 w-10 shrink-0 rounded-full overflow-hidden opacity-90" imageClass="h-full w-full object-cover" path={artist.artwork} alt="" />
-                  {:else}
-                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/[0.06] text-xs font-bold text-white/32">
-                      {artist.name.charAt(0).toUpperCase()}
-                    </span>
-                  {/if}
+                {#if artworkUrl(artist.artwork)}
+                  <LazyArtwork rootClass="h-10 w-10 shrink-0 rounded-full overflow-hidden opacity-90" imageClass="h-full w-full object-cover" path={artist.artwork} alt="" />
+                {:else}
+                  <span class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/[0.06] text-xs font-bold text-white/32">
+                    {artist.name.charAt(0).toUpperCase()}
+                  </span>
                 {/if}
                 <span class="min-w-0">
                   <span class="block truncate text-sm font-semibold">{artist.name}</span>

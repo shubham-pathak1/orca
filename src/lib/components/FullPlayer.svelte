@@ -465,11 +465,11 @@
       {#if lyricsOpen}
         <div class="lyrics-player-layout grid min-h-0 flex-1 grid-cols-[minmax(280px,390px)_minmax(0,900px)] items-center justify-center gap-10 pt-2 max-lg:grid-cols-1 max-lg:items-stretch">
           <div class="lyrics-side-player flex min-h-0 flex-col items-center justify-center text-center max-lg:hidden">
-            <button class="full-player-cover aspect-square w-full max-w-[min(340px,38vh)] shrink-0 overflow-hidden rounded-lg bg-white/10" title="Show player" on:click={() => (lyricsOpen = false)}>
+            <button class={`full-player-cover aspect-square w-full max-w-[min(340px,38vh)] shrink-0 overflow-hidden rounded-lg ${song?.artwork ? 'bg-white/10' : ''}`} title="Show player" on:click={() => (lyricsOpen = false)}>
               {#if song && artworkUrl(song.artwork)}
                 <img class="h-full w-full object-cover" src={artworkUrl(song.artwork) ?? ''} alt="" />
               {:else}
-                <img src="/default_cover.png" class="h-full w-full object-cover" alt="" />
+                <img src="/cover.png" class="h-full w-full object-cover" alt="" />
               {/if}
             </button>
 
@@ -545,11 +545,11 @@
         </div>
       {:else}
         <div class="flex min-h-0 flex-1 flex-col items-center justify-center pb-10 text-center">
-          <div class="full-player-cover aspect-square w-full max-w-[min(420px,48vh)] shrink-0 overflow-hidden rounded-lg bg-white/10">
+          <div class={`full-player-cover aspect-square w-full max-w-[min(420px,48vh)] shrink-0 overflow-hidden rounded-lg ${song?.artwork ? 'bg-white/10' : ''}`}>
             {#if song && artworkUrl(song.artwork)}
               <img class="h-full w-full object-cover" src={artworkUrl(song.artwork) ?? ''} alt="" />
             {:else}
-              <img src="/default_cover.png" class="h-full w-full object-cover" alt="" />
+              <img src="/cover.png" class="h-full w-full object-cover" alt="" />
             {/if}
           </div>
 
