@@ -163,6 +163,22 @@ export async function playbackSnapshot(): Promise<PlaybackState> {
   return invoke<PlaybackState>('playback_snapshot').catch(() => fallbackPlayback);
 }
 
+export async function updateMediaControls(update: {
+  title?: string;
+  artist?: string;
+  album?: string;
+  duration?: number;
+  playing: boolean;
+  progress?: number;
+  cover_url?: string;
+}): Promise<void> {
+  try {
+    await invoke('update_media_controls', { update });
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 export function artworkUrl(path: string | null): string | null {
   return cachedFileSrc(path);
 }

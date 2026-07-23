@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import AppBackdrop from './lib/components/AppBackdrop.svelte';
   import DetailsPanel from './lib/components/DetailsPanel.svelte';
   import FullPlayer from './lib/components/FullPlayer.svelte';
@@ -37,11 +37,14 @@
     resumePlayback,
     seekPlayback,
     setVolume,
-    updateSongMetadata
+    updateSongMetadata,
+    updateMediaControls
   } from './lib/tauri';
   import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { register, unregister } from '@tauri-apps/plugin-global-shortcut';
+  import { isSupported as isTaskbarSupported, setPlaybackState, setNavigationEnabled } from 'tauri-plugin-taskbar';
   import type { ActiveView } from './lib/navigation';
   import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate, ArtistEntry, AlbumEntry } from './lib/types';
 
@@ -88,11 +91,34 @@
   let handledEndedPath: string | null = null;
   let queuedNextForPath: string | null = null;
   let queuedNextPath: string | null = null;
+  let taskbarSupported = false;
+  let previousControlSync = { path: null as string | null, playing: false };
   $: bottomRowSize = '96px';
   $: defaultAccentRgb = '245,245,245';
   $: effectiveAccentRgb = dynamicCoverAccent && sampledArtwork ? accentRgb : defaultAccentRgb;
   $: if (playback.current_path) {
     window.localStorage.setItem('orca.lastPlayedPath', playback.current_path);
+  }
+  $: if (playback.current_path !== previousControlSync.path || playback.is_playing !== previousControlSync.playing) {
+    const nowPlaying = songs.find((s) => s.path === playback.current_path);
+    if (nowPlaying) {
+      updateMediaControls({
+        title: nowPlaying.title || nowPlaying.path.split('/').pop()?.split('\\').pop() || 'Unknown',
+        artist: nowPlaying.artist,
+        album: nowPlaying.album,
+        duration: nowPlaying.duration ? nowPlaying.duration / 1000 : undefined,
+        cover_url: 'file://' + (nowPlaying.artwork || 'D:\\projects\\orca\\public\\cover.png'),
+        playing: playback.is_playing,
+        progress: playback.position_ms / 1000,
+      }).catch(console.error);
+      previousControlSync = { path: playback.current_path, playing: playback.is_playing };
+      if (taskbarSupported) {
+        invoke('plugin:taskbar|set_playback_state', {
+          isPlaying: playback.is_playing,
+          is_playing: playback.is_playing
+        }).catch(console.error);
+      }
+    }
   }
 
   $: filteredSongs = songs.filter((song) => {
@@ -119,7 +145,7 @@
   $: artistCount = artists.length;
   $: ambientArtwork = artworkUrl((nowPlaying ?? selectedSong)?.artwork_preview ?? (nowPlaying ?? selectedSong)?.artwork ?? null);
   $: shellStyle = [
-    `--cover-art: ${ambientArtwork ? `url("${ambientArtwork}")` : 'url("/default_cover.png")'}`,
+    `--cover-art: ${ambientArtwork ? `url("${ambientArtwork}")` : 'url("/cover.png")'}`,
     `--accent: rgb(${effectiveAccentRgb})`,
     `--accent-soft: rgba(${effectiveAccentRgb}, 0.18)`,
     `--accent-mid: rgba(${effectiveAccentRgb}, 0.34)`,
@@ -152,9 +178,18 @@
       selectedPath = lastPlayedPath;
     }
 
-
-
     void (async () => {
+      taskbarSupported = await isTaskbarSupported().catch(() => false);
+      if (taskbarSupported) {
+        // autoAttach is true in tauri.conf.json, so buttons are attached automatically.
+        // We just need to set the initial state after a short delay to ensure window is ready.
+        await new Promise(r => setTimeout(r, 500));
+        await setNavigationEnabled(true, true).catch(e => console.error('Taskbar nav error:', e));
+        await invoke('plugin:taskbar|set_playback_state', {
+          isPlaying: false,
+          is_playing: false
+        }).catch(e => console.error('Taskbar state error:', e));
+      }
       const snapshot = await getLibrarySnapshot();
       applyLibrarySnapshot(snapshot);
 
@@ -188,6 +223,13 @@
 
     window.addEventListener('keydown', handleKeydown);
 
+    let unlisteners: Array<() => void> = [];
+    listen('media-play', () => resumePlayback()).then(u => unlisteners.push(u));
+    listen('media-pause', () => pausePlayback()).then(u => unlisteners.push(u));
+    listen('media-toggle', () => togglePlayback()).then(u => unlisteners.push(u));
+    listen('media-next', () => playNextSong()).then(u => unlisteners.push(u));
+    listen('media-prev', () => playPreviousSong()).then(u => unlisteners.push(u));
+
     register('MediaPlayPause', (event) => {
       if (event.state === 'Pressed') {
         void togglePlayback();
@@ -209,13 +251,16 @@
         status = `Scanning... ${event.payload} songs found`;
       }
     });
-
+    
     return () => {
       window.clearInterval(timer);
-      window.removeEventListener('keydown', handleKeydown);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('keydown', handleKeydown);
+      }
       void unregister('MediaPlayPause');
       void unregister('MediaTrackNext');
       void unregister('MediaTrackPrevious');
+      unlisteners.forEach(u => u());
       void unlisten.then((fn) => fn());
     };
   });
@@ -436,6 +481,10 @@
       handledEndedPath = null;
     }
 
+    if (taskbarSupported && previousPlayback.is_playing !== nextPlayback.is_playing) {
+      void setPlaybackState(nextPlayback.is_playing).catch(() => {});
+    }
+
     await maybeQueueNextTrack(nextPlayback);
 
     if (!nextPlayback.current_path || isHandlingTrackEnd || handledEndedPath === nextPlayback.current_path) {
@@ -557,13 +606,41 @@
       return;
     }
 
-    if (event.altKey && key === 'n') {
+    if (event.altKey && key === 'l') {
+      event.preventDefault();
+      activeView = 'songs';
+      fullPlayerOpen = false;
+      return;
+    }
+
+    if (event.altKey && key === 'a') {
+      event.preventDefault();
+      activeView = 'artists';
+      fullPlayerOpen = false;
+      return;
+    }
+
+    if (event.altKey && key === 'b') {
+      event.preventDefault();
+      activeView = 'albums';
+      fullPlayerOpen = false;
+      return;
+    }
+
+    if (event.altKey && key === 'p') {
+      event.preventDefault();
+      activeView = 'playlists';
+      fullPlayerOpen = false;
+      return;
+    }
+
+    if (event.altKey && event.key === 'ArrowRight') {
       event.preventDefault();
       await playNextSong();
       return;
     }
 
-    if (event.altKey && key === 'p') {
+    if (event.altKey && event.key === 'ArrowLeft') {
       event.preventDefault();
       await playPreviousSong();
       return;
