@@ -25,6 +25,7 @@ struct OrcaState {
     playback_state: Arc<Mutex<PlaybackState>>,
     #[allow(dead_code)]
     visualizer_data: VisualizerData,
+    media_controls: Option<souvlaki::MediaControls>,
 }
 
 struct SharedOrcaState(Mutex<OrcaState>);
@@ -205,6 +206,7 @@ fn load_state() -> Result<OrcaState, String> {
         audio_tx,
         playback_state,
         visualizer_data,
+        media_controls: None,
     })
 }
 
@@ -697,12 +699,108 @@ async fn waveform_peaks(
     Ok(peaks)
 }
 
+#[derive(serde::Deserialize)]
+pub struct MediaControlsUpdate {
+    title: Option<String>,
+    artist: Option<String>,
+    album: Option<String>,
+    duration: Option<f64>,
+    playing: bool,
+    progress: Option<f64>,
+    cover_url: Option<String>,
+}
+
+#[tauri::command]
+fn update_media_controls(update: MediaControlsUpdate, state: State<'_, SharedOrcaState>) -> Result<(), String> {
+    let mut state = state.0.lock().map_err(|error| error.to_string())?;
+    
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(controls) = &mut state.media_controls {
+            use souvlaki::{MediaMetadata, MediaPlayback, MediaPosition};
+            use std::time::Duration;
+            
+            let metadata = MediaMetadata {
+                title: update.title.as_deref(),
+                album: update.album.as_deref(),
+                artist: update.artist.as_deref(),
+                duration: update.duration.map(Duration::from_secs_f64),
+                cover_url: update.cover_url.as_deref(),
+                ..Default::default()
+            };
+            println!("Updating media controls metadata: {:?}", update.title);
+            
+            controls.set_metadata(metadata).map_err(|e| e.to_string())?;
+
+            let progress = update.progress.map(|p| MediaPosition(Duration::from_secs_f64(p)));
+            let playback = if update.playing {
+                MediaPlayback::Playing { progress }
+            } else {
+                MediaPlayback::Paused { progress }
+            };
+            
+            controls.set_playback(playback).map_err(|e| e.to_string())?;
+        }
+    }
+    
+    Ok(())
+}
+
 pub fn run() {
+    // Register the App User Model ID so Windows taskbar thumbnail buttons
+    // work in both the installed version and the portable .exe.
+    #[cfg(target_os = "windows")]
+    {
+        // use windows::core::PCWSTR;
+        // use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+        // let aumid: Vec<u16> = "dev.orca.player\0".encode_utf16().collect();
+        // let _ = unsafe { SetCurrentProcessExplicitAppUserModelID(PCWSTR(aumid.as_ptr())) };
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_taskbar::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let state = load_state().map_err(|error| Box::<dyn std::error::Error>::from(error))?;
+            
+            let mut state = state;
+
+            // Initialize souvlaki MediaControls
+            #[cfg(target_os = "windows")]
+            {
+                use souvlaki::{PlatformConfig, MediaControls, MediaControlEvent};
+                use tauri::Manager;
+                
+                let hwnd = app.get_webview_window("main").unwrap().hwnd().unwrap().0 as *mut _;
+                let config = PlatformConfig {
+                    dbus_name: "orca",
+                    display_name: "Orca",
+                    hwnd: Some(hwnd),
+                };
+                
+                match MediaControls::new(config) {
+                    Ok(mut controls) => {
+                        let app_handle = app.handle().clone();
+                        controls.attach(move |event| {
+                            match event {
+                                MediaControlEvent::Play => { let _ = app_handle.emit("media-play", ()); }
+                                MediaControlEvent::Pause => { let _ = app_handle.emit("media-pause", ()); }
+                                MediaControlEvent::Toggle => { let _ = app_handle.emit("media-toggle", ()); }
+                                MediaControlEvent::Next => { let _ = app_handle.emit("media-next", ()); }
+                                MediaControlEvent::Previous => { let _ = app_handle.emit("media-prev", ()); }
+                                _ => {}
+                            }
+                        }).ok();
+                        
+                        state.media_controls = Some(controls);
+                        println!("Successfully initialized souvlaki MediaControls");
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to initialize souvlaki MediaControls: {:?}", e);
+                    }
+                }
+            }
+
             app.manage(SharedOrcaState(Mutex::new(state)));
             Ok(())
         })
@@ -735,9 +833,11 @@ pub fn run() {
             pause_playback,
             resume_playback,
             seek_playback,
-            set_volume,
-            waveform_peaks
+            waveform_peaks,
+            playback_snapshot,
+            update_media_controls,
+            set_volume
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Orca");
+        .expect("error while running tauri application");
 }
