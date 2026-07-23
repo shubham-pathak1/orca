@@ -5,6 +5,10 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "opener:default"
+    "opener:default",
+    "taskbar:allow-initialize",
+    "taskbar:allow-set-playback-state",
+    "taskbar:allow-set-navigation-enabled",
+    "taskbar:allow-is-supported"
   ]
 }

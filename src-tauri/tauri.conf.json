@@ -9,6 +9,20 @@
     "devUrl": "http://127.0.0.1:1420",
     "frontendDist": "../dist"
   },
+  "plugins": {
+    "taskbar": {
+      "autoAttach": true,
+      "windowLabel": "main",
+      "icons": {
+        "previous": "icons/taskbar/PREV_THUMB.ico",
+        "previousDisabled": "icons/taskbar/PREV_THUMB_DISABLED.ico",
+        "play": "icons/taskbar/PLAY_THUMB.ico",
+        "pause": "icons/taskbar/PAUSE_THUMB.ico",
+        "next": "icons/taskbar/NEXT_THUMB.ico",
+        "nextDisabled": "icons/taskbar/NEXT_THUMB_DISABLED.ico"
+      }
+    }
+  },
   "app": {
     "windows": [
       {
@@ -31,6 +45,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "resources": ["icons/taskbar/*"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
