@@ -15,6 +15,7 @@ Orca is a local music player for Windows built using Svelte 5, Tauri 2, and Rust
 - **LRC Lyrics**: Sync with LRCLIB to fetch lyrics, with support for clicking lyric lines to seek.
 - **Metadata Editing**: Edit tags (title, artist, album, genre, cover art) directly in the app.
 - **Playlists**: Create and manage playlists, including custom playlist cover art.
+- **System Integration**: Taskbar hover controls, global media keys, and Windows SMTC media overlay support.
 - **Layouts**: Ambient artwork color backgrounds, sidebar navigation, queue management, and toggleable layout modes.
 
 ---
