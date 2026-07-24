@@ -32,10 +32,14 @@
   export let onRemoveArtistCover: (artistName: string) => Promise<void> | void = () => {};
   export let onChooseAlbumCover: (albumKey: string) => Promise<void> | void = () => {};
   export let onRemoveAlbumCover: (albumKey: string) => Promise<void> | void = () => {};
+  export let onFetchArtistArtworkManual: (artistName: string) => Promise<void> | void = () => {};
+  export let onFetchAlbumArtworkManual: (albumKey: string, artist: string, album: string) => Promise<void> | void = () => {};
   export let onRemoveSongFromPlaylist: (playlistId: number, song: LocalSong) => Promise<void> | void = () => {};
   export let onEditSong: (song: LocalSong) => void = () => {};
   export let playerPlacement: 'right' | 'bottom' = 'right';
   export let onPlayerPlacementChange: (placement: 'right' | 'bottom') => void = () => {};
+  export let sidebarMode: 'expanded' | 'collapsed' = 'expanded';
+  export let onSidebarModeChange: (mode: 'expanded' | 'collapsed') => void = () => {};
   export let seekbarStyle: 'standard' | 'waveform' = 'standard';
   export let onSeekbarStyleChange: (style: 'standard' | 'waveform') => void = () => {};
   export let scanRoots: string[] = [];
@@ -45,6 +49,8 @@
   export let onDynamicCoverAccentChange: (enabled: boolean) => void = () => {};
   export let blurredBackground = true;
   export let onBlurredBackgroundChange: (enabled: boolean) => void = () => {};
+  export let autoFetchArtwork = false;
+  export let onAutoFetchArtworkChange: (enabled: boolean) => void = () => {};
   export let fontFamily = 'Plus Jakarta Sans';
   export let onFontFamilyChange: (font: string) => void = () => {};
   export let fontSizePercent = 100;
@@ -67,6 +73,8 @@
   let isCreatingPlaylist = false;
   let contextMenu: { x: number; y: number; song: LocalSong } | null = null;
   let playlistContextMenu: { x: number; y: number; playlist: Playlist } | null = null;
+  let artistContextMenu: { x: number; y: number; artist: ArtistEntry } | null = null;
+  let albumContextMenu: { x: number; y: number; album: AlbumEntry } | null = null;
   let selectedPlaylistId: number | null = null;
   let selectedPlaylistSongIds: number[] = [];
   let editingPlaylistName = '';
@@ -185,6 +193,7 @@
         name: selectedArtistName,
         songs: selectedArtistSongs,
         artwork: artists.find((a) => a.name === selectedArtistName)?.artwork ?? null,
+        song_artwork: artists.find((a) => a.name === selectedArtistName)?.song_artwork ?? selectedArtistSongs[0]?.artwork ?? null,
         albums: albums.filter((album) => album.artist === selectedArtistName)
       }
     : null;
@@ -263,9 +272,15 @@
     window.localStorage.setItem('orca.librarySongLayout', layout);
   }
 
-  function closeFloatingUi() {
+  function closeContextMenus() {
     contextMenu = null;
     playlistContextMenu = null;
+    artistContextMenu = null;
+    albumContextMenu = null;
+  }
+
+  function closeFloatingUi() {
+    closeContextMenus();
     sortMenuOpen = false;
   }
 
@@ -450,6 +465,7 @@
 
   function openSongMenu(event: MouseEvent, song: LocalSong) {
     event.preventDefault();
+    closeContextMenus();
     contextMenu = {
       x: Math.min(event.clientX, window.innerWidth - 230),
       y: Math.min(event.clientY, window.innerHeight - 230),
@@ -460,6 +476,7 @@
   function openPlaylistMenu(event: MouseEvent, playlist: Playlist) {
     event.preventDefault();
     event.stopPropagation();
+    closeContextMenus();
     playlistContextMenu = {
       x: Math.min(event.clientX, window.innerWidth - 200),
       y: Math.min(event.clientY, window.innerHeight - 130),
@@ -469,22 +486,69 @@
 
   async function renameContextPlaylist() {
     const playlist = playlistContextMenu?.playlist;
-    playlistContextMenu = null;
-    if (!playlist) return;
-    const name = window.prompt('Rename playlist', playlist.name);
-    if (!name || name.trim() === playlist.name) return;
-    await onRenamePlaylist(playlist.id, name.trim());
-    if (selectedPlaylist?.id === playlist.id) {
-      editingPlaylistName = name.trim();
+    closeContextMenus();
+    if (playlist) {
+      const newName = prompt('Enter new playlist name:', playlist.name);
+      if (newName && newName.trim() && newName !== playlist.name) {
+        await onRenamePlaylist(playlist.id, newName.trim());
+      }
     }
   }
 
   async function deleteContextPlaylist() {
     const playlist = playlistContextMenu?.playlist;
-    playlistContextMenu = null;
-    if (!playlist) return;
-    playlistToDelete = playlist;
-    showDeletePlaylistConfirm = true;
+    closeContextMenus();
+    if (playlist) {
+      if (confirm(`Are you sure you want to delete "${playlist.name}"?`)) {
+        await onDeletePlaylist(playlist.id);
+      }
+    }
+  }
+
+  function openArtistMenu(event: MouseEvent, artist: ArtistEntry) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeContextMenus();
+    artistContextMenu = {
+      x: Math.min(event.clientX, window.innerWidth - 200),
+      y: Math.min(event.clientY, window.innerHeight - 130),
+      artist
+    };
+  }
+
+  function openAlbumMenu(event: MouseEvent, album: AlbumEntry) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeContextMenus();
+    albumContextMenu = {
+      x: Math.min(event.clientX, window.innerWidth - 200),
+      y: Math.min(event.clientY, window.innerHeight - 130),
+      album
+    };
+  }
+
+  async function fetchContextArtistImage() {
+    const artist = artistContextMenu?.artist;
+    closeContextMenus();
+    if (artist) {
+      await onFetchArtistArtworkManual(artist.name);
+    }
+  }
+
+  async function fetchContextAlbumArt() {
+    const album = albumContextMenu?.album;
+    closeContextMenus();
+    if (album) {
+      await onFetchAlbumArtworkManual(album.key, album.artist, album.title);
+    }
+  }
+
+  async function fetchSongAlbumArt() {
+    const song = contextMenu?.song;
+    closeContextMenus();
+    if (song) {
+      await onFetchAlbumArtworkManual(`${song.album_artist}:${song.album}`, song.album_artist, song.album);
+    }
   }
 
   async function confirmDeletePlaylist() {
@@ -503,7 +567,7 @@
 
   async function addCoverContextPlaylist() {
     const playlist = playlistContextMenu?.playlist;
-    playlistContextMenu = null;
+    closeContextMenus();
     if (!playlist) return;
     await onChoosePlaylistCover(playlist.id);
   }
@@ -514,7 +578,7 @@
     }
 
     const song = contextMenu.song;
-    contextMenu = null;
+    closeContextMenus();
     onEditSong(song);
   }
 
@@ -524,7 +588,7 @@
     }
 
     const song = contextMenu.song;
-    contextMenu = null;
+    closeContextMenus();
     await onAddSongToPlaylist(playlistId, song);
   }
 
@@ -534,7 +598,7 @@
     }
 
     const song = contextMenu.song;
-    contextMenu = null;
+    closeContextMenus();
     await onRemoveSongFromPlaylist(selectedPlaylist.id, song);
     selectedPlaylistSongIds = selectedPlaylistSongIds.filter((songId) => songId !== song.id);
   }
@@ -695,6 +759,8 @@
       <SettingsView
         {playerPlacement}
         {onPlayerPlacementChange}
+        {sidebarMode}
+        {onSidebarModeChange}
         {seekbarStyle}
         {onSeekbarStyleChange}
         {scanRoots}
@@ -712,6 +778,8 @@
         {onShowQualityInfoChange}
         {gaplessPlayback}
         {onGaplessPlaybackChange}
+        {autoFetchArtwork}
+        {onAutoFetchArtworkChange}
         {theme}
         {onThemeChange}
       />
@@ -719,7 +787,7 @@
       <div class="scrollbar-none h-full overflow-auto pr-2">
         {#if selectedPlaylist}
           <div class="relative mb-7 overflow-hidden rounded-md px-5 pb-6 pt-5">
-            <div class="pointer-events-none absolute inset-0 bg-cover bg-center opacity-20 blur-3xl" style={`background-image: ${artworkUrl(selectedPlaylistArtwork) ? `url("${artworkUrl(selectedPlaylistArtwork)}")` : 'none'}`}></div>
+            <div class="pointer-events-none absolute inset-0 transform-gpu bg-cover bg-center opacity-20 blur-3xl" style={`background-image: ${artworkUrl(selectedPlaylistArtwork) ? `url("${artworkUrl(selectedPlaylistArtwork)}")` : 'none'}`}></div>
             <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.06] via-transparent to-black/30"></div>
             <div class="relative mb-5 flex items-center justify-between gap-4">
               <button
@@ -988,7 +1056,7 @@
       {#if selectedAlbum}
         <div class="scrollbar-none h-full overflow-auto">
           <div class="relative mb-8 overflow-hidden rounded-md px-5 pb-6 pt-5">
-            <div class="pointer-events-none absolute inset-0 bg-cover bg-center opacity-20 blur-3xl" style={`background-image: ${artworkUrl(selectedAlbum.artwork) ? `url("${artworkUrl(selectedAlbum.artwork)}")` : 'none'}`}></div>
+            <div class="pointer-events-none absolute inset-0 transform-gpu bg-cover bg-center opacity-20 blur-3xl" style={`background-image: ${artworkUrl(selectedAlbum.artwork) ? `url("${artworkUrl(selectedAlbum.artwork)}")` : 'none'}`}></div>
             <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.05] via-transparent to-black/30"></div>
             <div class="relative mb-5 flex items-center justify-between gap-4">
               <button
@@ -1086,7 +1154,7 @@
               <h3 class="mb-3 text-sm font-black">More albums from {selectedAlbum.artist}</h3>
               <div class="grid grid-cols-2 gap-3">
                 {#each albumEntries.filter((album) => album.artist === selectedAlbum.artist && album.key !== selectedAlbum.key).slice(0, 6) as album}
-                  <button class="min-w-0 rounded-md bg-white/[0.035] p-2 text-left transition hover:bg-white/[0.07]" on:click={() => openAlbum(album.key)}>
+                  <button class="min-w-0 rounded-md bg-white/[0.035] p-2 text-left transition hover:bg-white/[0.07]" on:click={() => openAlbum(album.key)} on:contextmenu={(event) => openAlbumMenu(event, album)}>
                     <div class="aspect-square overflow-hidden rounded bg-white/8">
                       {#if artworkUrl(album.artwork)}
                         <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={album.artwork} alt="" />
@@ -1107,7 +1175,7 @@
           <div class="scrollbar-none grid max-h-full grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-3 overflow-auto pr-2" bind:this={albumListEl}>
             {#if albumEntries.length}
               {#each albumEntries as album}
-              <button data-letter={initialFromText(album.title)} class="text-left opacity-82 transition hover:opacity-100" on:click={() => openAlbum(album.key)}>
+              <button data-letter={initialFromText(album.title)} class="text-left opacity-82 transition hover:opacity-100" on:click={() => openAlbum(album.key)} on:contextmenu={(event) => openAlbumMenu(event, album)}>
                 <div class={`relative aspect-square overflow-hidden rounded-md ${artworkUrl(album.artwork) ? 'bg-white/[0.07]' : ''}`}>
                   {#if artworkUrl(album.artwork)}
                     <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={album.artwork} alt="" />
@@ -1134,7 +1202,7 @@
       {#if selectedArtist}
         <div class="scrollbar-none h-full overflow-auto">
           <div class="relative mb-8 overflow-hidden rounded-md px-5 pb-6 pt-5">
-            <div class="pointer-events-none absolute inset-0 bg-cover bg-center opacity-20 blur-3xl" style={`background-image: ${artworkUrl(selectedArtist.artwork) ? `url("${artworkUrl(selectedArtist.artwork)}")` : 'none'}`}></div>
+            <div class="pointer-events-none absolute inset-0 transform-gpu bg-cover bg-center opacity-20 blur-3xl" style={`background-image: ${artworkUrl(selectedArtist.artwork) ? `url("${artworkUrl(selectedArtist.artwork)}")` : 'none'}`}></div>
             <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.05] via-transparent to-black/30"></div>
             <div class="relative mb-5 flex items-center justify-between gap-4">
               <button
@@ -1159,26 +1227,28 @@
             </div>
             <div class="relative grid grid-cols-[148px_minmax(0,1fr)] items-end gap-5 max-md:grid-cols-1">
               <div class="group relative aspect-square w-[148px] shrink-0 overflow-hidden rounded-full bg-white/8 shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
-                {#if artworkUrl(selectedArtist.artwork)}
-                  <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={selectedArtist.artwork} alt="" />
+                {#if artworkUrl(selectedArtist.artwork ?? selectedArtist.song_artwork)}
+                  <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={selectedArtist.artwork ?? selectedArtist.song_artwork} alt="" />
                 {:else}
-                  <span class="grid h-full w-full place-items-center text-5xl font-black text-white/28">{selectedArtist.name.charAt(0).toUpperCase()}</span>
+                  <img src="/cover.png" class="h-full w-full object-cover" alt="" />
                 {/if}
-                <div class="absolute inset-x-2 bottom-2 flex justify-end gap-2 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
-                  <button class="grid h-8 w-8 place-items-center rounded-full bg-white text-black shadow-[0_10px_28px_rgba(0,0,0,0.36)] backdrop-blur-md" type="button" title="Change cover" aria-label="Change cover" on:click={chooseSelectedArtistCover}>
-                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M12 20h9" />
-                      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                    </svg>
-                  </button>
-                  <button class="grid h-8 w-8 place-items-center rounded-full bg-black text-white shadow-[0_10px_28px_rgba(0,0,0,0.36)] backdrop-blur-md" type="button" title="Remove cover" aria-label="Remove cover" on:click={removeSelectedArtistCover}>
-                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M3 6h18" />
-                      <path d="M8 6V4h8v2" />
-                      <path d="M19 6l-1 14H6L5 6" />
-                      <path d="M10 11v5M14 11v5" />
-                    </svg>
-                  </button>
+                <div class="absolute inset-0 bg-black/40 opacity-0 transition duration-200 group-hover:opacity-100 group-focus-within:opacity-100 rounded-full">
+                  <div class="absolute bottom-4 right-[12%] flex gap-2">
+                    <button class="grid h-8 w-8 place-items-center rounded-full bg-white text-black shadow-[0_10px_28px_rgba(0,0,0,0.36)] backdrop-blur-md transition hover:scale-110" type="button" title="Change cover" aria-label="Change cover" on:click={chooseSelectedArtistCover}>
+                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                      </svg>
+                    </button>
+                    <button class="grid h-8 w-8 place-items-center rounded-full bg-black text-white shadow-[0_10px_28px_rgba(0,0,0,0.36)] backdrop-blur-md transition hover:scale-110" type="button" title="Remove cover" aria-label="Remove cover" on:click={removeSelectedArtistCover}>
+                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 6h18" />
+                        <path d="M8 6V4h8v2" />
+                        <path d="M19 6l-1 14H6L5 6" />
+                        <path d="M10 11v5M14 11v5" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
               <div class="min-w-0">
@@ -1247,16 +1317,14 @@
         </div>
       {:else}
         <div class="grid h-full grid-cols-[minmax(0,1fr)_24px]">
-          <div class="scrollbar-none grid max-h-full grid-cols-5 gap-x-3 overflow-auto pr-2 max-2xl:grid-cols-4 max-lg:grid-cols-3 max-md:grid-cols-2" bind:this={artistListEl}>
+          <div class="scrollbar-none grid max-h-full content-start grid-cols-5 gap-x-3 overflow-auto pr-2 max-2xl:grid-cols-4 max-lg:grid-cols-3 max-md:grid-cols-2" bind:this={artistListEl}>
             {#if artistEntries.length}
               {#each artistEntries as artist}
-              <button data-letter={initialFromText(artist.name)} class="flex min-w-0 items-center gap-3 border-b border-white/[0.04] px-2 py-3 text-left transition hover:bg-white/[0.035]" on:click={() => openArtist(artist.name)}>
-                {#if artworkUrl(artist.artwork)}
-                  <LazyArtwork rootClass="h-10 w-10 shrink-0 rounded-full overflow-hidden opacity-90" imageClass="h-full w-full object-cover" path={artist.artwork} alt="" />
+              <button data-letter={initialFromText(artist.name)} class="flex min-w-0 items-center gap-3 border-b border-white/[0.04] px-2 py-3 text-left transition hover:bg-white/[0.035]" on:click={() => openArtist(artist.name)} on:contextmenu={(event) => openArtistMenu(event, artist)}>
+                {#if artworkUrl(artist.artwork ?? artist.song_artwork)}
+                  <LazyArtwork rootClass="h-10 w-10 shrink-0 rounded-full overflow-hidden opacity-90" imageClass="h-full w-full object-cover" path={artist.artwork ? (artist.artwork_thumb ?? artist.artwork) : (artist.song_artwork_thumb ?? artist.song_artwork)} alt="" />
                 {:else}
-                  <span class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/[0.06] text-xs font-bold text-white/32">
-                    {artist.name.charAt(0).toUpperCase()}
-                  </span>
+                  <img src="/cover.png" class="h-10 w-10 shrink-0 rounded-full object-cover opacity-90" alt="" />
                 {/if}
                 <span class="min-w-0">
                   <span class="block truncate text-sm font-semibold">{artist.name}</span>
@@ -1293,6 +1361,9 @@
       </div>
       <button role="menuitem" class="flex h-9 w-full items-center px-3 text-left text-xs font-semibold text-white/78 transition hover:bg-white/[0.08] hover:text-white" on:click={editContextSong}>
         Edit metadata
+      </button>
+      <button role="menuitem" class="flex h-9 w-full items-center px-3 text-left text-xs font-semibold text-white/78 transition hover:bg-white/[0.08] hover:text-white" on:click={fetchSongAlbumArt}>
+        Fetch cover online
       </button>
       {#if selectedPlaylist}
         <button role="menuitem" class="flex h-9 w-full items-center px-3 text-left text-xs font-semibold text-red-100/72 transition hover:bg-red-500/10 hover:text-red-100" on:click={removeContextSongFromPlaylist}>
@@ -1348,6 +1419,43 @@
           <path d="M19 6l-1 14H6L5 6" />
         </svg>
         Delete
+      </button>
+    </div>
+  {/if}
+
+  {#if artistContextMenu}
+    <div
+      role="menu"
+      tabindex="-1"
+      class="fixed z-50 w-52 overflow-hidden rounded-md border border-white/10 bg-[#151515] py-1 text-sm shadow-[0_18px_70px_rgba(0,0,0,0.45)]"
+      style={`left: ${artistContextMenu.x}px; top: ${artistContextMenu.y}px;`}
+      on:click|stopPropagation
+      on:keydown|stopPropagation
+    >
+      <div class="border-b border-white/[0.06] px-3 py-2">
+        <p class="truncate text-xs font-bold text-white">{artistContextMenu.artist.name}</p>
+      </div>
+      <button role="menuitem" class="flex h-9 w-full items-center px-3 text-left text-xs font-semibold text-white/78 transition hover:bg-white/[0.08] hover:text-white" on:click={fetchContextArtistImage}>
+        Fetch Artwork Online
+      </button>
+    </div>
+  {/if}
+
+  {#if albumContextMenu}
+    <div
+      role="menu"
+      tabindex="-1"
+      class="fixed z-50 w-52 overflow-hidden rounded-md border border-white/10 bg-[#151515] py-1 text-sm shadow-[0_18px_70px_rgba(0,0,0,0.45)]"
+      style={`left: ${albumContextMenu.x}px; top: ${albumContextMenu.y}px;`}
+      on:click|stopPropagation
+      on:keydown|stopPropagation
+    >
+      <div class="border-b border-white/[0.06] px-3 py-2">
+        <p class="truncate text-xs font-bold text-white">{albumContextMenu.album.title}</p>
+        <p class="truncate text-[11px] text-white/42">{albumContextMenu.album.artist}</p>
+      </div>
+      <button role="menuitem" class="flex h-9 w-full items-center px-3 text-left text-xs font-semibold text-white/78 transition hover:bg-white/[0.08] hover:text-white" on:click={fetchContextAlbumArt}>
+        Fetch Artwork Online
       </button>
     </div>
   {/if}

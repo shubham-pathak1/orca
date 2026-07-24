@@ -38,12 +38,15 @@
     seekPlayback,
     setVolume,
     updateSongMetadata,
-    updateMediaControls
+    updateMediaControls,
+    fetchArtistArtworkManual,
+    fetchAlbumArtworkManual,
+    fetchAllMissingArtwork
   } from './lib/tauri';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
-  import { register, unregister } from '@tauri-apps/plugin-global-shortcut';
+  import { register, unregister, isRegistered } from '@tauri-apps/plugin-global-shortcut';
   import { isSupported as isTaskbarSupported, setPlaybackState, setNavigationEnabled } from 'tauri-plugin-taskbar';
   import type { ActiveView } from './lib/navigation';
   import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate, ArtistEntry, AlbumEntry } from './lib/types';
@@ -70,6 +73,7 @@
   let accentRgb = '245,245,245';
   let sampledArtwork: string | null = null;
   let playerPlacement: 'right' | 'bottom' = 'bottom';
+  let sidebarMode: 'expanded' | 'collapsed' = 'expanded';
   let seekbarStyle: 'standard' | 'waveform' = 'waveform';
   let dynamicCoverAccent = true;
   let blurredNowPlayingBackground = true;
@@ -77,6 +81,7 @@
   let fontSizePercent = 100;
   let showQualityInfo = true;
   let gaplessPlayback = true;
+  let autoFetchArtwork = false;
   let theme: 'default' = 'default';
   let shuffleEnabled = false;
   let repeatMode: 'off' | 'all' | 'one' = 'off';
@@ -161,14 +166,17 @@
 
   onMount(() => {
     playerPlacement = readPreference('orca.playerPlacement', 'bottom', ['right', 'bottom']);
+    sidebarMode = readPreference('orca.sidebarMode', 'expanded', ['expanded', 'collapsed']);
     seekbarStyle = readPreference('orca.seekbarStyle', 'waveform', ['standard', 'waveform']);
     theme = readPreference('orca.theme', 'default', ['default']);
     dynamicCoverAccent = readBooleanPreference('orca.dynamicCoverAccent', true);
     blurredNowPlayingBackground = readBooleanPreference('orca.blurredNowPlayingBackground', true);
-    fontFamily = readPreference('orca.fontFamily', 'Plus Jakarta Sans', ['Plus Jakarta Sans', 'System', 'Segoe UI']);
+    const savedFont = window.localStorage.getItem('orca.fontFamily');
+    fontFamily = savedFont || 'Plus Jakarta Sans';
     fontSizePercent = readNumberPreference('orca.fontSizePercent', 100, 80, 120);
     showQualityInfo = readBooleanPreference('orca.showQualityInfo', true);
     gaplessPlayback = readBooleanPreference('orca.gaplessPlayback', true);
+    autoFetchArtwork = readBooleanPreference('orca.autoFetchArtwork', false);
     shuffleEnabled = readBooleanPreference('orca.shuffleEnabled', false);
     repeatMode = readPreference('orca.repeatMode', 'off', ['off', 'all', 'one']);
     fullPlayerLyricsOpen = readBooleanPreference('orca.fullPlayerLyricsOpen', false);
@@ -192,6 +200,10 @@
       }
       const snapshot = await getLibrarySnapshot();
       applyLibrarySnapshot(snapshot);
+      
+      if (autoFetchArtwork) {
+        void fetchAllMissingArtwork();
+      }
 
       // Show accurate library count from the snapshot
       status = snapshot.songs && snapshot.songs.length ? `${snapshot.songs.length} tracks loaded` : 'Add a folder to build your library';
@@ -230,21 +242,28 @@
     listen('media-next', () => playNextSong()).then(u => unlisteners.push(u));
     listen('media-prev', () => playPreviousSong()).then(u => unlisteners.push(u));
 
-    register('MediaPlayPause', (event) => {
+    async function safeRegister(key: string, handler: (e: any) => void) {
+      if (await isRegistered(key)) {
+        await unregister(key);
+      }
+      await register(key, handler).catch(e => console.error(`Failed to register ${key}:`, e));
+    }
+
+    void safeRegister('MediaPlayPause', (event) => {
       if (event.state === 'Pressed') {
         void togglePlayback();
       }
-    }).catch(e => console.error('Failed to register MediaPlayPause:', e));
-    register('MediaTrackNext', (event) => {
+    });
+    void safeRegister('MediaTrackNext', (event) => {
       if (event.state === 'Pressed') {
         void playNextSong();
       }
-    }).catch(e => console.error('Failed to register MediaTrackNext:', e));
-    register('MediaTrackPrevious', (event) => {
+    });
+    void safeRegister('MediaTrackPrevious', (event) => {
       if (event.state === 'Pressed') {
         void playPreviousSong();
       }
-    }).catch(e => console.error('Failed to register MediaTrackPrevious:', e));
+    });
 
     const unlisten = listen<number>('scan-progress', (event) => {
       if (isScanning) {
@@ -252,6 +271,15 @@
       }
     });
     
+    const unlistenLibrary = listen('library-refreshed', async () => {
+      try {
+        const snapshot = await getLibrarySnapshot();
+        applyLibrarySnapshot(snapshot);
+      } catch (error) {
+        console.error('Failed to get library snapshot after refresh', error);
+      }
+    });
+
     return () => {
       window.clearInterval(timer);
       if (typeof window !== 'undefined') {
@@ -262,6 +290,7 @@
       void unregister('MediaTrackPrevious');
       unlisteners.forEach(u => u());
       void unlisten.then((fn) => fn());
+      void unlistenLibrary.then((fn) => fn());
     };
   });
 
@@ -282,14 +311,35 @@
 
   function fontStack(value: string) {
     if (value === 'System') {
-      return 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      return 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     }
-
-    if (value === 'Segoe UI') {
-      return '"Segoe UI", ui-sans-serif, system-ui, sans-serif';
+    if (value === 'Plus Jakarta Sans') {
+      return '"Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif';
     }
+    if (value.startsWith('file:')) {
+      return '"OrcaCustomFont", ui-sans-serif, system-ui, sans-serif';
+    }
+    // Custom font name — wrap in quotes and fall back gracefully
+    return `"${value}", ui-sans-serif, system-ui, sans-serif`;
+  }
 
-    return '"Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif';
+  import { convertFileSrc } from '@tauri-apps/api/core';
+
+  function registerFontFile(filePath: string) {
+    const existing = document.getElementById('orca-custom-font-face');
+    if (existing) existing.remove();
+    const assetUrl = convertFileSrc(filePath);
+    const style = document.createElement('style');
+    style.id = 'orca-custom-font-face';
+    style.textContent = `@font-face { font-family: 'OrcaCustomFont'; src: url('${assetUrl}'); font-display: swap; }`;
+    document.head.appendChild(style);
+  }
+
+  $: if (fontFamily.startsWith('file:')) {
+    registerFontFile(fontFamily.slice(5));
+  } else {
+    const existing = document.getElementById('orca-custom-font-face');
+    if (existing) existing.remove();
   }
 
   function applyRootFontSize(value: number) {
@@ -303,6 +353,11 @@
   function setPlayerPlacement(placement: 'right' | 'bottom') {
     playerPlacement = placement;
     window.localStorage.setItem('orca.playerPlacement', placement);
+  }
+
+  function setSidebarMode(mode: 'expanded' | 'collapsed') {
+    sidebarMode = mode;
+    window.localStorage.setItem('orca.sidebarMode', mode);
   }
 
   function setSeekbarStyle(style: 'standard' | 'waveform') {
@@ -357,6 +412,11 @@
       queuedNextForPath = null;
       queuedNextPath = null;
     }
+  }
+
+  function setAutoFetchArtwork(enabled: boolean) {
+    autoFetchArtwork = enabled;
+    window.localStorage.setItem('orca.autoFetchArtwork', String(enabled));
   }
 
   function toggleShuffle() {
@@ -769,6 +829,9 @@
       applyLibrarySnapshot(snapshot);
       scanRoots = await libraryScanRoots();
       status = `${snapshot.songs.length} tracks loaded`;
+      if (autoFetchArtwork) {
+        void fetchAllMissingArtwork();
+      }
     } catch (error) {
       status = error instanceof Error ? error.message : 'Refresh failed';
     } finally {
@@ -805,33 +868,59 @@
     status = 'Deleted playlist';
   }
 
-  async function chooseExistingPlaylistCover(playlistId: number) {
+  async function handleChoosePlaylistCover(playlistId: number) {
     playlists = await choosePlaylistCover(playlistId);
     status = 'Updated playlist cover';
   }
 
-  async function clearExistingPlaylistCover(playlistId: number) {
+  async function handleRemovePlaylistCover(playlistId: number) {
     playlists = await removePlaylistCover(playlistId);
     status = 'Removed playlist cover';
   }
 
+  async function handleFetchArtistArtworkManual(artistName: string) {
+    try {
+      const snapshot = await fetchArtistArtworkManual(artistName);
+      applyLibrarySnapshot(snapshot);
+      status = 'Fetched artist artwork';
+    } catch (e: any) {
+      status = `Error: ${e}`;
+      console.error(e);
+    }
+  }
+
+  async function handleFetchAlbumArtworkManual(albumKey: string, artist: string, album: string) {
+    try {
+      const snapshot = await fetchAlbumArtworkManual(albumKey, artist, album);
+      applyLibrarySnapshot(snapshot);
+      status = 'Fetched album artwork';
+    } catch (e: any) {
+      status = `Error: ${e}`;
+      console.error(e);
+    }
+  }
+
   async function chooseExistingArtistCover(artistName: string) {
-    artists = await chooseArtistCover(artistName);
+    const newArtists = await chooseArtistCover(artistName);
+    artists = newArtists;
     status = 'Updated artist cover';
   }
 
   async function clearExistingArtistCover(artistName: string) {
-    artists = await removeArtistCover(artistName);
+    const newArtists = await removeArtistCover(artistName);
+    artists = newArtists;
     status = 'Removed artist cover';
   }
 
   async function chooseExistingAlbumCover(albumKey: string) {
-    albums = await chooseAlbumCover(albumKey);
+    const newAlbums = await chooseAlbumCover(albumKey);
+    albums = newAlbums;
     status = 'Updated album cover';
   }
 
   async function clearExistingAlbumCover(albumKey: string) {
-    albums = await removeAlbumCover(albumKey);
+    const newAlbums = await removeAlbumCover(albumKey);
+    albums = newAlbums;
     status = 'Removed album cover';
   }
 
@@ -1032,13 +1121,17 @@
   <AppBackdrop {shellStyle} blurredBackground={blurredNowPlayingBackground} />
 
   <div
-    class={`relative grid h-full ${
+    class={`relative grid h-full transition-all ${
       playerPlacement === 'right'
-        ? 'grid-cols-[132px_minmax(0,1fr)_250px] grid-rows-[minmax(0,1fr)_96px] xl:grid-rows-[1fr] max-xl:grid-cols-[132px_minmax(0,1fr)]'
-        : 'grid-cols-[132px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_96px]'
+        ? (sidebarMode === 'collapsed'
+            ? 'grid-cols-[64px_minmax(0,1fr)_250px] grid-rows-[minmax(0,1fr)_96px] xl:grid-rows-[1fr] max-xl:grid-cols-[64px_minmax(0,1fr)]'
+            : 'grid-cols-[132px_minmax(0,1fr)_250px] grid-rows-[minmax(0,1fr)_96px] xl:grid-rows-[1fr] max-xl:grid-cols-[132px_minmax(0,1fr)]')
+        : (sidebarMode === 'collapsed'
+            ? 'grid-cols-[64px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_96px]'
+            : 'grid-cols-[132px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_96px]')
     } max-md:grid-cols-[64px_minmax(0,1fr)]`}
   >
-    <Sidebar {activeView} {isScanning} {folderCount} onSelect={(view) => (activeView = view)} onAddFolder={addFolder} onRefresh={refreshLibrary} />
+    <Sidebar {activeView} {isScanning} {folderCount} {sidebarMode} onSelect={(view) => (activeView = view)} onAddFolder={addFolder} onRefresh={refreshLibrary} />
     <LibraryView
       {activeView}
       {songs}
@@ -1057,16 +1150,20 @@
       onLoadPlaylistSongIds={loadPlaylistSongs}
       onRenamePlaylist={renameExistingPlaylist}
       onDeletePlaylist={deleteExistingPlaylist}
-      onChoosePlaylistCover={chooseExistingPlaylistCover}
-      onRemovePlaylistCover={clearExistingPlaylistCover}
+      onChoosePlaylistCover={handleChoosePlaylistCover}
+      onRemovePlaylistCover={handleRemovePlaylistCover}
       onChooseArtistCover={chooseExistingArtistCover}
       onRemoveArtistCover={clearExistingArtistCover}
       onChooseAlbumCover={chooseExistingAlbumCover}
       onRemoveAlbumCover={clearExistingAlbumCover}
+      onFetchArtistArtworkManual={handleFetchArtistArtworkManual}
+      onFetchAlbumArtworkManual={handleFetchAlbumArtworkManual}
       onRemoveSongFromPlaylist={removeFromPlaylist}
-      onEditSong={editSongMetadata}
+      onEditSong={(song) => { metadataEditorSong = song; }}
       {playerPlacement}
       onPlayerPlacementChange={setPlayerPlacement}
+      {sidebarMode}
+      onSidebarModeChange={setSidebarMode}
       {seekbarStyle}
       onSeekbarStyleChange={setSeekbarStyle}
       {scanRoots}
@@ -1084,6 +1181,8 @@
       onShowQualityInfoChange={setShowQualityInfo}
       {gaplessPlayback}
       onGaplessPlaybackChange={setGaplessPlayback}
+      {autoFetchArtwork}
+      onAutoFetchArtworkChange={setAutoFetchArtwork}
       {theme}
       onThemeChange={setTheme}
       {status}
@@ -1153,6 +1252,12 @@
       onVolume={changeVolume}
       onToggleMute={toggleMute}
       onAdjustVolume={adjustVolumeByAmount}
+      onEditSong={() => {
+        if (nowPlaying ?? selectedSong) {
+          metadataEditorSong = nowPlaying ?? selectedSong;
+          fullPlayerOpen = false;
+        }
+      }}
     />
     <MetadataEditor
       open={Boolean(metadataEditorSong)}
@@ -1162,6 +1267,21 @@
       onSave={saveSongMetadata}
       onReplaceCover={replaceSongCover}
       onRemoveCover={clearSongCover}
+      onFetchAlbumArtwork={async (song) => {
+        try {
+          const albumKey = `${song.album_artist}:${song.album}`;
+          const snapshot = await fetchAlbumArtworkManual(albumKey, song.album_artist, song.album);
+          applyLibrarySnapshot(snapshot);
+          // Refresh the local song object in the editor if it's currently open
+          if (metadataEditorSong?.id === song.id) {
+            metadataEditorSong = snapshot.songs.find(s => s.id === song.id) || null;
+          }
+          status = 'Fetched album artwork';
+        } catch (e: any) {
+          status = `Error: ${e}`;
+          console.error(e);
+        }
+      }}
     />
     <QueuePanel
       open={queueOpen}
