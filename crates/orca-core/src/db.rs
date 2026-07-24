@@ -159,20 +159,32 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS artist_artworks (
             artist_name TEXT PRIMARY KEY,
-            artwork_path TEXT
+            artwork_path TEXT,
+            artwork_thumb_path TEXT
         )",
         [],
     )
     .map_err(|e| e.to_string())?;
 
+    let has_artist_thumb: bool = conn.prepare("SELECT artwork_thumb_path FROM artist_artworks LIMIT 0").is_ok();
+    if !has_artist_thumb {
+        conn.execute("ALTER TABLE artist_artworks ADD COLUMN artwork_thumb_path TEXT", []).ok();
+    }
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS album_artworks (
             album_key TEXT PRIMARY KEY,
-            artwork_path TEXT
+            artwork_path TEXT,
+            artwork_thumb_path TEXT
         )",
         [],
     )
     .map_err(|e| e.to_string())?;
+
+    let has_album_thumb: bool = conn.prepare("SELECT artwork_thumb_path FROM album_artworks LIMIT 0").is_ok();
+    if !has_album_thumb {
+        conn.execute("ALTER TABLE album_artworks ADD COLUMN artwork_thumb_path TEXT", []).ok();
+    }
 
     let has_quality: bool = conn.prepare("SELECT sample_rate FROM songs LIMIT 0").is_ok();
     if !has_quality {
@@ -404,7 +416,16 @@ fn upsert_song(conn: &Connection, song: &LocalSong) -> Result<(), String> {
 
 pub fn get_all_songs(conn: &Connection) -> Result<Vec<LocalSong>, String> {
     let mut stmt = conn
-        .prepare("SELECT id, title, artist, album_artist, album, year, track_number, disc_number, genre, path, duration, artwork_url, artwork_thumb_url, artwork_preview_url, lyrics, sample_rate, bitrate, bit_depth, format, modified_at, file_size FROM songs")
+        .prepare(
+            "SELECT s.id, s.title, s.artist, s.album_artist, s.album, s.year, s.track_number, s.disc_number, 
+                    s.genre, s.path, s.duration, 
+                    COALESCE(s.artwork_url, awa.artwork_path), 
+                    COALESCE(s.artwork_thumb_url, awa.artwork_thumb_path), 
+                    COALESCE(s.artwork_preview_url, awa.artwork_path), 
+                    s.lyrics, s.sample_rate, s.bitrate, s.bit_depth, s.format, s.modified_at, s.file_size 
+             FROM songs s
+             LEFT JOIN album_artworks awa ON (s.album_artist || ':' || s.album) = awa.album_key"
+        )
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], |row| {
@@ -756,6 +777,10 @@ pub struct ArtistEntry {
     pub name: String,
     pub song_count: i64,
     pub artwork: Option<String>,
+    pub artwork_thumb: Option<String>,
+    /// Fallback: first song's artwork when no artist-specific image was fetched
+    pub song_artwork: Option<String>,
+    pub song_artwork_thumb: Option<String>,
 }
 
 #[derive(serde::Serialize, Debug)]
@@ -766,12 +791,15 @@ pub struct AlbumEntry {
     pub song_count: i64,
     pub duration: i64,
     pub artwork: Option<String>,
+    pub artwork_thumb: Option<String>,
 }
 
 pub fn get_artists(conn: &Connection) -> Result<Vec<ArtistEntry>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT s.artist, COUNT(*), aa.artwork_path
+            "SELECT s.artist, COUNT(*), NULLIF(aa.artwork_path, 'DELETED'), NULLIF(aa.artwork_thumb_path, 'DELETED'),
+                    (SELECT COALESCE(s2.artwork_url, NULLIF(awa.artwork_path, 'DELETED')) FROM songs s2 LEFT JOIN album_artworks awa ON awa.album_key = s2.album_artist || ':' || s2.album WHERE s2.artist = s.artist AND COALESCE(s2.artwork_url, NULLIF(awa.artwork_path, 'DELETED')) IS NOT NULL LIMIT 1),
+                    (SELECT COALESCE(s2.artwork_thumb_url, NULLIF(awa.artwork_thumb_path, 'DELETED')) FROM songs s2 LEFT JOIN album_artworks awa ON awa.album_key = s2.album_artist || ':' || s2.album WHERE s2.artist = s.artist AND COALESCE(s2.artwork_thumb_url, NULLIF(awa.artwork_thumb_path, 'DELETED')) IS NOT NULL LIMIT 1)
              FROM songs s
              LEFT JOIN artist_artworks aa ON s.artist = aa.artist_name
              GROUP BY s.artist
@@ -784,6 +812,9 @@ pub fn get_artists(conn: &Connection) -> Result<Vec<ArtistEntry>, String> {
             name: row.get(0)?,
             song_count: row.get(1)?,
             artwork: row.get(2)?,
+            artwork_thumb: row.get(3)?,
+            song_artwork: row.get(4)?,
+            song_artwork_thumb: row.get(5)?,
         })
     }).map_err(|e| e.to_string())?;
 
@@ -797,7 +828,9 @@ pub fn get_artists(conn: &Connection) -> Result<Vec<ArtistEntry>, String> {
 pub fn get_albums(conn: &Connection) -> Result<Vec<AlbumEntry>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT album_artist || ':' || album as key, album, album_artist, COUNT(*), SUM(duration), COALESCE(awa.artwork_path, COALESCE(MAX(s.artwork_preview_url), MAX(s.artwork_thumb_url)))
+            "SELECT album_artist || ':' || album as key, album, album_artist, COUNT(*), SUM(duration), 
+                    COALESCE(NULLIF(awa.artwork_path, 'DELETED'), MAX(s.artwork_preview_url)), 
+                    COALESCE(NULLIF(awa.artwork_thumb_path, 'DELETED'), MAX(s.artwork_thumb_url))
              FROM songs s
              LEFT JOIN album_artworks awa ON (s.album_artist || ':' || s.album) = awa.album_key
              GROUP BY album_artist, album
@@ -813,6 +846,7 @@ pub fn get_albums(conn: &Connection) -> Result<Vec<AlbumEntry>, String> {
             song_count: row.get(3)?,
             duration: row.get(4)?,
             artwork: row.get(5)?,
+            artwork_thumb: row.get(6)?,
         })
     }).map_err(|e| e.to_string())?;
 
@@ -849,10 +883,10 @@ pub fn update_playlist_cover(conn: &Connection, playlist_id: i64, cover_path: Op
     Ok(())
 }
 
-pub fn update_artist_artwork(conn: &Connection, artist_name: &str, artwork_path: Option<&str>) -> Result<(), String> {
+pub fn update_artist_artwork(conn: &Connection, artist_name: &str, artwork_path: Option<&str>, artwork_thumb_path: Option<&str>) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO artist_artworks (artist_name, artwork_path) VALUES (?1, ?2) ON CONFLICT(artist_name) DO UPDATE SET artwork_path = excluded.artwork_path",
-        params![artist_name, artwork_path],
+        "INSERT INTO artist_artworks (artist_name, artwork_path, artwork_thumb_path) VALUES (?1, ?2, ?3) ON CONFLICT(artist_name) DO UPDATE SET artwork_path = excluded.artwork_path, artwork_thumb_path = excluded.artwork_thumb_path",
+        params![artist_name, artwork_path, artwork_thumb_path],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
@@ -860,17 +894,61 @@ pub fn update_artist_artwork(conn: &Connection, artist_name: &str, artwork_path:
 
 pub fn remove_artist_artwork(conn: &Connection, artist_name: &str) -> Result<(), String> {
     conn.execute(
-        "DELETE FROM artist_artworks WHERE artist_name = ?1",
+        "INSERT INTO artist_artworks (artist_name, artwork_path, artwork_thumb_path) VALUES (?1, 'DELETED', 'DELETED') ON CONFLICT(artist_name) DO UPDATE SET artwork_path = 'DELETED', artwork_thumb_path = 'DELETED'",
         params![artist_name],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
 }
 
-pub fn update_album_artwork(conn: &Connection, album_key: &str, artwork_path: Option<&str>) -> Result<(), String> {
+/// Returns artist names that have no artwork and have NOT been explicitly deleted by the user.
+/// Uses a single query: the 'DELETED' tombstone is non-NULL so WHERE aa.artwork_path IS NULL
+/// naturally excludes both tombstoned entries and those that already have real artwork.
+pub fn get_artists_needing_artwork(conn: &Connection) -> Result<Vec<String>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT DISTINCT s.artist FROM songs s
+             LEFT JOIN artist_artworks aa ON s.artist = aa.artist_name
+             WHERE aa.artwork_path IS NULL
+             ORDER BY s.artist COLLATE NOCASE ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let iter = stmt
+        .query_map([], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    let mut names = Vec::new();
+    for item in iter {
+        names.push(item.map_err(|e| e.to_string())?);
+    }
+    Ok(names)
+}
+
+/// Returns (album_key, album_title, album_artist) tuples that have no artwork and have NOT
+/// been explicitly deleted by the user. Same tombstone logic as get_artists_needing_artwork.
+pub fn get_albums_needing_artwork(conn: &Connection) -> Result<Vec<(String, String, String)>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT DISTINCT s.album_artist || ':' || s.album, s.album, s.album_artist
+             FROM songs s
+             LEFT JOIN album_artworks aa ON (s.album_artist || ':' || s.album) = aa.album_key
+             WHERE aa.artwork_path IS NULL
+             ORDER BY s.album COLLATE NOCASE ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let iter = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .map_err(|e| e.to_string())?;
+    let mut albums = Vec::new();
+    for item in iter {
+        albums.push(item.map_err(|e| e.to_string())?);
+    }
+    Ok(albums)
+}
+
+pub fn update_album_artwork(conn: &Connection, album_key: &str, artwork_path: Option<&str>, artwork_thumb_path: Option<&str>) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO album_artworks (album_key, artwork_path) VALUES (?1, ?2) ON CONFLICT(album_key) DO UPDATE SET artwork_path = excluded.artwork_path",
-        params![album_key, artwork_path],
+        "INSERT INTO album_artworks (album_key, artwork_path, artwork_thumb_path) VALUES (?1, ?2, ?3) ON CONFLICT(album_key) DO UPDATE SET artwork_path = excluded.artwork_path, artwork_thumb_path = excluded.artwork_thumb_path",
+        params![album_key, artwork_path, artwork_thumb_path],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
@@ -878,7 +956,7 @@ pub fn update_album_artwork(conn: &Connection, album_key: &str, artwork_path: Op
 
 pub fn remove_album_artwork(conn: &Connection, album_key: &str) -> Result<(), String> {
     conn.execute(
-        "DELETE FROM album_artworks WHERE album_key = ?1",
+        "INSERT INTO album_artworks (album_key, artwork_path, artwork_thumb_path) VALUES (?1, 'DELETED', 'DELETED') ON CONFLICT(album_key) DO UPDATE SET artwork_path = 'DELETED', artwork_thumb_path = 'DELETED'",
         params![album_key],
     )
     .map_err(|e| e.to_string())?;
