@@ -1,6 +1,8 @@
 <script lang="ts">
   export let playerPlacement: 'right' | 'bottom' = 'right';
   export let onPlayerPlacementChange: (placement: 'right' | 'bottom') => void = () => {};
+  export let sidebarMode: 'expanded' | 'collapsed' = 'expanded';
+  export let onSidebarModeChange: (mode: 'expanded' | 'collapsed') => void = () => {};
   export let seekbarStyle: 'standard' | 'waveform' = 'standard';
   export let onSeekbarStyleChange: (style: 'standard' | 'waveform') => void = () => {};
   export let scanRoots: string[] = [];
@@ -18,16 +20,32 @@
   export let onShowQualityInfoChange: (enabled: boolean) => void = () => {};
   export let gaplessPlayback = true;
   export let onGaplessPlaybackChange: (enabled: boolean) => void = () => {};
+  export let autoFetchArtwork = false;
+  export let onAutoFetchArtworkChange: (enabled: boolean) => void = () => {};
   export let theme: 'default' = 'default';
   export let onThemeChange: (theme: 'default') => void = () => {};
 
   let activeTab = 'Appearance';
   const tabs = ['Appearance', 'Interface', 'Library', 'Audio', 'About'];
   const themes: { id: 'default'; label: string }[] = [{ id: 'default', label: 'Default' }];
-  const fontOptions = ['Plus Jakarta Sans', 'System', 'Segoe UI'];
+  const fontPresets = ['Plus Jakarta Sans', 'System'];
+  let customFonts: string[] = [];
+  try {
+    const saved = window.localStorage.getItem('orca.customFonts');
+    if (saved) customFonts = JSON.parse(saved);
+  } catch {}
+  
+  if (fontFamily.startsWith('file:') && !customFonts.includes(fontFamily)) {
+    customFonts = [...customFonts, fontFamily];
+    window.localStorage.setItem('orca.customFonts', JSON.stringify(customFonts));
+  }
   const playerPlacements: { id: 'right' | 'bottom'; title: string; description: string }[] = [
     { id: 'right', title: 'Right side', description: 'Keep the full controls in the side rail' },
     { id: 'bottom', title: 'Bottom bar', description: 'Use a horizontal player across the bottom' }
+  ];
+  const sidebarModes: { id: 'expanded' | 'collapsed'; title: string; description: string }[] = [
+    { id: 'expanded', title: 'Expanded', description: 'Always show text labels in the sidebar' },
+    { id: 'collapsed', title: 'Icon-only', description: 'Collapse the sidebar to icons only to save space' }
   ];
   const seekbarStyles: { id: 'standard' | 'waveform'; title: string; description: string }[] = [
     { id: 'standard', title: 'Classic', description: 'Use the simple progress bar' },
@@ -43,7 +61,32 @@
   ];
 
   import { openUrl } from '@tauri-apps/plugin-opener';
+  import { invoke } from '@tauri-apps/api/core';
   import ConfirmDialog from './ConfirmDialog.svelte';
+
+  async function browseFont() {
+    if (customFonts.length >= 5) return;
+    try {
+      const path = await invoke<string>('pick_font_file');
+      const fontStr = 'file:' + path;
+      if (!customFonts.includes(fontStr)) {
+        customFonts = [...customFonts, fontStr];
+        window.localStorage.setItem('orca.customFonts', JSON.stringify(customFonts));
+      }
+      onFontFamilyChange(fontStr);
+    } catch {
+      // user cancelled — do nothing
+    }
+  }
+
+  function removeCustomFont(fontStr: string, e: Event) {
+    e.stopPropagation();
+    customFonts = customFonts.filter(f => f !== fontStr);
+    window.localStorage.setItem('orca.customFonts', JSON.stringify(customFonts));
+    if (fontFamily === fontStr) {
+      onFontFamilyChange('Plus Jakarta Sans');
+    }
+  }
 
   const releaseLabel = 'v0.1.3-alpha';
 
@@ -119,20 +162,51 @@
         />
       </div>
 
-      <div class="mb-7 grid grid-cols-[1fr_152px] items-center gap-5 border-t border-white/10 pt-5 max-md:grid-cols-1">
-        <div>
+      <div class="mb-7 border-t border-white/10 pt-5">
+        <div class="mb-4">
           <h3 class="text-sm font-bold text-white">Font</h3>
-          <p class="text-sm text-white/48">Choose from presets, local fonts, or upload your own</p>
+          <p class="text-sm text-white/48">Pick a preset or browse for a custom font file</p>
         </div>
-        <select
-          class="h-9 rounded-md border border-white/10 bg-[#161616] px-3 text-sm text-white outline-none"
-          bind:value={fontFamily}
-          on:change={(event) => onFontFamilyChange((event.currentTarget as HTMLSelectElement).value)}
-        >
-          {#each fontOptions as font}
-            <option value={font}>{font}</option>
+        <div class="flex gap-2">
+          {#each fontPresets as preset}
+            <button
+              class={`h-9 rounded-md border px-4 text-sm font-semibold transition ${fontFamily === preset ? 'border-white bg-white text-black' : 'border-white/12 text-white/72 hover:border-white/30 hover:text-white'}`}
+              on:click={() => onFontFamilyChange(preset)}
+            >{preset}</button>
           {/each}
-        </select>
+          
+          {#each customFonts as customFont}
+            <div class="relative group">
+              <button
+                class={`h-9 rounded-md border pl-4 pr-8 text-sm font-semibold transition ${fontFamily === customFont ? 'border-white bg-white text-black' : 'border-white/12 text-white/72 hover:border-white/30 hover:text-white'}`}
+                on:click={() => onFontFamilyChange(customFont)}
+              >{folderName(customFont.slice(5)).replace(/\.[^/.]+$/, '')}</button>
+              <button
+                class={`absolute right-1 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-sm opacity-0 group-hover:opacity-100 transition ${fontFamily === customFont ? 'text-black/40 hover:bg-black/10 hover:text-black' : 'text-white/40 hover:bg-white/10 hover:text-white'}`}
+                title="Remove custom font"
+                type="button"
+                on:click={(e) => removeCustomFont(customFont, e)}
+              >
+                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            </div>
+          {/each}
+
+          {#if customFonts.length < 5}
+            <button
+              class="flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-white/12 px-3 text-sm text-white/72 transition hover:border-white/30 hover:text-white"
+              type="button"
+              title="Browse for a font file on your computer"
+              on:click={browseFont}
+            >
+              <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+              Browse file
+            </button>
+          {/if}
+        </div>
       </div>
 
       <div class="mb-7 grid grid-cols-[1fr_340px] items-center gap-5 border-t border-white/10 pt-5 max-md:grid-cols-1">
@@ -197,6 +271,21 @@
             >
               <span class="block text-sm font-bold">{placement.title}</span>
               <span class={`mt-1 block text-xs ${playerPlacement === placement.id ? 'text-black/58' : 'text-white/44'}`}>{placement.description}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+      <div>
+        <h3 class="text-sm font-bold text-white">Sidebar mode</h3>
+        <p class="text-sm text-white/48">Choose whether the sidebar should show text labels or just icons</p>
+        <div class="mt-4 grid grid-cols-2 gap-3 max-md:grid-cols-1">
+          {#each sidebarModes as mode}
+            <button
+              class={`min-h-20 rounded-md border px-4 py-3 text-left transition ${sidebarMode === mode.id ? 'border-white bg-white text-black' : 'border-white/12 bg-black/20 text-white hover:border-white/35 hover:bg-white/[0.05]'}`}
+              on:click={() => onSidebarModeChange(mode.id)}
+            >
+              <span class="block text-sm font-bold">{mode.title}</span>
+              <span class={`mt-1 block text-xs ${sidebarMode === mode.id ? 'text-black/58' : 'text-white/44'}`}>{mode.description}</span>
             </button>
           {/each}
         </div>
@@ -272,6 +361,31 @@
       <p class="mt-3 text-xs text-white/34">
         Removing a folder keeps the files on disk. It only removes that folder from Orca and drops its songs from the library.
       </p>
+
+      <div class="mt-10 border-t border-white/10 pt-6">
+        <div class="grid grid-cols-[1fr_44px] items-center gap-5">
+          <div>
+            <h3 class="flex items-center gap-1.5 text-sm font-bold text-white">
+              Automatically fetch missing artwork
+              <span class="group relative">
+                <span class="grid h-4 w-4 cursor-default place-items-center rounded-full bg-white/15 text-[10px] font-bold text-white/60 transition hover:bg-white/25 hover:text-white">α</span>
+                <span class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-72 -translate-x-1/2 rounded-lg bg-[#1c1c1e] px-3 py-2.5 text-xs font-normal leading-relaxed text-white/70 opacity-0 shadow-xl ring-1 ring-white/10 transition-opacity group-hover:opacity-100">
+                  <span class="font-semibold text-white">Alpha feature</span> — downloaded covers are stored separately and are not embedded into your audio files. Results may occasionally be inaccurate.
+                  <span class="absolute -bottom-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 rounded-sm bg-[#1c1c1e] ring-1 ring-white/10"></span>
+                </span>
+              </span>
+            </h3>
+            <p class="text-sm text-white/48">Download missing album covers and artist images from iTunes and Deezer when the library loads.</p>
+          </div>
+          <button
+            class={`relative h-6 w-11 rounded-full border transition ${autoFetchArtwork ? 'toggle-switch-on' : 'toggle-switch-off'}`}
+            title="Automatically fetch missing artwork"
+            on:click={() => onAutoFetchArtworkChange(!autoFetchArtwork)}
+          >
+            <span class={`toggle-knob absolute top-1 h-4 w-4 rounded-full transition ${autoFetchArtwork ? 'left-6' : 'left-1'}`}></span>
+          </button>
+        </div>
+      </div>
     </section>
   {:else if activeTab === 'Audio'}
     <section class="max-w-[820px] space-y-5">
