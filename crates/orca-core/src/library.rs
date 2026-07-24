@@ -429,10 +429,10 @@ fn artwork_extension_from_mime(mime: &str) -> &'static str {
     else { "jpg" }
 }
 
-struct ArtworkPaths {
-    full: String,
-    thumb: String,
-    preview: String,
+pub struct ArtworkPaths {
+    pub full: String,
+    pub thumb: String,
+    pub preview: String,
 }
 
 fn persist_artwork(
@@ -473,7 +473,7 @@ fn persist_artwork(
     })
 }
 
-fn write_webp_derivative(
+pub fn write_webp_derivative(
     image: &image::DynamicImage,
     output_path: &Path,
     size: u32,

@@ -393,6 +393,7 @@ fn choose_artist_cover(
         &state.db_conn,
         &artist_name,
         Some(&image_path.to_string_lossy()),
+        None,
     )?;
     db::get_artists(&state.db_conn)
 }
@@ -424,18 +425,127 @@ fn choose_album_cover(
         &state.db_conn,
         &album_key,
         Some(&image_path.to_string_lossy()),
+        None,
     )?;
     db::get_albums(&state.db_conn)
 }
 
 #[tauri::command]
-fn remove_album_cover(
+async fn remove_album_cover(
     album_key: String,
     state: State<'_, SharedOrcaState>,
-) -> Result<Vec<db::AlbumEntry>, String> {
-    let state = state.0.lock().map_err(|error| error.to_string())?;
+) -> Result<LibrarySnapshot, String> {
+    let mut state = state.0.lock().map_err(|error| error.to_string())?;
     db::remove_album_artwork(&state.db_conn, &album_key)?;
-    db::get_albums(&state.db_conn)
+    state.songs = db::get_all_songs(&state.db_conn)?;
+    snapshot_from_state(&state)
+}
+
+#[tauri::command]
+async fn fetch_artist_artwork_manual(
+    artist_name: String,
+    state: State<'_, SharedOrcaState>,
+) -> Result<LibrarySnapshot, String> {
+    let url = orca_core::online_artwork::fetch_itunes_artist_image(&artist_name)
+        .or_else(|| orca_core::online_artwork::fetch_deezer_artist_image(&artist_name));
+    let url = url.ok_or_else(|| "Artist image not found online".to_string())?;
+    
+    let cache_dir = artwork_dir().join("online");
+    let safe_name = artist_name.replace(|c: char| !c.is_alphanumeric(), "_");
+    let prefix = format!("artist_{}", safe_name);
+    
+    let paths = orca_core::online_artwork::download_and_cache(&url, &cache_dir, &prefix)?;
+    
+    let mut state = state.0.lock().map_err(|error| error.to_string())?;
+    db::update_artist_artwork(
+        &state.db_conn,
+        &artist_name,
+        Some(&paths.full),
+        Some(&paths.thumb),
+    )?;
+    
+    state.songs = db::get_all_songs(&state.db_conn)?;
+    snapshot_from_state(&state)
+}
+
+#[tauri::command]
+async fn fetch_album_artwork_manual(
+    album_key: String,
+    artist: String,
+    album: String,
+    state: State<'_, SharedOrcaState>,
+) -> Result<LibrarySnapshot, String> {
+    let url = orca_core::online_artwork::fetch_itunes_album_art(&artist, &album);
+    let url = url.ok_or_else(|| "Album art not found online".to_string())?;
+    
+    let cache_dir = artwork_dir().join("online");
+    let safe_name = album_key.replace(|c: char| !c.is_alphanumeric(), "_");
+    let prefix = format!("album_{}", safe_name);
+    
+    let paths = orca_core::online_artwork::download_and_cache(&url, &cache_dir, &prefix)?;
+    
+    let mut state = state.0.lock().map_err(|error| error.to_string())?;
+    db::update_album_artwork(
+        &state.db_conn,
+        &album_key,
+        Some(&paths.full),
+        Some(&paths.thumb),
+    )?;
+    
+    state.songs = db::get_all_songs(&state.db_conn)?;
+    snapshot_from_state(&state)
+}
+
+#[tauri::command]
+async fn fetch_all_missing_artwork(
+    state: State<'_, SharedOrcaState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    use tauri::Emitter;
+    // This runs on a separate thread so we don't block the UI
+    let state_clone = state.0.lock().map_err(|e| e.to_string())?;
+    let db_conn_path = state_clone.db_conn.path().map(|p| p.to_string());
+    let cache_base = artwork_dir().join("online");
+    
+    if let Some(path) = db_conn_path {
+        std::thread::spawn(move || {
+            let conn = rusqlite::Connection::open(&path).ok()?;
+            
+            // 1. Fetch artists without artwork (tombstoned artists already excluded by query)
+            if let Ok(artists) = db::get_artists_needing_artwork(&conn) {
+                for artist_name in artists {
+                    if let Some(url) = orca_core::online_artwork::fetch_itunes_artist_image(&artist_name)
+                        .or_else(|| orca_core::online_artwork::fetch_deezer_artist_image(&artist_name)) {
+                        let safe_name = artist_name.replace(|c: char| !c.is_alphanumeric(), "_");
+                        let prefix = format!("artist_{}", safe_name);
+                        if let Ok(paths) = orca_core::online_artwork::download_and_cache(&url, &cache_base, &prefix) {
+                            let _ = db::update_artist_artwork(&conn, &artist_name, Some(&paths.full), Some(&paths.thumb));
+                        }
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                }
+            }
+            
+            // 2. Fetch albums without artwork (tombstoned albums already excluded by query)
+            if let Ok(albums) = db::get_albums_needing_artwork(&conn) {
+                for (album_key, album_title, album_artist) in albums {
+                    if let Some(url) = orca_core::online_artwork::fetch_itunes_album_art(&album_artist, &album_title) {
+                        let safe_name = album_key.replace(|c: char| !c.is_alphanumeric(), "_");
+                        let prefix = format!("album_{}", safe_name);
+                        if let Ok(paths) = orca_core::online_artwork::download_and_cache(&url, &cache_base, &prefix) {
+                            let _ = db::update_album_artwork(&conn, &album_key, Some(&paths.full), Some(&paths.thumb));
+                        }
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                }
+            }
+            
+            let _ = app.emit("library-refreshed", ());
+            Some(())
+        });
+    }
+    
+    Ok(())
 }
 
 #[tauri::command]
@@ -746,6 +856,18 @@ fn update_media_controls(update: MediaControlsUpdate, state: State<'_, SharedOrc
     Ok(())
 }
 
+#[tauri::command]
+fn pick_font_file() -> Result<String, String> {
+    let Some(path) = rfd::FileDialog::new()
+        .add_filter("Font files", &["ttf", "otf", "woff", "woff2"])
+        .set_title("Pick a font file")
+        .pick_file()
+    else {
+        return Err("Font selection cancelled".to_string());
+    };
+    Ok(path.to_string_lossy().to_string())
+}
+
 pub fn run() {
     // Register the App User Model ID so Windows taskbar thumbnail buttons
     // work in both the installed version and the portable .exe.
@@ -823,6 +945,9 @@ pub fn run() {
             remove_artist_cover,
             choose_album_cover,
             remove_album_cover,
+            fetch_artist_artwork_manual,
+            fetch_album_artwork_manual,
+            fetch_all_missing_artwork,
             update_song_metadata,
             choose_song_cover,
             remove_song_cover,
@@ -836,7 +961,8 @@ pub fn run() {
             waveform_peaks,
             playback_snapshot,
             update_media_controls,
-            set_volume
+            set_volume,
+            pick_font_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

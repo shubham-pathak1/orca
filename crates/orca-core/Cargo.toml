@@ -9,6 +9,7 @@ biquad = "0.5"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 log = "0.4"
 lofty = "0.21"
+md5 = "0.7"
 rodio = "0.21.1"
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
