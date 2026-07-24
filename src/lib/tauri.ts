@@ -103,20 +103,32 @@ export async function removePlaylistCover(playlistId: number): Promise<Playlist[
   return invoke<Playlist[]>('remove_playlist_cover', { playlistId });
 }
 
-export async function chooseArtistCover(artistName: string): Promise<ArtistEntry[]> {
-  return invoke<ArtistEntry[]>('choose_artist_cover', { artistName });
+export async function chooseArtistCover(artistName: string): Promise<LibrarySnapshot> {
+  return invoke<LibrarySnapshot>('choose_artist_cover', { artistName });
 }
 
-export async function removeArtistCover(artistName: string): Promise<ArtistEntry[]> {
-  return invoke<ArtistEntry[]>('remove_artist_cover', { artistName });
+export async function removeArtistCover(artistName: string): Promise<LibrarySnapshot> {
+  return invoke<LibrarySnapshot>('remove_artist_cover', { artistName });
 }
 
-export async function chooseAlbumCover(albumKey: string): Promise<AlbumEntry[]> {
-  return invoke<AlbumEntry[]>('choose_album_cover', { albumKey });
+export async function chooseAlbumCover(albumKey: string): Promise<LibrarySnapshot> {
+  return invoke<LibrarySnapshot>('choose_album_cover', { albumKey });
 }
 
-export async function removeAlbumCover(albumKey: string): Promise<AlbumEntry[]> {
-  return invoke<AlbumEntry[]>('remove_album_cover', { albumKey });
+export async function removeAlbumCover(albumKey: string): Promise<LibrarySnapshot> {
+  return invoke<LibrarySnapshot>('remove_album_cover', { albumKey });
+}
+
+export async function fetchArtistArtworkManual(artistName: string): Promise<LibrarySnapshot> {
+  return invoke<LibrarySnapshot>('fetch_artist_artwork_manual', { artistName });
+}
+
+export async function fetchAlbumArtworkManual(albumKey: string, artist: string, album: string): Promise<LibrarySnapshot> {
+  return invoke<LibrarySnapshot>('fetch_album_artwork_manual', { albumKey, artist, album });
+}
+
+export async function fetchAllMissingArtwork(): Promise<void> {
+  return invoke<void>('fetch_all_missing_artwork');
 }
 
 export async function updateSongMetadata(update: SongMetadataUpdate): Promise<LibrarySnapshot> {

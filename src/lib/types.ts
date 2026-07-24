@@ -41,6 +41,9 @@ export type ArtistEntry = {
   name: string;
   song_count: number;
   artwork: string | null;
+  artwork_thumb: string | null;
+  song_artwork: string | null;
+  song_artwork_thumb: string | null;
 };
 
 export type AlbumEntry = {
@@ -50,6 +53,7 @@ export type AlbumEntry = {
   song_count: number;
   duration: number;
   artwork: string | null;
+  artwork_thumb: string | null;
 };
 
 export type LibrarySnapshot = {
