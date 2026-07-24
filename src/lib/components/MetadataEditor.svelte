@@ -9,6 +9,7 @@
   export let onSave: (update: SongMetadataUpdate) => Promise<void> | void = () => {};
   export let onReplaceCover: (song: LocalSong) => Promise<void> | void = () => {};
   export let onRemoveCover: (song: LocalSong) => Promise<void> | void = () => {};
+  export let onFetchAlbumArtwork: (song: LocalSong) => Promise<void> | void = () => {};
 
   let loadedPath: string | null = null;
   let title = '';
@@ -83,6 +84,12 @@
         <div class="aspect-square overflow-hidden rounded-md bg-white/[0.06]">
           {#if artworkUrl(song.artwork)}
             <img class="h-full w-full object-cover" src={artworkUrl(song.artwork) ?? ''} alt="" />
+          {:else}
+            <div class="flex h-full w-full items-center justify-center opacity-20">
+              <svg viewBox="0 0 24 24" fill="currentColor" class="h-16 w-16">
+                <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6Z"/>
+              </svg>
+            </div>
           {/if}
         </div>
         <div class="mt-4 min-w-0">
@@ -93,9 +100,14 @@
           <button class="h-10 rounded-md border border-white/12 text-sm font-bold text-white/72 transition hover:bg-white/[0.08] hover:text-white" type="button" on:click={() => onReplaceCover(song)}>
             Replace cover
           </button>
+          <button class="h-10 rounded-md border border-[var(--accent-mid)] text-sm font-bold text-[var(--accent)] transition hover:bg-[var(--accent-soft)] hover:text-white" type="button" on:click={() => onFetchAlbumArtwork(song)}>
+            Fetch artwork online
+          </button>
+          {#if artworkUrl(song.artwork)}
           <button class="h-10 rounded-md border border-white/12 text-sm font-bold text-white/54 transition hover:bg-white/[0.08] hover:text-white" type="button" on:click={() => onRemoveCover(song)}>
             Remove cover
           </button>
+          {/if}
         </div>
         <p class="mt-4 break-all text-[11px] leading-5 text-white/32">{song.path}</p>
       </aside>
