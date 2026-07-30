@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { artworkUrl } from '../tauri';
-  import { formatDuration, formatQuality } from '../format';
+  import { formatDuration, formatQuality, formatTotalDuration } from '../format';
   import type { LocalSong, Playlist, ArtistEntry, AlbumEntry } from '../types';
   import type { ActiveView } from '../navigation';
   import AlphabetRail from './AlphabetRail.svelte';
@@ -218,7 +218,9 @@
   }
 
   $: if (activeView !== 'artists') {
-    selectedArtistName = null;
+    if (!backTarget || backTarget.view !== 'artists') {
+      selectedArtistName = null;
+    }
   }
 
   $: if (activeView !== 'albums') {
@@ -228,6 +230,12 @@
   $: if (activeView !== 'playlists') {
     selectedPlaylistId = null;
     selectedPlaylistSongIds = [];
+  }
+
+  $: if (activeView) {
+    if (activeView !== 'albums' && activeView !== 'artists') {
+      backTarget = null;
+    }
   }
 
 
@@ -292,6 +300,8 @@
 
   let savedArtistScrollTop = 0;
   let savedAlbumScrollTop = 0;
+  let visibleArtistCount = 50;
+  let backTarget: { view: ActiveView, artistName: string | null } | null = null;
 
   function openArtist(name: string) {
     if (artistListEl) {
@@ -302,11 +312,17 @@
     detailQuery = '';
   }
 
-  function openAlbum(key: string) {
+  function openAlbum(key: string, fromArtist: boolean = false) {
     if (albumListEl) {
       savedAlbumScrollTop = albumListEl.scrollTop;
     }
+    if (fromArtist) {
+      backTarget = { view: 'artists', artistName: selectedArtistName };
+    } else {
+      backTarget = null;
+    }
     selectedAlbumKey = key;
+    activeView = 'albums';
     query = '';
     detailQuery = '';
   }
@@ -365,11 +381,21 @@
   function closeAlbum() {
     selectedAlbumKey = null;
     detailQuery = '';
-    void tick().then(() => {
-      if (albumListEl) {
-        albumListEl.scrollTop = savedAlbumScrollTop;
+    
+    if (backTarget) {
+      const target = backTarget;
+      backTarget = null;
+      activeView = target.view;
+      if (target.view === 'artists' && target.artistName) {
+        selectedArtistName = target.artistName;
       }
-    });
+    } else {
+      void tick().then(() => {
+        if (albumListEl) {
+          albumListEl.scrollTop = savedAlbumScrollTop;
+        }
+      });
+    }
   }
 
   async function savePlaylistName() {
@@ -1104,7 +1130,11 @@
               <div class="min-w-0">
                 <h2 class="truncate text-6xl font-black max-xl:text-5xl">{selectedAlbum.title}</h2>
                 <p class="mt-3 text-sm text-white/62">By {selectedAlbum.artist}</p>
-                <p class="mt-1 text-xs text-white/42">{selectedAlbum.song_count} {selectedAlbum.song_count === 1 ? 'track' : 'tracks'} / {formatDuration(selectedAlbum.duration)}</p>
+                <p class="mt-1 flex items-center gap-1.5 text-xs text-white/42">
+                  <span>{selectedAlbum.song_count} {selectedAlbum.song_count === 1 ? 'track' : 'tracks'}</span>
+                  <span class="text-[6px] opacity-40">&#9679;</span>
+                  <span>{formatTotalDuration(selectedAlbum.duration)}</span>
+                </p>
                 <div class="mt-5 flex items-center gap-2">
                 <button class="grid h-11 w-11 place-items-center rounded-full bg-[var(--accent)] text-black transition hover:scale-105" title="Play album" on:click={() => playFirstSong(selectedAlbumVisibleSongs)}>
                   <svg class="ml-0.5 h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
@@ -1253,7 +1283,13 @@
               </div>
               <div class="min-w-0">
                 <h2 class="truncate text-6xl font-black max-xl:text-5xl leading-normal">{selectedArtist.name}</h2>
-                <p class="mt-3 text-sm text-white/62">{selectedArtist.songs.length} {selectedArtist.songs.length === 1 ? 'song' : 'songs'} / {selectedArtist.albums.length} {selectedArtist.albums.length === 1 ? 'album' : 'albums'}</p>
+                <p class="mt-3 flex items-center gap-1.5 text-sm text-white/62">
+                  <span>{selectedArtist.albums.length} {selectedArtist.albums.length === 1 ? 'album' : 'albums'}</span>
+                  <span class="text-[6px] opacity-40">&#9679;</span>
+                  <span>{selectedArtist.songs.length} {selectedArtist.songs.length === 1 ? 'song' : 'songs'}</span>
+                  <span class="text-[6px] opacity-40">&#9679;</span>
+                  <span>{formatTotalDuration(selectedArtist.songs.reduce((acc, song) => acc + (song.duration || 0), 0))}</span>
+                </p>
                 <div class="mt-5 flex items-center gap-2">
                 <button class="grid h-11 w-11 place-items-center rounded-full bg-[var(--accent)] text-black transition hover:scale-105" title="Play artist" on:click={() => playFirstSong(selectedArtistVisibleSongs)}>
                   <svg class="ml-0.5 h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
@@ -1299,7 +1335,7 @@
               <h3 class="mb-3 text-base font-black">Albums</h3>
               <div class="grid grid-cols-2 gap-3">
                 {#each selectedArtist.albums.slice(0, 6) as album}
-                  <button class="min-w-0 rounded-md bg-white/[0.035] p-2 text-left transition hover:bg-white/[0.07]" on:click={() => { selectedAlbumKey = album.key; activeView = 'albums'; }}>
+                  <button class="min-w-0 rounded-md bg-white/[0.035] p-2 text-left transition hover:bg-white/[0.07]" on:click={() => openAlbum(album.key, true)}>
                     <div class="aspect-square overflow-hidden rounded bg-white/8">
                       {#if artworkUrl(album.artwork)}
                         <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={album.artwork} alt="" />
@@ -1317,9 +1353,14 @@
         </div>
       {:else}
         <div class="grid h-full grid-cols-[minmax(0,1fr)_24px]">
-          <div class="scrollbar-none grid max-h-full content-start grid-cols-5 gap-x-3 overflow-auto pr-2 max-2xl:grid-cols-4 max-lg:grid-cols-3 max-md:grid-cols-2" bind:this={artistListEl}>
+          <div class="scrollbar-none grid max-h-full content-start grid-cols-5 gap-x-3 gap-y-1 overflow-auto pr-2 max-2xl:grid-cols-4 max-lg:grid-cols-3 max-md:grid-cols-2" bind:this={artistListEl} on:scroll={(e) => {
+            const target = e.currentTarget;
+            if (target.scrollTop + target.clientHeight >= target.scrollHeight - 500) {
+              visibleArtistCount += 50;
+            }
+          }}>
             {#if artistEntries.length}
-              {#each artistEntries as artist}
+              {#each artistEntries.slice(0, visibleArtistCount) as artist}
               <button data-letter={initialFromText(artist.name)} class="flex min-w-0 items-center gap-3 border-b border-white/[0.04] px-2 py-3 text-left transition hover:bg-white/[0.035]" on:click={() => openArtist(artist.name)} on:contextmenu={(event) => openArtistMenu(event, artist)}>
                 {#if artworkUrl(artist.artwork ?? artist.song_artwork)}
                   <LazyArtwork rootClass="h-10 w-10 shrink-0 rounded-full overflow-hidden opacity-90" imageClass="h-full w-full object-cover" path={artist.artwork ? (artist.artwork_thumb ?? artist.artwork) : (artist.song_artwork_thumb ?? artist.song_artwork)} alt="" />
