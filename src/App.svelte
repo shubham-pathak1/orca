@@ -87,6 +87,7 @@
   let repeatMode: 'off' | 'all' | 'one' = 'off';
   let queueOrderPaths: string[] = [];
   let queueRemovedPaths: string[] = [];
+  let shufflePlayedPaths = new Set<string>();
   let metadataEditorSong: LocalSong | null = null;
   let isSavingMetadata = false;
   let folderCount = 0;
@@ -438,9 +439,9 @@
     const orderedSongs = orderPaths
       .map((path) => songsByPath.get(path))
       .filter((song): song is LocalSong => Boolean(song));
-    const orderedPaths = new Set(orderedSongs.map((song) => song.path));
-    const missingSongs = sourceSongs.filter((song) => !orderedPaths.has(song.path));
-    return [...orderedSongs, ...missingSongs];
+    // Do NOT append songs not in the context — when a context is set (e.g. artist / album),
+    // next/prev should stay strictly within that context.
+    return orderedSongs;
   }
 
   function buildQueueSongs(sourceSongs: LocalSong[], currentPath: string | null, mode: 'off' | 'all' | 'one') {
@@ -613,11 +614,18 @@
     }
 
     if (shuffleEnabled && orderedPlaybackSongs.length > 1) {
-      let nextIndex = currentIndex;
-      while (nextIndex === currentIndex) {
-        nextIndex = Math.floor(Math.random() * orderedPlaybackSongs.length);
+      const unplayed = orderedPlaybackSongs.filter((s) => !shufflePlayedPaths.has(s.path));
+      if (unplayed.length === 0) {
+        if (repeatMode === 'off') {
+          return null; // all songs played, stop
+        }
+        // repeat all: reset history
+        shufflePlayedPaths = new Set([currentPath]);
+        const candidates = orderedPlaybackSongs.filter((s) => s.path !== currentPath);
+        if (!candidates.length) return null;
+        return candidates[Math.floor(Math.random() * candidates.length)];
       }
-      return orderedPlaybackSongs[nextIndex];
+      return unplayed[Math.floor(Math.random() * unplayed.length)];
     }
 
     const isLastSong = currentIndex >= orderedPlaybackSongs.length - 1;
@@ -1004,6 +1012,9 @@
     if (contextSongs && contextSongs.length) {
       queueOrderPaths = contextSongs.map((s) => s.path);
       queueRemovedPaths = [];
+      shufflePlayedPaths = new Set([song.path]); // reset history for new context
+    } else {
+      shufflePlayedPaths.add(song.path);
     }
     try {
       playback = await playSong(song.path);
@@ -1023,20 +1034,36 @@
       return;
     }
 
-    if (offset > 0 && repeatMode === 'off' && currentIndex >= orderedPlaybackSongs.length - 1) {
+    if (shuffleEnabled && orderedPlaybackSongs.length > 1) {
+      // In shuffle mode: pick a random unplayed song.
+      // If all songs have been played and repeat is off, stop.
+      const unplayed = orderedPlaybackSongs.filter((s) => !shufflePlayedPaths.has(s.path));
+      if (unplayed.length === 0) {
+        if (repeatMode === 'off') {
+          return; // album/context is over
+        }
+        // repeat all: reset and play again
+        shufflePlayedPaths = new Set([currentPath ?? '']);
+        const candidates = orderedPlaybackSongs.filter((s) => s.path !== currentPath);
+        if (!candidates.length) return;
+        const next = candidates[Math.floor(Math.random() * candidates.length)];
+        await chooseSong(next);
+        return;
+      }
+      const next = unplayed[Math.floor(Math.random() * unplayed.length)];
+      await chooseSong(next);
       return;
     }
 
+    // Sequential boundary guards (shuffle off only)
+    if (offset > 0 && repeatMode === 'off' && currentIndex >= orderedPlaybackSongs.length - 1) {
+      return;
+    }
     if (offset < 0 && repeatMode === 'off' && currentIndex <= 0) {
       return;
     }
 
-    let nextIndex = (currentIndex + offset + orderedPlaybackSongs.length) % orderedPlaybackSongs.length;
-    if (shuffleEnabled && orderedPlaybackSongs.length > 1) {
-      do {
-        nextIndex = Math.floor(Math.random() * orderedPlaybackSongs.length);
-      } while (nextIndex === currentIndex);
-    }
+    const nextIndex = (currentIndex + offset + orderedPlaybackSongs.length) % orderedPlaybackSongs.length;
     await chooseSong(orderedPlaybackSongs[nextIndex]);
   }
 
@@ -1124,16 +1151,16 @@
     class={`relative grid h-full transition-all ${
       playerPlacement === 'right'
         ? (sidebarMode === 'collapsed'
-            ? 'grid-cols-[64px_minmax(0,1fr)_250px] grid-rows-[minmax(0,1fr)_96px] xl:grid-rows-[1fr] max-xl:grid-cols-[64px_minmax(0,1fr)]'
+            ? 'grid-cols-[56px_minmax(0,1fr)_250px] grid-rows-[minmax(0,1fr)_96px] xl:grid-rows-[1fr] max-xl:grid-cols-[56px_minmax(0,1fr)]'
             : 'grid-cols-[132px_minmax(0,1fr)_250px] grid-rows-[minmax(0,1fr)_96px] xl:grid-rows-[1fr] max-xl:grid-cols-[132px_minmax(0,1fr)]')
         : (sidebarMode === 'collapsed'
-            ? 'grid-cols-[64px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_96px]'
+            ? 'grid-cols-[56px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_96px]'
             : 'grid-cols-[132px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_96px]')
-    } max-md:grid-cols-[64px_minmax(0,1fr)]`}
+    } max-md:grid-cols-[56px_minmax(0,1fr)]`}
   >
     <Sidebar {activeView} {isScanning} {folderCount} {sidebarMode} onSelect={(view) => (activeView = view)} onAddFolder={addFolder} onRefresh={refreshLibrary} />
     <LibraryView
-      {activeView}
+      bind:activeView
       {songs}
       {playlists}
       {filteredSongs}
