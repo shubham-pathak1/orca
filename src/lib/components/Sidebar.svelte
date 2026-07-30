@@ -12,7 +12,7 @@
   $: collapsed = sidebarMode === 'collapsed';
 </script>
 
-<aside class={`row-span-2 flex min-h-0 flex-col border-r border-white/10 bg-black/70 px-3 py-4 transition-all ${collapsed ? 'w-[64px] items-center px-2' : 'max-md:w-[64px] max-md:items-center max-md:px-2'}`}>
+<aside class={`row-span-2 flex min-h-0 flex-col border-r border-white/10 bg-black/70 px-3 py-4 transition-all ${collapsed ? 'w-[56px] items-center px-2' : 'max-md:w-[56px] max-md:items-center max-md:px-2'}`}>
   <div class={`mb-6 flex items-center gap-2 px-1 ${collapsed ? 'justify-center px-0' : 'max-md:justify-center max-md:px-0'}`}>
     <img class="h-6 w-6 rounded-sm object-cover" src="/orca_logo.png" alt="" />
     <span class={`truncate text-base font-bold text-white ${collapsed ? 'hidden' : 'max-md:hidden'}`}>Orca</span>
