@@ -48,7 +48,7 @@ pub fn fetch_itunes_artist_image(artist: &str) -> Option<String> {
             .finish(),
     );
 
-    let req = ureq::get(&url).set("User-Agent", "Orca/0.1.3 (https://github.com/shubham-pathak1/orca)");
+    let req = ureq::get(&url).set("User-Agent", "Orca/0.1.4 (https://github.com/shubham-pathak1/orca)");
     let resp = req.call().ok()?;
     if resp.status() != 200 { return None; }
     
@@ -72,7 +72,7 @@ pub fn fetch_itunes_artist_image(artist: &str) -> Option<String> {
             .finish(),
     );
     
-    let req2 = ureq::get(&lookup_url).set("User-Agent", "Orca/0.1.3 (https://github.com/shubham-pathak1/orca)");
+    let req2 = ureq::get(&lookup_url).set("User-Agent", "Orca/0.1.4 (https://github.com/shubham-pathak1/orca)");
     let resp2 = req2.call().ok()?;
     if resp2.status() != 200 { return None; }
     
@@ -100,7 +100,7 @@ pub fn fetch_itunes_album_art(artist: &str, album: &str) -> Option<String> {
             .finish(),
     );
 
-    let req = ureq::get(&url).set("User-Agent", "Orca/0.1.3 (https://github.com/shubham-pathak1/orca)");
+    let req = ureq::get(&url).set("User-Agent", "Orca/0.1.4 (https://github.com/shubham-pathak1/orca)");
     let resp = req.call().ok()?;
     
     if resp.status() != 200 {
@@ -208,7 +208,7 @@ pub fn fetch_deezer_artist_image(artist: &str) -> Option<String> {
             .finish(),
     );
 
-    let req = ureq::get(&url).set("User-Agent", "Orca/0.1.3 (https://github.com/shubham-pathak1/orca)");
+    let req = ureq::get(&url).set("User-Agent", "Orca/0.1.4 (https://github.com/shubham-pathak1/orca)");
     let resp = req.call().ok()?;
     
     if resp.status() != 200 {
@@ -250,7 +250,7 @@ pub fn fetch_deezer_album_art(artist: &str, album: &str) -> Option<String> {
             .finish(),
     );
 
-    let req = ureq::get(&url).set("User-Agent", "Orca/0.1.3 (https://github.com/shubham-pathak1/orca)");
+    let req = ureq::get(&url).set("User-Agent", "Orca/0.1.4 (https://github.com/shubham-pathak1/orca)");
     let resp = req.call().ok()?;
     
     if resp.status() != 200 {
@@ -282,7 +282,7 @@ pub fn fetch_deezer_album_art(artist: &str, album: &str) -> Option<String> {
 }
 
 pub fn download_and_cache(url: &str, cache_dir: &Path, prefix: &str) -> Result<ArtworkPaths, String> {
-    let req = ureq::get(url).set("User-Agent", "Orca/0.1.3 (https://github.com/shubham-pathak1/orca)");
+    let req = ureq::get(url).set("User-Agent", "Orca/0.1.4 (https://github.com/shubham-pathak1/orca)");
     let resp = req.call().map_err(|e| e.to_string())?;
     
     if resp.status() != 200 {
