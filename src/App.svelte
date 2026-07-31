@@ -22,10 +22,7 @@
     getLibrarySnapshot,
     libraryFolderCount,
     libraryScanRoots,
-    pausePlayback,
     pickAndScanFolder,
-    playSong,
-    playbackSnapshot,
     queueNextPlayback,
     removeLibraryScanRoot,
     playlistSongIds,
@@ -34,9 +31,6 @@
     removeSongFromPlaylist,
     renamePlaylist,
     rescanLibrary,
-    resumePlayback,
-    seekPlayback,
-    setVolume,
     updateSongMetadata,
     updateMediaControls,
     fetchArtistArtworkManual,
@@ -49,19 +43,18 @@
   import { register, unregister, isRegistered } from '@tauri-apps/plugin-global-shortcut';
   import { isSupported as isTaskbarSupported, setPlaybackState, setNavigationEnabled } from 'tauri-plugin-taskbar';
   import type { ActiveView } from './lib/navigation';
+  import { createPlaybackStore } from './lib/stores/playback';
   import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate, ArtistEntry, AlbumEntry } from './lib/types';
 
   let songs: LocalSong[] = [];
   let playlists: Playlist[] = [];
   let artists: ArtistEntry[] = [];
   let albums: AlbumEntry[] = [];
-  let playback: PlaybackState = {
-    current_path: null,
-    position_ms: 0,
-    duration_ms: 0,
-    is_playing: false,
-    volume: 1
-  };
+  const playbackStore = createPlaybackStore();
+  let playback: PlaybackState;
+  const unsubscribePlayback = playbackStore.subscribe((state) => {
+    playback = state;
+  });
   let query = '';
   let activeView: ActiveView = 'songs';
   let isScanning = false;
@@ -92,7 +85,6 @@
   let isSavingMetadata = false;
   let folderCount = 0;
   let scanRoots: string[] = [];
-  let isPollingPlayback = false;
   let isHandlingTrackEnd = false;
   let handledEndedPath: string | null = null;
   let queuedNextForPath: string | null = null;
@@ -209,36 +201,17 @@
       // Show accurate library count from the snapshot
       status = snapshot.songs && snapshot.songs.length ? `${snapshot.songs.length} tracks loaded` : 'Add a folder to build your library';
 
-      // Restore saved volume so the app doesn't blast at 100% after a restart
-      const savedVolume = window.localStorage.getItem('orca.volume');
-      if (savedVolume !== null) {
-        const vol = Number(savedVolume);
-        if (!isNaN(vol) && vol >= 0 && vol <= 1) {
-          playback = await setVolume(vol);
-        }
-      }
-
+      await playbackStore.restoreVolume();
       scanRoots = await libraryScanRoots();
     })();
 
-    const timer = window.setInterval(async () => {
-      if (isPollingPlayback) {
-        return;
-      }
-
-      isPollingPlayback = true;
-      try {
-        await handlePlaybackSnapshot(await playbackSnapshot());
-      } finally {
-        isPollingPlayback = false;
-      }
-    }, 500);
+    playbackStore.startPolling(handlePlaybackSnapshot);
 
     window.addEventListener('keydown', handleKeydown);
 
     let unlisteners: Array<() => void> = [];
-    listen('media-play', () => resumePlayback()).then(u => unlisteners.push(u));
-    listen('media-pause', () => pausePlayback()).then(u => unlisteners.push(u));
+    listen('media-play', () => playbackStore.resume()).then(u => unlisteners.push(u));
+    listen('media-pause', () => playbackStore.pause()).then(u => unlisteners.push(u));
     listen('media-toggle', () => togglePlayback()).then(u => unlisteners.push(u));
     listen('media-next', () => playNextSong()).then(u => unlisteners.push(u));
     listen('media-prev', () => playPreviousSong()).then(u => unlisteners.push(u));
@@ -282,7 +255,8 @@
     });
 
     return () => {
-      window.clearInterval(timer);
+      playbackStore.stopPolling();
+      unsubscribePlayback();
       if (typeof window !== 'undefined') {
         window.removeEventListener('keydown', handleKeydown);
       }
@@ -517,7 +491,7 @@
     playlists = snapshot.playlists;
     artists = snapshot.artists ?? [];
     albums = snapshot.albums ?? [];
-    playback = snapshot.playback;
+    playbackStore.set(snapshot.playback);
     folderCount = snapshot.folder_count ?? folderCount;
     queueOrderPaths = queueOrderPaths.filter((path) => songs.some((song) => song.path === path));
     queueRemovedPaths = queueRemovedPaths.filter((path) => songs.some((song) => song.path === path));
@@ -529,7 +503,7 @@
 
   async function handlePlaybackSnapshot(nextPlayback: PlaybackState) {
     const previousPlayback = playback;
-    playback = nextPlayback;
+    playbackStore.set(nextPlayback);
 
     if (previousPlayback.current_path !== nextPlayback.current_path) {
       selectedPath = nextPlayback.current_path;
@@ -1048,7 +1022,7 @@
       shufflePlayedPaths.add(song.path);
     }
     try {
-      playback = await playSong(song.path);
+      await playbackStore.play(song.path);
     } catch (error) {
       status = error instanceof Error ? error.message : String(error);
     }
@@ -1123,7 +1097,7 @@
     handledEndedPath = null;
     queuedNextForPath = null;
     queuedNextPath = null;
-    playback = playback.is_playing ? await pausePlayback() : await resumePlayback();
+    await (playback.is_playing ? playbackStore.pause() : playbackStore.resume());
   }
 
   async function seek(event: Event) {
@@ -1131,49 +1105,27 @@
     handledEndedPath = null;
     queuedNextForPath = null;
     queuedNextPath = null;
-    playback = await seekPlayback(Number(target.value));
+    await playbackStore.seek(Number(target.value));
   }
 
   async function seekToPosition(positionMs: number) {
     handledEndedPath = null;
     queuedNextForPath = null;
     queuedNextPath = null;
-    playback = await seekPlayback(positionMs);
-  }
-
-  let preMuteVolume = Number(window.localStorage.getItem('orca.volume') || '1.0');
-  if (preMuteVolume <= 0) {
-    preMuteVolume = 1.0;
+    await playbackStore.seek(positionMs);
   }
 
   async function changeVolume(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
-    const vol = Number(target.value);
-    playback = await setVolume(vol);
-    window.localStorage.setItem('orca.volume', String(vol));
-    if (vol > 0) {
-      preMuteVolume = vol;
-    }
+    await playbackStore.setVolume(Number(target.value));
   }
 
   async function toggleMute() {
-    if (playback.volume > 0) {
-      preMuteVolume = playback.volume;
-      playback = await setVolume(0);
-      window.localStorage.setItem('orca.volume', '0');
-    } else {
-      playback = await setVolume(preMuteVolume);
-      window.localStorage.setItem('orca.volume', String(preMuteVolume));
-    }
+    await playbackStore.toggleMute();
   }
 
   async function adjustVolumeByAmount(amount: number) {
-    const newVolume = Math.min(1, Math.max(0, playback.volume + amount));
-    playback = await setVolume(newVolume);
-    window.localStorage.setItem('orca.volume', String(newVolume));
-    if (newVolume > 0) {
-      preMuteVolume = newVolume;
-    }
+    await playbackStore.adjustVolume(amount);
   }
 </script>
 
