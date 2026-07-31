@@ -20,8 +20,13 @@
 
   <nav class="flex flex-col gap-1 w-full">
     {#each navItems as item}
+      {@const isActive = activeView === item.id}
       <button
-        class={`sidebar-item flex h-10 items-center gap-3 rounded-md px-3 text-left text-sm font-semibold transition ${collapsed ? 'justify-center px-0' : 'max-md:justify-center max-md:px-0'} ${activeView === item.id ? `sidebar-item-active bg-white/[0.13] text-white ${collapsed ? 'shadow-none' : 'shadow-[inset_3px_0_0_var(--accent)] max-md:shadow-none'}` : 'text-white/62 hover:bg-white/[0.06] hover:text-white'}`}
+        class={`sidebar-item flex h-10 items-center gap-3 rounded-md text-left text-sm font-semibold transition
+          ${collapsed ? 'justify-center px-0' : 'px-3 max-md:justify-center max-md:px-0'}
+          ${isActive
+            ? `sidebar-item-active bg-white/[0.13] text-white ${!collapsed ? 'shadow-[inset_3px_0_0_var(--accent)] max-md:shadow-none' : ''}`
+            : 'text-white/62 hover:bg-white/[0.06] hover:text-white'}`}
         on:click={() => onSelect(item.id)}
         title={item.label}
       >

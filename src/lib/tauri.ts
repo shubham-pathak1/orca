@@ -10,31 +10,12 @@ const fallbackPlayback: PlaybackState = {
   volume: 1
 };
 
-const fileSrcCache = new Map<string, string>();
-const FILE_SRC_CACHE_MAX = 2048;
-
 function cachedFileSrc(path: string | null): string | null {
   if (!path) {
     return null;
   }
-
-  const cached = fileSrcCache.get(path);
-  if (cached) {
-    fileSrcCache.delete(path);
-    fileSrcCache.set(path, cached);
-    return cached;
-  }
-
   try {
-    const url = convertFileSrc(path);
-    fileSrcCache.set(path, url);
-    if (fileSrcCache.size > FILE_SRC_CACHE_MAX) {
-      const oldest = fileSrcCache.keys().next().value;
-      if (oldest) {
-        fileSrcCache.delete(oldest);
-      }
-    }
-    return url;
+    return convertFileSrc(path);
   } catch {
     return null;
   }

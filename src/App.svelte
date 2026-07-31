@@ -587,7 +587,17 @@
       return;
     }
 
-    const nextSong = pickNextSong(nextPlayback.current_path);
+    let nextSong = pickNextSong(nextPlayback.current_path);
+
+    // Same fallback as handleTrackEnded: if context is done, peek into full library
+    if (!nextSong && queueOrderPaths.length > 0 && repeatMode === 'off') {
+      const fullLibrary = songs.filter((s) => !queueRemovedPathSet.has(s.path) || s.path === nextPlayback.current_path);
+      const currentIndexInLibrary = fullLibrary.findIndex((s) => s.path === nextPlayback.current_path);
+      if (currentIndexInLibrary >= 0 && currentIndexInLibrary < fullLibrary.length - 1) {
+        nextSong = fullLibrary[currentIndexInLibrary + 1];
+      }
+    }
+
     if (!nextSong) {
       return;
     }
@@ -637,7 +647,21 @@
   }
 
   async function handleTrackEnded(path: string) {
-    const nextSong = pickNextSong(path);
+    let nextSong = pickNextSong(path);
+
+    // If the context (artist/album) is exhausted and repeat is off,
+    // fall back to the full library and continue from the next song.
+    if (!nextSong && queueOrderPaths.length > 0 && repeatMode === 'off') {
+      const fullLibrary = songs.filter((s) => !queueRemovedPathSet.has(s.path) || s.path === path);
+      const currentIndexInLibrary = fullLibrary.findIndex((s) => s.path === path);
+      if (currentIndexInLibrary >= 0 && currentIndexInLibrary < fullLibrary.length - 1) {
+        // Clear context so we re-enter full-library playback
+        queueOrderPaths = [];
+        queueRemovedPaths = [];
+        nextSong = fullLibrary[currentIndexInLibrary + 1];
+      }
+    }
+
     if (nextSong) {
       await chooseSong(nextSong);
     }
@@ -1052,14 +1076,6 @@
       }
       const next = unplayed[Math.floor(Math.random() * unplayed.length)];
       await chooseSong(next);
-      return;
-    }
-
-    // Sequential boundary guards (shuffle off only)
-    if (offset > 0 && repeatMode === 'off' && currentIndex >= orderedPlaybackSongs.length - 1) {
-      return;
-    }
-    if (offset < 0 && repeatMode === 'off' && currentIndex <= 0) {
       return;
     }
 

@@ -92,6 +92,12 @@
   let songScrollTop = 0;
   let songViewportHeight = 0;
   let songViewportWidth = 0;
+  let visibleAlbumCount = 60;
+
+  $: if (activeView || query) {
+    visibleArtistCount = 60;
+    visibleAlbumCount = 60;
+  }
 
   const LIST_ROW_HEIGHT = 40;
   const GRID_MIN_COLUMN_WIDTH = 132;

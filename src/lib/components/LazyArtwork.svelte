@@ -12,10 +12,10 @@
   let loaded = false;
   let observer: IntersectionObserver | null = null;
 
+  // Only compute the URL when visible — avoids unnecessary convertFileSrc calls
   $: src = isVisible ? artworkUrl(path) : null;
-  $: if (!src) {
-    loaded = false;
-  }
+
+  // Reset loaded fade-in whenever src changes
   $: if (src) {
     loaded = false;
   }
@@ -24,10 +24,13 @@
     observer = new IntersectionObserver(
       ([entry]) => {
         isVisible = entry.isIntersecting;
+        // When leaving viewport, drop loaded flag so next appearance fades in cleanly
+        if (!entry.isIntersecting) {
+          loaded = false;
+        }
       },
-      { rootMargin: '48px', threshold: 0.01 }
+      { rootMargin: '120px', threshold: 0 }
     );
-
     observer.observe(root);
   });
 
@@ -44,7 +47,6 @@
       class={`${imageClass} transition-opacity duration-150 ${loaded ? 'opacity-100' : 'opacity-0'}`}
       {src}
       {alt}
-      loading="lazy"
       decoding="async"
       on:load={() => (loaded = true)}
     />

@@ -277,11 +277,9 @@
 
     try {
       await onSeek(event);
-      seekGraceTimer = setTimeout(() => {
-        optimisticPosition = null;
-        smoothPosition = playback.position_ms;
-        lastUpdateTime = performance.now();
-      }, 800);
+      optimisticPosition = null;
+      smoothPosition = seekVal;
+      lastUpdateTime = performance.now();
     } catch {
       optimisticPosition = null;
     } finally {
