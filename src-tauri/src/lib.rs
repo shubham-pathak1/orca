@@ -380,7 +380,7 @@ fn remove_playlist_cover(
 fn choose_artist_cover(
     artist_name: String,
     state: State<'_, SharedOrcaState>,
-) -> Result<Vec<db::ArtistEntry>, String> {
+) -> Result<LibrarySnapshot, String> {
     let Some(image_path) = rfd::FileDialog::new()
         .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
         .pick_file()
@@ -395,24 +395,24 @@ fn choose_artist_cover(
         Some(&image_path.to_string_lossy()),
         None,
     )?;
-    db::get_artists(&state.db_conn)
+    snapshot_from_state(&state)
 }
 
 #[tauri::command]
 fn remove_artist_cover(
     artist_name: String,
     state: State<'_, SharedOrcaState>,
-) -> Result<Vec<db::ArtistEntry>, String> {
+) -> Result<LibrarySnapshot, String> {
     let state = state.0.lock().map_err(|error| error.to_string())?;
     db::remove_artist_artwork(&state.db_conn, &artist_name)?;
-    db::get_artists(&state.db_conn)
+    snapshot_from_state(&state)
 }
 
 #[tauri::command]
 fn choose_album_cover(
     album_key: String,
     state: State<'_, SharedOrcaState>,
-) -> Result<Vec<db::AlbumEntry>, String> {
+) -> Result<LibrarySnapshot, String> {
     let Some(image_path) = rfd::FileDialog::new()
         .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
         .pick_file()
@@ -427,7 +427,7 @@ fn choose_album_cover(
         Some(&image_path.to_string_lossy()),
         None,
     )?;
-    db::get_albums(&state.db_conn)
+    snapshot_from_state(&state)
 }
 
 #[tauri::command]

@@ -940,26 +940,26 @@
   }
 
   async function chooseExistingArtistCover(artistName: string) {
-    const newArtists = await chooseArtistCover(artistName);
-    artists = newArtists;
+    const snapshot = await chooseArtistCover(artistName);
+    applyLibrarySnapshot(snapshot);
     status = 'Updated artist cover';
   }
 
   async function clearExistingArtistCover(artistName: string) {
-    const newArtists = await removeArtistCover(artistName);
-    artists = newArtists;
+    const snapshot = await removeArtistCover(artistName);
+    applyLibrarySnapshot(snapshot);
     status = 'Removed artist cover';
   }
 
   async function chooseExistingAlbumCover(albumKey: string) {
-    const newAlbums = await chooseAlbumCover(albumKey);
-    albums = newAlbums;
+    const snapshot = await chooseAlbumCover(albumKey);
+    applyLibrarySnapshot(snapshot);
     status = 'Updated album cover';
   }
 
   async function clearExistingAlbumCover(albumKey: string) {
-    const newAlbums = await removeAlbumCover(albumKey);
-    albums = newAlbums;
+    const snapshot = await removeAlbumCover(albumKey);
+    applyLibrarySnapshot(snapshot);
     status = 'Removed album cover';
   }
 
