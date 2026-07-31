@@ -191,10 +191,9 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
 
     let artwork_paths = tag.and_then(|t| t.pictures().iter().next()).and_then(|p| {
         persist_artwork(
-            path,
             artwork_dir,
             p.data(),
-            p.mime_type().map(|m| m.as_str()),
+            p.mime_type().map(|mime| mime.as_str()),
         )
         .ok()
     });

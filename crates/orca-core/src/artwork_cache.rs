@@ -1,6 +1,4 @@
-use std::collections::hash_map::DefaultHasher;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::io::Cursor;
 use std::path::Path;
 
@@ -15,7 +13,6 @@ pub struct ArtworkPaths {
 }
 
 pub fn persist_artwork(
-    song_path: &Path,
     artwork_dir: &Path,
     bytes: &[u8],
     mime: Option<&str>,
@@ -27,21 +24,25 @@ pub fn persist_artwork(
     fs::create_dir_all(artwork_dir).map_err(|error| error.to_string())?;
 
     let extension = artwork_extension_from_mime(mime.unwrap_or("image/jpeg"));
-    let hash = artwork_hash(song_path, bytes);
+    let hash = artwork_hash(bytes);
     let original_path = artwork_dir.join(format!("art_{hash}.{extension}"));
     let thumb_path = artwork_dir.join(format!("thumb_{hash}_80.webp"));
     let preview_path = artwork_dir.join(format!("preview_{hash}_256.webp"));
 
-    fs::write(&original_path, bytes).map_err(|error| error.to_string())?;
+    if !original_path.is_file() {
+        fs::write(&original_path, bytes).map_err(|error| error.to_string())?;
+    }
 
-    let mut thumb_written = false;
-    let mut preview_written = false;
-    if let Ok(image) = image::load_from_memory(bytes) {
-        if write_webp_derivative(&image, &thumb_path, 80).is_ok() {
-            thumb_written = true;
-        }
-        if write_webp_derivative(&image, &preview_path, 256).is_ok() {
-            preview_written = true;
+    let mut thumb_written = thumb_path.is_file();
+    let mut preview_written = preview_path.is_file();
+    if !thumb_written || !preview_written {
+        if let Ok(image) = image::load_from_memory(bytes) {
+            if !thumb_written && write_webp_derivative(&image, &thumb_path, 80).is_ok() {
+                thumb_written = true;
+            }
+            if !preview_written && write_webp_derivative(&image, &preview_path, 256).is_ok() {
+                preview_written = true;
+            }
         }
     }
 
@@ -98,9 +99,16 @@ fn artwork_extension_from_mime(mime: &str) -> &'static str {
     }
 }
 
-fn artwork_hash(song_path: &Path, bytes: &[u8]) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    song_path.to_string_lossy().hash(&mut hasher);
-    bytes.hash(&mut hasher);
-    hasher.finish()
+fn artwork_hash(bytes: &[u8]) -> String {
+    format!("{:x}", md5::compute(bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::artwork_hash;
+
+    #[test]
+    fn artwork_hash_is_content_based() {
+        assert_eq!(artwork_hash(b"abc"), "900150983cd24fb0d6963f7d28e17f72");
+    }
 }
