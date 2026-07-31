@@ -536,6 +536,13 @@
       queuedNextForPath = null;
       queuedNextPath = null;
       handledEndedPath = null;
+      
+      // If we seamlessly transitioned out of the context (artist/album) into the full library,
+      // clear the context so UI and Prev/Next buttons use the full library again.
+      if (nextPlayback.current_path && queueOrderPaths.length > 0 && !queueOrderPaths.includes(nextPlayback.current_path)) {
+        queueOrderPaths = [];
+        queueRemovedPaths = [];
+      }
     } else if (previousPlayback.is_playing && previousPlayback.position_ms > nextPlayback.position_ms + 1000) {
       queuedNextForPath = null;
       queuedNextPath = null;
@@ -1079,7 +1086,23 @@
       return;
     }
 
-    const nextIndex = (currentIndex + offset + orderedPlaybackSongs.length) % orderedPlaybackSongs.length;
+    let nextIndex = currentIndex + offset;
+    
+    // If skipping past the end of the context (artist/album) and repeat is off,
+    // transition to the next song in the full library instead of looping back.
+    if (nextIndex >= orderedPlaybackSongs.length && queueOrderPaths.length > 0 && repeatMode === 'off') {
+      const fullLibrary = songs.filter((s) => !queueRemovedPathSet.has(s.path) || s.path === currentPath);
+      const currentIndexInLibrary = fullLibrary.findIndex((s) => s.path === currentPath);
+      if (currentIndexInLibrary >= 0 && currentIndexInLibrary < fullLibrary.length - 1) {
+        queueOrderPaths = [];
+        queueRemovedPaths = [];
+        await chooseSong(fullLibrary[currentIndexInLibrary + 1]);
+        return;
+      }
+    }
+
+    // Wrap around for Prev button, or Next button if repeat is 'all' or no context is set
+    nextIndex = (nextIndex + orderedPlaybackSongs.length) % orderedPlaybackSongs.length;
     await chooseSong(orderedPlaybackSongs[nextIndex]);
   }
 

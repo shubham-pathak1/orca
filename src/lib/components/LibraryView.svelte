@@ -929,9 +929,9 @@
             </div>
           {/if}
         {:else}
-          <form class="mb-5 grid grid-cols-[minmax(180px,360px)_auto] items-center gap-3 max-md:grid-cols-1" on:submit|preventDefault={createPlaylistFromInput}>
+          <form class="mb-5 flex flex-wrap items-center gap-3" on:submit|preventDefault={createPlaylistFromInput}>
             <input
-              class="h-10 rounded-md border border-white/10 bg-white/[0.045] px-3 text-sm text-white outline-none placeholder:text-white focus:border-[color:var(--accent-mid)]"
+              class="h-10 w-full max-w-[360px] rounded-md border border-white/10 bg-white/[0.045] px-3 text-sm text-white outline-none placeholder:text-white focus:border-[color:var(--accent-mid)]"
               bind:value={newPlaylistName}
               placeholder="New playlist name"
             />
