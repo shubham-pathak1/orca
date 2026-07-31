@@ -1,3 +1,4 @@
+pub mod artwork_cache;
 pub mod audio_engine;
 pub mod db;
 pub mod lastfm;

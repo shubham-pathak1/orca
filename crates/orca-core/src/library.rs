@@ -1,18 +1,12 @@
-use std::collections::hash_map::DefaultHasher;
 use std::fs;
-use std::hash::{Hash, Hasher};
-use std::io::Cursor;
 use std::path::Path;
 
-use image::codecs::webp::WebPEncoder;
-use image::imageops::FilterType;
-use image::ExtendedColorType;
-
+use crate::artwork_cache::persist_artwork;
 use lofty::config::WriteOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::picture::{Picture, PictureType};
-use lofty::prelude::*;
 use lofty::prelude::ItemKey;
+use lofty::prelude::*;
 use lofty::probe::Probe;
 use lofty::tag::Tag;
 use serde::{Deserialize, Serialize};
@@ -95,9 +89,14 @@ where
             continue;
         };
         let ext_str = ext.to_string_lossy().to_lowercase();
-        let is_audio =
-            ext_str == "mp3" || ext_str == "flac" || ext_str == "m4a" || ext_str == "wav" ||
-            ext_str == "ogg" || ext_str == "opus" || ext_str == "aiff" || ext_str == "aif";
+        let is_audio = ext_str == "mp3"
+            || ext_str == "flac"
+            || ext_str == "m4a"
+            || ext_str == "wav"
+            || ext_str == "ogg"
+            || ext_str == "opus"
+            || ext_str == "aiff"
+            || ext_str == "aif";
         if !is_audio {
             continue;
         }
@@ -154,7 +153,9 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
                 .and_then(|m| m.modified().ok())
                 .and_then(|t| t.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
                 .map(|d| d.as_secs() as i64);
-            let format = path.extension().map(|e| e.to_string_lossy().to_uppercase().to_string());
+            let format = path
+                .extension()
+                .map(|e| e.to_string_lossy().to_uppercase().to_string());
             return Ok(LocalSong {
                 id: None,
                 path: path.to_string_lossy().to_string(),
@@ -187,74 +188,89 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
     let properties = tagged_file.properties();
     let duration = properties.duration().as_millis() as u32;
 
-    let (title, artist, album_artist, album, year, track_number, disc_number, genre) = if let Some(t) = tag {
-        let title = normalize_text(
-            t.title().map(|a| a.to_string()).or_else(|| {
-                path.file_stem()
-                    .map(|f| f.to_string_lossy().to_string())
-            }),
-            "Unknown Title",
-        );
+    let (title, artist, album_artist, album, year, track_number, disc_number, genre) =
+        if let Some(t) = tag {
+            let title = normalize_text(
+                t.title()
+                    .map(|a| a.to_string())
+                    .or_else(|| path.file_stem().map(|f| f.to_string_lossy().to_string())),
+                "Unknown Title",
+            );
 
-        let artist = normalize_text(t.artist().map(|a| a.to_string()), "Unknown Artist");
-        let album_artist = normalize_text(
-            t.get_string(&ItemKey::AlbumArtist)
-                .map(|a| a.to_string())
-                .or_else(|| Some(artist.clone())),
-            "Unknown Artist",
-        );
-        let album = normalize_text(t.album().map(|a| a.to_string()), "Unknown Album");
+            let artist = normalize_text(t.artist().map(|a| a.to_string()), "Unknown Artist");
+            let album_artist = normalize_text(
+                t.get_string(&ItemKey::AlbumArtist)
+                    .map(|a| a.to_string())
+                    .or_else(|| Some(artist.clone())),
+                "Unknown Artist",
+            );
+            let album = normalize_text(t.album().map(|a| a.to_string()), "Unknown Album");
 
-        let year = t.year().map(|y| y as i32).filter(|y| *y > 0);
-        let track_number = t.track().map(|n| n as i32).filter(|n| *n > 0).or_else(|| {
-            parse_tag_i32(t.get_string(&ItemKey::TrackNumber))
-        });
-        let disc_number = t.disk().map(|n| n as i32).filter(|n| *n > 0).or_else(|| {
-            parse_tag_i32(t.get_string(&ItemKey::DiscNumber))
-        });
-        let genre = t.genre().map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
+            let year = t.year().map(|y| y as i32).filter(|y| *y > 0);
+            let track_number = t
+                .track()
+                .map(|n| n as i32)
+                .filter(|n| *n > 0)
+                .or_else(|| parse_tag_i32(t.get_string(&ItemKey::TrackNumber)));
+            let disc_number = t
+                .disk()
+                .map(|n| n as i32)
+                .filter(|n| *n > 0)
+                .or_else(|| parse_tag_i32(t.get_string(&ItemKey::DiscNumber)));
+            let genre = t
+                .genre()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty());
 
-        (
-            title,
-            artist,
-            album_artist,
-            album,
-            year,
-            track_number,
-            disc_number,
-            genre,
-        )
-    } else {
-        (
-            normalize_text(Some(
-                path.file_stem()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string(),
-            ), "Unknown Title"),
-            "Unknown Artist".to_string(),
-            "Unknown Artist".to_string(),
-            "Unknown Album".to_string(),
-            None,
-            None,
-            None,
-            None,
-        )
-    };
+            (
+                title,
+                artist,
+                album_artist,
+                album,
+                year,
+                track_number,
+                disc_number,
+                genre,
+            )
+        } else {
+            (
+                normalize_text(
+                    Some(
+                        path.file_stem()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string(),
+                    ),
+                    "Unknown Title",
+                ),
+                "Unknown Artist".to_string(),
+                "Unknown Artist".to_string(),
+                "Unknown Album".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+        };
 
-    let lyrics = tag.and_then(|t| {
-        t.get_string(&ItemKey::Lyrics)
-            .map(|s| s.to_string())
-    });
+    let lyrics = tag.and_then(|t| t.get_string(&ItemKey::Lyrics).map(|s| s.to_string()));
 
     let artwork_paths = tag.and_then(|t| t.pictures().iter().next()).and_then(|p| {
-        persist_artwork(path, artwork_dir, p.data(), p.mime_type().map(|m| m.as_str())).ok()
+        persist_artwork(
+            path,
+            artwork_dir,
+            p.data(),
+            p.mime_type().map(|m| m.as_str()),
+        )
+        .ok()
     });
 
     let sample_rate = properties.sample_rate();
     let bitrate = properties.audio_bitrate();
     let bit_depth = properties.bit_depth();
-    let format = path.extension().map(|e| e.to_string_lossy().to_uppercase().to_string());
+    let format = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_uppercase().to_string());
 
     let file_metadata = fs::metadata(path).ok();
     let file_size = file_metadata.as_ref().map(|m| m.len());
@@ -288,7 +304,6 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
         file_size,
     })
 }
-
 
 #[derive(Deserialize)]
 pub struct SongMetadataUpdate {
@@ -419,86 +434,3 @@ fn clear_pictures(tag: &mut Tag) {
         tag.remove_picture(0);
     }
 }
-
-fn artwork_extension_from_mime(mime: &str) -> &'static str {
-    let normalized = mime.to_ascii_lowercase();
-    if normalized.contains("png") { "png" }
-    else if normalized.contains("webp") { "webp" }
-    else if normalized.contains("gif") { "gif" }
-    else if normalized.contains("bmp") { "bmp" }
-    else { "jpg" }
-}
-
-pub struct ArtworkPaths {
-    pub full: String,
-    pub thumb: String,
-    pub preview: String,
-}
-
-fn persist_artwork(
-    song_path: &Path,
-    artwork_dir: &Path,
-    bytes: &[u8],
-    mime: Option<&str>,
-) -> Result<ArtworkPaths, String> {
-    if bytes.is_empty() {
-        return Err("Artwork bytes are empty".to_string());
-    }
-
-    fs::create_dir_all(artwork_dir).map_err(|e| e.to_string())?;
-
-    let ext = artwork_extension_from_mime(mime.unwrap_or("image/jpeg"));
-    let hash = artwork_hash(song_path, bytes);
-    let original_path = artwork_dir.join(format!("art_{}.{}", hash, ext));
-    let thumb_path = artwork_dir.join(format!("thumb_{}_80.webp", hash));
-    let preview_path = artwork_dir.join(format!("preview_{}_256.webp", hash));
-
-    fs::write(&original_path, bytes).map_err(|e| e.to_string())?;
-
-    let mut thumb_written = false;
-    let mut preview_written = false;
-    if let Ok(img) = image::load_from_memory(bytes) {
-        if write_webp_derivative(&img, &thumb_path, 80).is_ok() {
-            thumb_written = true;
-        }
-        if write_webp_derivative(&img, &preview_path, 256).is_ok() {
-            preview_written = true;
-        }
-    }
-
-    Ok(ArtworkPaths {
-        full: original_path.to_string_lossy().to_string(),
-        thumb: if thumb_written { thumb_path } else { original_path.clone() }.to_string_lossy().to_string(),
-        preview: if preview_written { preview_path } else { original_path.clone() }.to_string_lossy().to_string(),
-    })
-}
-
-pub fn write_webp_derivative(
-    image: &image::DynamicImage,
-    output_path: &Path,
-    size: u32,
-) -> Result<(), String> {
-    let resized = image.resize(size, size, FilterType::Triangle).to_rgba8();
-    let mut output: Vec<u8> = Vec::new();
-    let encoder = WebPEncoder::new_lossless(Cursor::new(&mut output));
-    encoder
-        .encode(
-            resized.as_raw(),
-            resized.width(),
-            resized.height(),
-            ExtendedColorType::Rgba8,
-        )
-        .map_err(|error| error.to_string())?;
-    fs::write(output_path, &output).map_err(|error| error.to_string())
-}
-
-// Hash combines the song path with the artwork bytes so the generated
-// filename changes whenever the embedded cover changes. This busts the
-// browser/file cache so a swapped cover shows up immediately.
-fn artwork_hash(song_path: &Path, bytes: &[u8]) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    song_path.to_string_lossy().hash(&mut hasher);
-    bytes.hash(&mut hasher);
-    hasher.finish()
-}
-
