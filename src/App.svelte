@@ -19,18 +19,13 @@
     removeAlbumCover,
     createPlaylist,
     deletePlaylist,
-    getLibrarySnapshot,
     libraryFolderCount,
-    libraryScanRoots,
-    pickAndScanFolder,
     queueNextPlayback,
-    removeLibraryScanRoot,
     playlistSongIds,
     removePlaylistCover,
     removeSongCover,
     removeSongFromPlaylist,
     renamePlaylist,
-    rescanLibrary,
     updateSongMetadata,
     updateMediaControls,
     fetchArtistArtworkManual,
@@ -43,14 +38,28 @@
   import { register, unregister, isRegistered } from '@tauri-apps/plugin-global-shortcut';
   import { isSupported as isTaskbarSupported, setPlaybackState, setNavigationEnabled } from 'tauri-plugin-taskbar';
   import type { ActiveView } from './lib/navigation';
+  import { createLibraryStore } from './lib/stores/library';
   import { createPlaybackStore } from './lib/stores/playback';
   import { createQueueStore } from './lib/stores/queue';
   import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate, ArtistEntry, AlbumEntry } from './lib/types';
 
+  const libraryStore = createLibraryStore();
   let songs: LocalSong[] = [];
   let playlists: Playlist[] = [];
   let artists: ArtistEntry[] = [];
   let albums: AlbumEntry[] = [];
+  let folderCount = 0;
+  let scanRoots: string[] = [];
+  let isScanning = false;
+  const unsubscribeLibrary = libraryStore.subscribe((state) => {
+    songs = state.songs;
+    playlists = state.playlists;
+    artists = state.artists;
+    albums = state.albums;
+    folderCount = state.folderCount;
+    scanRoots = state.scanRoots;
+    isScanning = state.isScanning;
+  });
   const playbackStore = createPlaybackStore();
   let playback: PlaybackState;
   const unsubscribePlayback = playbackStore.subscribe((state) => {
@@ -58,7 +67,6 @@
   });
   let query = '';
   let activeView: ActiveView = 'songs';
-  let isScanning = false;
   let status = 'Ready';
   let selectedPath: string | null = null;
   let fullPlayerOpen = false;
@@ -86,8 +94,6 @@
   });
   let metadataEditorSong: LocalSong | null = null;
   let isSavingMetadata = false;
-  let folderCount = 0;
-  let scanRoots: string[] = [];
   let isHandlingTrackEnd = false;
   let handledEndedPath: string | null = null;
   let queuedNextForPath: string | null = null;
@@ -193,7 +199,7 @@
           is_playing: false
         }).catch(e => console.error('Taskbar state error:', e));
       }
-      const snapshot = await getLibrarySnapshot();
+      const snapshot = await libraryStore.load();
       applyLibrarySnapshot(snapshot);
       
       if (autoFetchArtwork) {
@@ -204,7 +210,6 @@
       status = snapshot.songs && snapshot.songs.length ? `${snapshot.songs.length} tracks loaded` : 'Add a folder to build your library';
 
       await playbackStore.restoreVolume();
-      scanRoots = await libraryScanRoots();
     })();
 
     playbackStore.startPolling(handlePlaybackSnapshot);
@@ -249,7 +254,7 @@
     
     const unlistenLibrary = listen('library-refreshed', async () => {
       try {
-        const snapshot = await getLibrarySnapshot();
+        const snapshot = await libraryStore.load();
         applyLibrarySnapshot(snapshot);
       } catch (error) {
         console.error('Failed to get library snapshot after refresh', error);
@@ -258,6 +263,7 @@
 
     return () => {
       playbackStore.stopPolling();
+      unsubscribeLibrary();
       unsubscribePlayback();
       unsubscribeQueue();
       if (typeof window !== 'undefined') {
@@ -426,13 +432,9 @@
   }
 
   function applyLibrarySnapshot(snapshot: LibrarySnapshot) {
-    songs = snapshot.songs;
-    playlists = snapshot.playlists;
-    artists = snapshot.artists ?? [];
-    albums = snapshot.albums ?? [];
+    libraryStore.applySnapshot(snapshot);
     playbackStore.set(snapshot.playback);
-    folderCount = snapshot.folder_count ?? folderCount;
-    queueStore.syncSongs(songs);
+    queueStore.syncSongs(snapshot.songs);
 
     if (metadataEditorSong) {
       metadataEditorSong = songs.find((song) => song.path === metadataEditorSong?.path) ?? metadataEditorSong;
@@ -727,74 +729,62 @@
   }
 
   async function addFolder() {
-    isScanning = true;
     status = 'Scanning folder...';
     try {
-      const snapshot = await pickAndScanFolder();
+      const snapshot = await libraryStore.addFolder();
       applyLibrarySnapshot(snapshot);
-      scanRoots = await libraryScanRoots();
       status = `${snapshot.songs.length} tracks loaded`;
     } catch (error) {
       status = error instanceof Error ? error.message : 'Scan cancelled';
-    } finally {
-      isScanning = false;
     }
   }
 
   async function refreshLibrary() {
-    isScanning = true;
     status = 'Refreshing library...';
     try {
-      const snapshot = await rescanLibrary();
+      const snapshot = await libraryStore.rescan();
       applyLibrarySnapshot(snapshot);
-      scanRoots = await libraryScanRoots();
       status = `${snapshot.songs.length} tracks loaded`;
       if (autoFetchArtwork) {
         void fetchAllMissingArtwork();
       }
     } catch (error) {
       status = error instanceof Error ? error.message : 'Refresh failed';
-    } finally {
-      isScanning = false;
     }
   }
 
   async function addPlaylist(name: string) {
-    playlists = await createPlaylist(name);
+    libraryStore.setPlaylists(await createPlaylist(name));
   }
 
   async function removeScanRoot(root: string) {
-    isScanning = true;
     status = 'Removing folder...';
     try {
-      const snapshot = await removeLibraryScanRoot(root);
+      const snapshot = await libraryStore.removeScanRoot(root);
       applyLibrarySnapshot(snapshot);
-      scanRoots = await libraryScanRoots();
       status = `${snapshot.songs.length} tracks loaded`;
     } catch (error) {
       status = error instanceof Error ? error.message : 'Could not remove folder';
-    } finally {
-      isScanning = false;
     }
   }
 
   async function renameExistingPlaylist(playlistId: number, name: string) {
-    playlists = await renamePlaylist(playlistId, name);
+    libraryStore.setPlaylists(await renamePlaylist(playlistId, name));
     status = `Renamed playlist to ${name}`;
   }
 
   async function deleteExistingPlaylist(playlistId: number) {
-    playlists = await deletePlaylist(playlistId);
+    libraryStore.setPlaylists(await deletePlaylist(playlistId));
     status = 'Deleted playlist';
   }
 
   async function handleChoosePlaylistCover(playlistId: number) {
-    playlists = await choosePlaylistCover(playlistId);
+    libraryStore.setPlaylists(await choosePlaylistCover(playlistId));
     status = 'Updated playlist cover';
   }
 
   async function handleRemovePlaylistCover(playlistId: number) {
-    playlists = await removePlaylistCover(playlistId);
+    libraryStore.setPlaylists(await removePlaylistCover(playlistId));
     status = 'Removed playlist cover';
   }
 
@@ -854,8 +844,9 @@
       return;
     }
 
-    playlists = await addSongToPlaylist(playlistId, song.id);
-    const playlist = playlists.find((item) => item.id === playlistId);
+    const updatedPlaylists = await addSongToPlaylist(playlistId, song.id);
+    libraryStore.setPlaylists(updatedPlaylists);
+    const playlist = updatedPlaylists.find((item) => item.id === playlistId);
     status = playlist ? `Added to ${playlist.name}` : 'Added to playlist';
   }
 
@@ -912,7 +903,7 @@
       return;
     }
 
-    playlists = await removeSongFromPlaylist(playlistId, song.id);
+    libraryStore.setPlaylists(await removeSongFromPlaylist(playlistId, song.id));
     status = `Removed ${song.title} from playlist`;
   }
 
