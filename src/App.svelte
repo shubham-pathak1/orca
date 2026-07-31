@@ -44,6 +44,7 @@
   import { isSupported as isTaskbarSupported, setPlaybackState, setNavigationEnabled } from 'tauri-plugin-taskbar';
   import type { ActiveView } from './lib/navigation';
   import { createPlaybackStore } from './lib/stores/playback';
+  import { createQueueStore } from './lib/stores/queue';
   import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate, ArtistEntry, AlbumEntry } from './lib/types';
 
   let songs: LocalSong[] = [];
@@ -78,9 +79,11 @@
   let theme: 'default' = 'default';
   let shuffleEnabled = false;
   let repeatMode: 'off' | 'all' | 'one' = 'off';
-  let queueOrderPaths: string[] = [];
-  let queueRemovedPaths: string[] = [];
-  let shufflePlayedPaths = new Set<string>();
+  const queueStore = createQueueStore();
+  let queueState = { orderPaths: [] as string[], removedPaths: [] as string[], shufflePlayedPaths: new Set<string>() };
+  const unsubscribeQueue = queueStore.subscribe((state) => {
+    queueState = state;
+  });
   let metadataEditorSong: LocalSong | null = null;
   let isSavingMetadata = false;
   let folderCount = 0;
@@ -133,12 +136,11 @@
   $: nowPlaying = songs.find((song) => song.path === playback.current_path) ?? null;
   $: selectedSong = songs.find((song) => song.path === selectedPath) ?? nowPlaying ?? filteredSongs[0] ?? null;
   $: currentQueuePath = playback.current_path ?? selectedPath;
+  $: queueOrderPaths = queueState.orderPaths;
+  $: queueRemovedPaths = queueState.removedPaths;
   $: queueRemovedPathSet = new Set(queueRemovedPaths);
-  $: orderedPlaybackSongs = orderSongsForQueue(
-    songs.filter((song) => !queueRemovedPathSet.has(song.path) || song.path === currentQueuePath),
-    queueOrderPaths
-  );
-  $: queueSongs = buildQueueSongs(orderedPlaybackSongs, playback.current_path ?? selectedPath, repeatMode);
+  $: orderedPlaybackSongs = queueStore.playableSongs(songs, currentQueuePath);
+  $: queueSongs = queueStore.queueSongs(songs, playback.current_path ?? selectedPath, repeatMode);
   $: albumCount = albums.length;
   $: artistCount = artists.length;
   $: ambientArtwork = artworkUrl((nowPlaying ?? selectedSong)?.artwork_preview ?? (nowPlaying ?? selectedSong)?.artwork ?? null);
@@ -257,6 +259,7 @@
     return () => {
       playbackStore.stopPolling();
       unsubscribePlayback();
+      unsubscribeQueue();
       if (typeof window !== 'undefined') {
         window.removeEventListener('keydown', handleKeydown);
       }
@@ -404,86 +407,22 @@
     window.localStorage.setItem('orca.repeatMode', repeatMode);
   }
 
-  function orderSongsForQueue(sourceSongs: LocalSong[], orderPaths: string[]) {
-    if (!orderPaths.length) {
-      return sourceSongs;
-    }
 
-    const songsByPath = new Map(sourceSongs.map((song) => [song.path, song]));
-    const orderedSongs = orderPaths
-      .map((path) => songsByPath.get(path))
-      .filter((song): song is LocalSong => Boolean(song));
-    // Do NOT append songs not in the context — when a context is set (e.g. artist / album),
-    // next/prev should stay strictly within that context.
-    return orderedSongs;
-  }
-
-  function buildQueueSongs(sourceSongs: LocalSong[], currentPath: string | null, mode: 'off' | 'all' | 'one') {
-    if (!sourceSongs.length) {
-      return [];
-    }
-
-    const currentIndex = currentPath ? sourceSongs.findIndex((song) => song.path === currentPath) : -1;
-    if (currentIndex < 0) {
-      return sourceSongs;
-    }
-
-    if (mode === 'one') {
-      return [sourceSongs[currentIndex]];
-    }
-
-    const currentAndRemaining = sourceSongs.slice(currentIndex);
-    if (mode !== 'all') {
-      return currentAndRemaining;
-    }
-
-    return [...currentAndRemaining, ...sourceSongs.slice(0, currentIndex)];
-  }
 
   function toggleQueue() {
     queueOpen = !queueOpen;
   }
 
   function reorderQueueSong(sourcePath: string, targetPath: string) {
-    if (sourcePath === targetPath) {
-      return;
-    }
-
-    const currentPath = playback.current_path ?? selectedPath;
-    if (sourcePath === currentPath) {
-      return;
-    }
-
-    const orderedPaths = orderSongsForQueue(songs, queueOrderPaths).map((song) => song.path);
-    const sourceIndex = orderedPaths.indexOf(sourcePath);
-    if (sourceIndex < 0) {
-      return;
-    }
-
-    const nextOrder = orderedPaths.filter((path) => path !== sourcePath);
-    const targetIndex = nextOrder.indexOf(targetPath);
-    if (targetIndex < 0) {
-      return;
-    }
-
-    const insertIndex = targetPath === currentPath ? targetIndex + 1 : targetIndex;
-    nextOrder.splice(insertIndex, 0, sourcePath);
-    queueOrderPaths = nextOrder;
+    queueStore.reorder(songs, playback.current_path ?? selectedPath, sourcePath, targetPath);
   }
 
   function removeQueueSong(path: string) {
-    if (path === (playback.current_path ?? selectedPath)) {
-      return;
-    }
-
-    queueRemovedPaths = Array.from(new Set([...queueRemovedPaths, path]));
+    queueStore.remove(playback.current_path ?? selectedPath, path);
   }
 
   function clearQueue() {
-    const currentPath = playback.current_path ?? selectedPath;
-    queueRemovedPaths = songs
-      .map((song) => song.path)
-      .filter((path) => path !== currentPath);
+    queueStore.clear(songs, playback.current_path ?? selectedPath);
   }
 
   function applyLibrarySnapshot(snapshot: LibrarySnapshot) {
@@ -493,8 +432,7 @@
     albums = snapshot.albums ?? [];
     playbackStore.set(snapshot.playback);
     folderCount = snapshot.folder_count ?? folderCount;
-    queueOrderPaths = queueOrderPaths.filter((path) => songs.some((song) => song.path === path));
-    queueRemovedPaths = queueRemovedPaths.filter((path) => songs.some((song) => song.path === path));
+    queueStore.syncSongs(songs);
 
     if (metadataEditorSong) {
       metadataEditorSong = songs.find((song) => song.path === metadataEditorSong?.path) ?? metadataEditorSong;
@@ -513,9 +451,8 @@
       
       // If we seamlessly transitioned out of the context (artist/album) into the full library,
       // clear the context so UI and Prev/Next buttons use the full library again.
-      if (nextPlayback.current_path && queueOrderPaths.length > 0 && !queueOrderPaths.includes(nextPlayback.current_path)) {
-        queueOrderPaths = [];
-        queueRemovedPaths = [];
+      if (nextPlayback.current_path && queueStore.hasContext() && !queueOrderPaths.includes(nextPlayback.current_path)) {
+        queueStore.clearContext();
       }
     } else if (previousPlayback.is_playing && previousPlayback.position_ms > nextPlayback.position_ms + 1000) {
       queuedNextForPath = null;
@@ -571,7 +508,7 @@
     let nextSong = pickNextSong(nextPlayback.current_path);
 
     // Same fallback as handleTrackEnded: if context is done, peek into full library
-    if (!nextSong && queueOrderPaths.length > 0 && repeatMode === 'off') {
+    if (!nextSong && queueStore.hasContext() && repeatMode === 'off') {
       const fullLibrary = songs.filter((s) => !queueRemovedPathSet.has(s.path) || s.path === nextPlayback.current_path);
       const currentIndexInLibrary = fullLibrary.findIndex((s) => s.path === nextPlayback.current_path);
       if (currentIndexInLibrary >= 0 && currentIndexInLibrary < fullLibrary.length - 1) {
@@ -595,50 +532,20 @@
   }
 
   function pickNextSong(currentPath: string) {
-    const currentIndex = orderedPlaybackSongs.findIndex((song) => song.path === currentPath);
-    if (currentIndex < 0 || orderedPlaybackSongs.length === 0) {
-      return null;
-    }
-
-    if (repeatMode === 'one') {
-      return orderedPlaybackSongs[currentIndex];
-    }
-
-    if (shuffleEnabled && orderedPlaybackSongs.length > 1) {
-      const unplayed = orderedPlaybackSongs.filter((s) => !shufflePlayedPaths.has(s.path));
-      if (unplayed.length === 0) {
-        if (repeatMode === 'off') {
-          return null; // all songs played, stop
-        }
-        // repeat all: reset history
-        shufflePlayedPaths = new Set([currentPath]);
-        const candidates = orderedPlaybackSongs.filter((s) => s.path !== currentPath);
-        if (!candidates.length) return null;
-        return candidates[Math.floor(Math.random() * candidates.length)];
-      }
-      return unplayed[Math.floor(Math.random() * unplayed.length)];
-    }
-
-    const isLastSong = currentIndex >= orderedPlaybackSongs.length - 1;
-    if (isLastSong && repeatMode !== 'all') {
-      return null;
-    }
-
-    return orderedPlaybackSongs[(currentIndex + 1) % orderedPlaybackSongs.length];
+    return queueStore.pickNext(orderedPlaybackSongs, currentPath, shuffleEnabled, repeatMode);
   }
+
 
   async function handleTrackEnded(path: string) {
     let nextSong = pickNextSong(path);
 
     // If the context (artist/album) is exhausted and repeat is off,
     // fall back to the full library and continue from the next song.
-    if (!nextSong && queueOrderPaths.length > 0 && repeatMode === 'off') {
+    if (!nextSong && queueStore.hasContext() && repeatMode === 'off') {
       const fullLibrary = songs.filter((s) => !queueRemovedPathSet.has(s.path) || s.path === path);
       const currentIndexInLibrary = fullLibrary.findIndex((s) => s.path === path);
       if (currentIndexInLibrary >= 0 && currentIndexInLibrary < fullLibrary.length - 1) {
-        // Clear context so we re-enter full-library playback
-        queueOrderPaths = [];
-        queueRemovedPaths = [];
+        queueStore.clearContext();
         nextSong = fullLibrary[currentIndexInLibrary + 1];
       }
     }
@@ -1015,11 +922,9 @@
     queuedNextPath = null;
     selectedPath = song.path;
     if (contextSongs && contextSongs.length) {
-      queueOrderPaths = contextSongs.map((s) => s.path);
-      queueRemovedPaths = [];
-      shufflePlayedPaths = new Set([song.path]); // reset history for new context
+      queueStore.setContext(contextSongs, song.path);
     } else {
-      shufflePlayedPaths.add(song.path);
+      queueStore.recordPlayed(song.path);
     }
     try {
       await playbackStore.play(song.path);
@@ -1042,13 +947,13 @@
     if (shuffleEnabled && orderedPlaybackSongs.length > 1) {
       // In shuffle mode: pick a random unplayed song.
       // If all songs have been played and repeat is off, stop.
-      const unplayed = orderedPlaybackSongs.filter((s) => !shufflePlayedPaths.has(s.path));
+      const unplayed = orderedPlaybackSongs.filter((s) => !queueState.shufflePlayedPaths.has(s.path));
       if (unplayed.length === 0) {
         if (repeatMode === 'off') {
           return; // album/context is over
         }
         // repeat all: reset and play again
-        shufflePlayedPaths = new Set([currentPath ?? '']);
+        queueStore.resetShuffle(currentPath ?? '');
         const candidates = orderedPlaybackSongs.filter((s) => s.path !== currentPath);
         if (!candidates.length) return;
         const next = candidates[Math.floor(Math.random() * candidates.length)];
@@ -1064,12 +969,11 @@
     
     // If skipping past the end of the context (artist/album) and repeat is off,
     // transition to the next song in the full library instead of looping back.
-    if (nextIndex >= orderedPlaybackSongs.length && queueOrderPaths.length > 0 && repeatMode === 'off') {
+    if (nextIndex >= orderedPlaybackSongs.length && queueStore.hasContext() && repeatMode === 'off') {
       const fullLibrary = songs.filter((s) => !queueRemovedPathSet.has(s.path) || s.path === currentPath);
       const currentIndexInLibrary = fullLibrary.findIndex((s) => s.path === currentPath);
       if (currentIndexInLibrary >= 0 && currentIndexInLibrary < fullLibrary.length - 1) {
-        queueOrderPaths = [];
-        queueRemovedPaths = [];
+        queueStore.clearContext();
         await chooseSong(fullLibrary[currentIndexInLibrary + 1]);
         return;
       }
