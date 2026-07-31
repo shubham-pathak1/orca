@@ -32,6 +32,12 @@ Thumbs.db
 *.pdb
 *.exe
 
+# Local migration and test artifacts
+src_slint_backup/
+ui_slint_backup/
+temp_run/
+test_run/
+
 # Local app data and generated caches
 orca.db
 orca_settings.json
