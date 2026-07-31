@@ -10,7 +10,6 @@ use lofty::prelude::*;
 use lofty::probe::Probe;
 use lofty::tag::Tag;
 use serde::{Deserialize, Serialize};
-use walkdir::WalkDir;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct LocalSong {
@@ -66,71 +65,6 @@ fn parse_tag_i32(value: Option<&str>) -> Option<i32> {
     }
     let first = text.split('/').next().unwrap_or(text).trim();
     first.parse::<i32>().ok().filter(|n| *n > 0)
-}
-
-pub fn scan_music_folder<F>(
-    folder_path: &Path,
-    artwork_dir: &Path,
-    existing_map: &std::collections::HashMap<String, (i64, u64, LocalSong)>,
-    on_progress: F,
-) -> Result<Vec<LocalSong>, String>
-where
-    F: Fn() + Send + Sync,
-{
-    let mut songs = Vec::new();
-
-    for entry in WalkDir::new(folder_path).into_iter().filter_map(|e| e.ok()) {
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-
-        let Some(ext) = path.extension() else {
-            continue;
-        };
-        let ext_str = ext.to_string_lossy().to_lowercase();
-        let is_audio = ext_str == "mp3"
-            || ext_str == "flac"
-            || ext_str == "m4a"
-            || ext_str == "wav"
-            || ext_str == "ogg"
-            || ext_str == "opus"
-            || ext_str == "aiff"
-            || ext_str == "aif";
-        if !is_audio {
-            continue;
-        }
-
-        let path_str = path.to_string_lossy().to_string();
-        let mut reused = false;
-
-        if let Some((stored_mtime, stored_size, cached_song)) = existing_map.get(&path_str) {
-            if let Ok(metadata) = fs::metadata(path) {
-                let current_size = metadata.len();
-                let current_mtime = metadata
-                    .modified()
-                    .ok()
-                    .and_then(|t| t.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(0);
-
-                if current_size == *stored_size && current_mtime == *stored_mtime {
-                    songs.push(cached_song.clone());
-                    reused = true;
-                    on_progress();
-                }
-            }
-        }
-
-        if !reused {
-            if let Ok(song) = scan_music_file(path, artwork_dir) {
-                songs.push(song);
-                on_progress();
-            }
-        }
-    }
-
-    Ok(songs)
 }
 
 pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, String> {

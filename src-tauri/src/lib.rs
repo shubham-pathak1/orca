@@ -145,7 +145,7 @@ where
     let mut seen_paths = HashSet::new();
 
     for root in roots {
-        let scanned = orca_core::library::scan_music_folder(
+        let scanned = orca_core::scanner::scan_music_folder(
             &root,
             &artwork_dir,
             &existing_map,
