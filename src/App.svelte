@@ -40,6 +40,7 @@
   import type { ActiveView } from './lib/navigation';
   import { createLibraryStore } from './lib/stores/library';
   import { createPlaybackStore } from './lib/stores/playback';
+  import { createPreferencesStore } from './lib/stores/preferences';
   import { createQueueStore } from './lib/stores/queue';
   import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate, ArtistEntry, AlbumEntry } from './lib/types';
 
@@ -74,6 +75,7 @@
   let queueOpen = false;
   let accentRgb = '245,245,245';
   let sampledArtwork: string | null = null;
+  const preferencesStore = createPreferencesStore();
   let playerPlacement: 'right' | 'bottom' = 'bottom';
   let sidebarMode: 'expanded' | 'collapsed' = 'expanded';
   let seekbarStyle: 'standard' | 'waveform' = 'waveform';
@@ -87,6 +89,21 @@
   let theme: 'default' = 'default';
   let shuffleEnabled = false;
   let repeatMode: 'off' | 'all' | 'one' = 'off';
+  const unsubscribePreferences = preferencesStore.subscribe((preferences) => {
+    playerPlacement = preferences.playerPlacement;
+    sidebarMode = preferences.sidebarMode;
+    seekbarStyle = preferences.seekbarStyle;
+    dynamicCoverAccent = preferences.dynamicCoverAccent;
+    blurredNowPlayingBackground = preferences.blurredNowPlayingBackground;
+    fontFamily = preferences.fontFamily;
+    fontSizePercent = preferences.fontSizePercent;
+    showQualityInfo = preferences.showQualityInfo;
+    gaplessPlayback = preferences.gaplessPlayback;
+    autoFetchArtwork = preferences.autoFetchArtwork;
+    shuffleEnabled = preferences.shuffleEnabled;
+    repeatMode = preferences.repeatMode;
+    fullPlayerLyricsOpen = preferences.fullPlayerLyricsOpen;
+  });
   const queueStore = createQueueStore();
   let queueState = { orderPaths: [] as string[], removedPaths: [] as string[], shufflePlayedPaths: new Set<string>() };
   const unsubscribeQueue = queueStore.subscribe((state) => {
@@ -166,21 +183,8 @@
   }
 
   onMount(() => {
-    playerPlacement = readPreference('orca.playerPlacement', 'bottom', ['right', 'bottom']);
-    sidebarMode = readPreference('orca.sidebarMode', 'expanded', ['expanded', 'collapsed']);
-    seekbarStyle = readPreference('orca.seekbarStyle', 'waveform', ['standard', 'waveform']);
+    preferencesStore.load();
     theme = readPreference('orca.theme', 'default', ['default']);
-    dynamicCoverAccent = readBooleanPreference('orca.dynamicCoverAccent', true);
-    blurredNowPlayingBackground = readBooleanPreference('orca.blurredNowPlayingBackground', true);
-    const savedFont = window.localStorage.getItem('orca.fontFamily');
-    fontFamily = savedFont || 'Plus Jakarta Sans';
-    fontSizePercent = readNumberPreference('orca.fontSizePercent', 100, 80, 120);
-    showQualityInfo = readBooleanPreference('orca.showQualityInfo', true);
-    gaplessPlayback = readBooleanPreference('orca.gaplessPlayback', true);
-    autoFetchArtwork = readBooleanPreference('orca.autoFetchArtwork', false);
-    shuffleEnabled = readBooleanPreference('orca.shuffleEnabled', false);
-    repeatMode = readPreference('orca.repeatMode', 'off', ['off', 'all', 'one']);
-    fullPlayerLyricsOpen = readBooleanPreference('orca.fullPlayerLyricsOpen', false);
 
     const lastPlayedPath = window.localStorage.getItem('orca.lastPlayedPath');
     if (lastPlayedPath) {
@@ -264,6 +268,7 @@
     return () => {
       playbackStore.stopPolling();
       unsubscribeLibrary();
+      unsubscribePreferences();
       unsubscribePlayback();
       unsubscribeQueue();
       if (typeof window !== 'undefined') {
@@ -335,18 +340,15 @@
   }
 
   function setPlayerPlacement(placement: 'right' | 'bottom') {
-    playerPlacement = placement;
-    window.localStorage.setItem('orca.playerPlacement', placement);
+    preferencesStore.setPlayerPlacement(placement);
   }
 
   function setSidebarMode(mode: 'expanded' | 'collapsed') {
-    sidebarMode = mode;
-    window.localStorage.setItem('orca.sidebarMode', mode);
+    preferencesStore.setSidebarMode(mode);
   }
 
   function setSeekbarStyle(style: 'standard' | 'waveform') {
-    seekbarStyle = style;
-    window.localStorage.setItem('orca.seekbarStyle', style);
+    preferencesStore.setSeekbarStyle(style);
   }
 
   function setTheme(value: 'default') {
@@ -358,8 +360,7 @@
   }
 
   function setDynamicCoverAccent(enabled: boolean) {
-    dynamicCoverAccent = enabled;
-    window.localStorage.setItem('orca.dynamicCoverAccent', String(enabled));
+    preferencesStore.setDynamicCoverAccent(enabled);
     if (!enabled) {
       sampledArtwork = null;
       accentRgb = '245,245,245';
@@ -370,28 +371,23 @@
   }
 
   function setBlurredNowPlayingBackground(enabled: boolean) {
-    blurredNowPlayingBackground = enabled;
-    window.localStorage.setItem('orca.blurredNowPlayingBackground', String(enabled));
+    preferencesStore.setBlurredNowPlayingBackground(enabled);
   }
 
   function setFontFamily(value: string) {
-    fontFamily = value;
-    window.localStorage.setItem('orca.fontFamily', value);
+    preferencesStore.setFontFamily(value);
   }
 
   function setFontSizePercent(value: number) {
-    fontSizePercent = Math.min(120, Math.max(80, Math.round(value)));
-    window.localStorage.setItem('orca.fontSizePercent', String(fontSizePercent));
+    preferencesStore.setFontSizePercent(value);
   }
 
   function setShowQualityInfo(enabled: boolean) {
-    showQualityInfo = enabled;
-    window.localStorage.setItem('orca.showQualityInfo', String(enabled));
+    preferencesStore.setShowQualityInfo(enabled);
   }
 
   function setGaplessPlayback(enabled: boolean) {
-    gaplessPlayback = enabled;
-    window.localStorage.setItem('orca.gaplessPlayback', String(enabled));
+    preferencesStore.setGaplessPlayback(enabled);
     if (!enabled) {
       queuedNextForPath = null;
       queuedNextPath = null;
@@ -399,18 +395,15 @@
   }
 
   function setAutoFetchArtwork(enabled: boolean) {
-    autoFetchArtwork = enabled;
-    window.localStorage.setItem('orca.autoFetchArtwork', String(enabled));
+    preferencesStore.setAutoFetchArtwork(enabled);
   }
 
   function toggleShuffle() {
-    shuffleEnabled = !shuffleEnabled;
-    window.localStorage.setItem('orca.shuffleEnabled', String(shuffleEnabled));
+    preferencesStore.toggleShuffle();
   }
 
   function cycleRepeat() {
-    repeatMode = repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off';
-    window.localStorage.setItem('orca.repeatMode', repeatMode);
+    preferencesStore.cycleRepeat();
   }
 
 
