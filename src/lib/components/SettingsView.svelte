@@ -260,50 +260,66 @@
     </section>
   {:else if activeTab === 'Interface'}
     <section class="max-w-[820px] space-y-8">
-      <div>
-        <h3 class="text-sm font-bold text-white">Player placement</h3>
-        <p class="text-sm text-white/48">Choose where the compact player lives in the app shell</p>
-        <div class="mt-4 grid grid-cols-2 gap-3 max-md:grid-cols-1">
-          {#each playerPlacements as placement}
-            <button
-              class={`min-h-20 rounded-md border px-4 py-3 text-left transition ${playerPlacement === placement.id ? 'border-white bg-white text-black' : 'border-white/12 bg-black/20 text-white hover:border-white/35 hover:bg-white/[0.05]'}`}
-              on:click={() => onPlayerPlacementChange(placement.id)}
-            >
-              <span class="block text-sm font-bold">{placement.title}</span>
-              <span class={`mt-1 block text-xs ${playerPlacement === placement.id ? 'text-black/58' : 'text-white/44'}`}>{placement.description}</span>
-            </button>
-          {/each}
+      <div class="flex items-center gap-12 max-md:flex-col max-md:items-start max-md:gap-4 border-b border-white/10 pb-6">
+        <div class="flex-1 max-w-[380px]">
+          <h3 class="text-sm font-bold text-white">Player placement</h3>
+          <p class="text-sm text-white/48">Choose where the compact player lives in the app shell</p>
         </div>
-      </div>
-      <div>
-        <h3 class="text-sm font-bold text-white">Sidebar mode</h3>
-        <p class="text-sm text-white/48">Choose whether the sidebar should show text labels or just icons</p>
-        <div class="mt-4 grid grid-cols-2 gap-3 max-md:grid-cols-1">
-          {#each sidebarModes as mode}
-            <button
-              class={`min-h-20 rounded-md border px-4 py-3 text-left transition ${sidebarMode === mode.id ? 'border-white bg-white text-black' : 'border-white/12 bg-black/20 text-white hover:border-white/35 hover:bg-white/[0.05]'}`}
-              on:click={() => onSidebarModeChange(mode.id)}
-            >
-              <span class="block text-sm font-bold">{mode.title}</span>
-              <span class={`mt-1 block text-xs ${sidebarMode === mode.id ? 'text-black/58' : 'text-white/44'}`}>{mode.description}</span>
-            </button>
-          {/each}
+        <div class="relative w-[180px]">
+          <select 
+            class="h-10 w-full appearance-none rounded-md border border-white/12 bg-black/20 pl-3 pr-10 text-sm font-semibold text-white outline-none transition hover:border-white/35 focus:border-[color:var(--accent-mid)]"
+            value={playerPlacement} 
+            on:change={(e) => onPlayerPlacementChange(e.currentTarget.value)}
+          >
+            {#each playerPlacements as placement}
+              <option class="bg-[#111] text-white" value={placement.id}>{placement.title}</option>
+            {/each}
+          </select>
+          <svg class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
         </div>
       </div>
 
-      <div class="border-t border-white/10 pt-6">
-        <h3 class="text-sm font-bold text-white">Seekbar style</h3>
-        <p class="text-sm text-white/48">Choose between the classic slider and a decoded waveform</p>
-        <div class="mt-4 grid grid-cols-2 gap-3 max-md:grid-cols-1">
-          {#each seekbarStyles as style}
-            <button
-              class={`min-h-20 rounded-md border px-4 py-3 text-left transition ${seekbarStyle === style.id ? 'border-white bg-white text-black' : 'border-white/12 bg-black/20 text-white hover:border-white/35 hover:bg-white/[0.05]'}`}
-              on:click={() => onSeekbarStyleChange(style.id)}
-            >
-              <span class="block text-sm font-bold">{style.title}</span>
-              <span class={`mt-1 block text-xs ${seekbarStyle === style.id ? 'text-black/58' : 'text-white/44'}`}>{style.description}</span>
-            </button>
-          {/each}
+      <div class="flex items-center gap-12 max-md:flex-col max-md:items-start max-md:gap-4 border-b border-white/10 pb-6 pt-2">
+        <div class="flex-1 max-w-[380px]">
+          <h3 class="text-sm font-bold text-white">Sidebar mode</h3>
+          <p class="text-sm text-white/48">Choose whether the sidebar should show text labels or just icons</p>
+        </div>
+        <div class="relative w-[180px]">
+          <select 
+            class="h-10 w-full appearance-none rounded-md border border-white/12 bg-black/20 pl-3 pr-10 text-sm font-semibold text-white outline-none transition hover:border-white/35 focus:border-[color:var(--accent-mid)]"
+            value={sidebarMode} 
+            on:change={(e) => onSidebarModeChange(e.currentTarget.value)}
+          >
+            {#each sidebarModes as mode}
+              <option class="bg-[#111] text-white" value={mode.id}>{mode.title}</option>
+            {/each}
+          </select>
+          <svg class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-12 max-md:flex-col max-md:items-start max-md:gap-4 border-b border-white/10 pb-6 pt-2">
+        <div class="flex-1 max-w-[380px]">
+          <h3 class="text-sm font-bold text-white">Seekbar style</h3>
+          <p class="text-sm text-white/48">Choose between the classic slider and a decoded waveform</p>
+        </div>
+        <div class="relative w-[180px]">
+          <select 
+            class="h-10 w-full appearance-none rounded-md border border-white/12 bg-black/20 pl-3 pr-10 text-sm font-semibold text-white outline-none transition hover:border-white/35 focus:border-[color:var(--accent-mid)]"
+            value={seekbarStyle} 
+            on:change={(e) => onSeekbarStyleChange(e.currentTarget.value)}
+          >
+            {#each seekbarStyles as style}
+              <option class="bg-[#111] text-white" value={style.id}>{style.title}</option>
+            {/each}
+          </select>
+          <svg class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
         </div>
       </div>
 

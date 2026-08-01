@@ -202,7 +202,7 @@
   {:else}
     <!-- Shared page header (hidden when a view is in detail mode) -->
     {#if !isInDetail}
-      <div class={`mb-4 grid items-center gap-4 max-lg:grid-cols-1 ${activeView === 'settings' || activeView === 'playlists' ? 'grid-cols-[minmax(200px,1fr)_minmax(260px,420px)]' : 'grid-cols-[minmax(200px,1fr)_minmax(220px,300px)_140px]'}`}>
+      <div class="mb-4 grid items-center gap-4 max-lg:grid-cols-1 grid-cols-[minmax(200px,1fr)_minmax(200px,300px)]">
         <div>
           <h1 class="text-2xl font-bold tracking-normal">{pageTitle}</h1>
           <p class="mt-1 text-xs text-white/42">{pageSubtitle}</p>
@@ -213,13 +213,11 @@
             <input class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white focus:border-[color:var(--accent-mid)]"
               bind:value={settingsQuery} placeholder="Search settings..." />
           </label>
-        {:else if activeView === 'playlists'}
-          <!-- playlist search is internal to PlaylistsView -->
         {:else}
           <label>
             <span class="sr-only">Search library</span>
             <input class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white focus:border-[color:var(--accent-mid)]"
-              bind:value={query} placeholder="Search library..." />
+              bind:value={query} placeholder="Search {activeView}..." />
           </label>
         {/if}
       </div>

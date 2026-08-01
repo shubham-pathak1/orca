@@ -22,10 +22,9 @@
   export let selectedPlaylist: Playlist | null = null;
   export let selectedPlaylistSongIds: number[] = [];
 
-  // Exported so LibraryView can toggle header / height
   export let isInDetail = false;
 
-  let playlistQuery = '';
+  export let query = '';
   let detailQuery = '';
   let newPlaylistName = '';
   let isCreatingPlaylist = false;
@@ -41,7 +40,7 @@
   $: isInDetail = Boolean(selectedPlaylist);
 
   $: filteredPlaylists = playlists.filter((p) =>
-    p.name.toLowerCase().includes(playlistQuery.trim().toLowerCase())
+    p.name.toLowerCase().includes(query.trim().toLowerCase())
   );
   $: selectedPlaylistSongs = selectedPlaylistSongIds
     .map((id) => songs.find((s) => s.id === id))

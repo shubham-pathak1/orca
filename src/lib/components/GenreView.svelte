@@ -143,18 +143,18 @@
     {#if genreEntries.length}
       {#each genreEntries as genre}
         <button class="group text-left transition" on:click={() => openGenre(genre.name)}>
-          <div class="relative aspect-square overflow-hidden rounded-lg bg-white/[0.07] shadow-[0_4px_20px_rgba(0,0,0,0.3)] transition group-hover:scale-[1.03] group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+          <div class="relative flex aspect-square flex-col items-center justify-center overflow-hidden rounded-lg bg-black/80 shadow-[0_4px_20px_rgba(0,0,0,0.3)] transition group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
             {#if artworkUrl(genre.song_artwork)}
-              <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={genre.song_artwork} alt="" />
+              <LazyArtwork rootClass="absolute inset-0" imageClass="h-full w-full object-cover opacity-40 transition duration-300 group-hover:opacity-20" path={genre.song_artwork} alt="" />
             {:else}
-              <img src="/cover.png" class="h-full w-full object-cover" alt="" />
+              <img src="/cover.png" class="absolute inset-0 h-full w-full object-cover opacity-40 transition duration-300 group-hover:opacity-20" alt="" />
             {/if}
-            <!-- Genre name badge overlay -->
-            <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-2.5 pb-2.5 pt-8">
-              <span class="block truncate text-xs font-bold leading-tight text-white drop-shadow">{genre.name}</span>
+            <!-- Centered genre text overlay -->
+            <div class="relative z-10 flex flex-col items-center justify-center p-3 text-center">
+              <span class="block w-full break-words text-lg font-black leading-tight text-white drop-shadow-lg">{genre.name}</span>
+              <span class="mt-1.5 block text-[10px] font-bold uppercase tracking-widest text-white/60 drop-shadow-md">{genre.song_count} {genre.song_count === 1 ? 'song' : 'songs'}</span>
             </div>
           </div>
-          <p class="mt-1.5 truncate text-xs text-white/40">{genre.song_count} {genre.song_count === 1 ? 'song' : 'songs'}</p>
         </button>
       {/each}
     {:else}
