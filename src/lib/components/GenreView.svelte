@@ -1,0 +1,168 @@
+<script lang="ts">
+  import { artworkUrl } from '../tauri';
+  import { formatDuration, formatTotalDuration } from '../format';
+  import type { LocalSong, GenreEntry } from '../types';
+  import LazyArtwork from './LazyArtwork.svelte';
+
+  export let genres: GenreEntry[] = [];
+  export let songs: LocalSong[] = [];
+  export let query = '';
+  export let currentPath: string | null = null;
+  export let onChooseSong: (song: LocalSong, contextSongs?: LocalSong[]) => void = () => {};
+  export let onOpenSongMenu: (event: MouseEvent, song: LocalSong) => void = () => {};
+
+  // Exported so LibraryView can toggle header / height
+  export let isInDetail = false;
+
+  let selectedGenreName: string | null = null;
+  let detailQuery = '';
+
+  $: isInDetail = Boolean(selectedGenreName);
+
+  $: genreEntries = genres.filter((g) =>
+    !query || g.name.toLowerCase().includes(query.trim().toLowerCase())
+  );
+  $: selectedGenre = selectedGenreName
+    ? genres.find((g) => g.name === selectedGenreName) ?? null
+    : null;
+  $: selectedGenreSongs = selectedGenreName
+    ? songs
+        .filter((s) => s.genre === selectedGenreName)
+        .sort((a, b) => a.title.localeCompare(b.title))
+    : [];
+  $: selectedGenreVisibleSongs = filterDetailSongs(selectedGenreSongs, detailQuery);
+
+  function filterDetailSongs(sourceSongs: LocalSong[], searchQuery: string) {
+    const needle = searchQuery.trim().toLowerCase();
+    if (!needle) return sourceSongs;
+    return sourceSongs.filter((s) =>
+      [s.title, s.artist, s.album].some((v) => v.toLowerCase().includes(needle))
+    );
+  }
+
+  function rowArtwork(song: LocalSong): string | null {
+    return song.artwork_thumb ?? song.artwork_preview ?? null;
+  }
+
+  function openGenre(name: string) {
+    selectedGenreName = name;
+    detailQuery = '';
+  }
+
+  function closeGenre() {
+    selectedGenreName = null;
+    detailQuery = '';
+  }
+
+  function playFirstSong(sourceSongs: LocalSong[]) {
+    const first = sourceSongs[0];
+    if (first) onChooseSong(first, sourceSongs);
+  }
+</script>
+
+{#if selectedGenre}
+  <!-- Genre detail -->
+  <div class="scrollbar-none h-full overflow-auto">
+    <div class="relative mb-8 overflow-hidden rounded-md px-5 pb-6 pt-5">
+      <div class="pointer-events-none absolute inset-0 transform-gpu bg-cover bg-center opacity-20 blur-3xl"
+        style={`background-image: ${artworkUrl(selectedGenre.song_artwork) ? `url("${artworkUrl(selectedGenre.song_artwork)}")` : 'none'}`}></div>
+      <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.05] via-transparent to-black/30"></div>
+      <div class="relative mb-5 flex items-center justify-between gap-4">
+        <button class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/12 bg-black/24 text-white/70 transition hover:border-white/24 hover:bg-white/[0.08] hover:text-white"
+          type="button" title="Back" aria-label="Back" on:click={closeGenre}>
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+        </button>
+        <label class="w-full max-w-xl">
+          <span class="sr-only">Search songs in genre</span>
+          <input class="h-10 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm text-white caret-white outline-none transition placeholder:text-white focus:border-[color:var(--accent-mid)]"
+            bind:value={detailQuery} placeholder="Search {selectedGenre.name}..." />
+        </label>
+      </div>
+      <div class="relative grid grid-cols-[148px_minmax(0,1fr)] items-end gap-5 max-md:grid-cols-1">
+        <div class="relative aspect-square w-[148px] shrink-0 overflow-hidden rounded-md bg-white/8 shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
+          {#if artworkUrl(selectedGenre.song_artwork)}
+            <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={selectedGenre.song_artwork} alt="" />
+          {:else}
+            <img src="/cover.png" class="h-full w-full object-cover" alt="" />
+          {/if}
+        </div>
+        <div class="min-w-0">
+          <h2 class="truncate text-6xl font-black leading-normal max-xl:text-5xl">{selectedGenre.name}</h2>
+          <p class="mt-3 flex items-center gap-1.5 text-sm text-white/62">
+            <span>{selectedGenre.song_count} {selectedGenre.song_count === 1 ? 'song' : 'songs'}</span>
+            <span class="text-[6px] opacity-40">&#9679;</span>
+            <span>{formatTotalDuration(selectedGenreSongs.reduce((acc, song) => acc + (song.duration || 0), 0))}</span>
+          </p>
+          <div class="mt-5 flex items-center gap-2">
+            <button class="grid h-11 w-11 place-items-center rounded-full bg-[var(--accent)] text-black transition hover:scale-105"
+              title="Play genre" on:click={() => playFirstSong(selectedGenreVisibleSongs)}>
+              <svg class="ml-0.5 h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid h-8 grid-cols-[48px_minmax(220px,1fr)_minmax(140px,0.6fr)_72px] items-center border-b border-white/8 px-2 text-[11px] font-bold uppercase text-white/36 max-lg:grid-cols-[40px_minmax(180px,1fr)_72px]">
+      <span>#</span><span>Title</span><span class="max-lg:hidden">Artist</span><span class="text-right">Time</span>
+    </div>
+    {#each selectedGenreVisibleSongs as song, index}
+      <button class={`grid min-h-11 w-full grid-cols-[48px_minmax(220px,1fr)_minmax(140px,0.6fr)_72px] items-center gap-3 border-b border-white/[0.035] px-2 text-left transition max-lg:grid-cols-[40px_minmax(180px,1fr)_72px] ${song.path === currentPath ? 'bg-[var(--accent-soft)]' : 'hover:bg-white/[0.045]'}`}
+        on:click={() => onChooseSong(song, selectedGenreVisibleSongs)}
+        on:contextmenu={(e) => onOpenSongMenu(e, song)}>
+        <span class="text-sm text-white/36">{index + 1}</span>
+        <span class="flex min-w-0 items-center gap-2">
+          {#if artworkUrl(song.artwork)}
+            <LazyArtwork rootClass="h-8 w-8 shrink-0 rounded-sm overflow-hidden" imageClass="h-full w-full object-cover" path={rowArtwork(song)} alt="" />
+          {:else}
+            <img src="/cover.png" class="h-8 w-8 shrink-0 rounded-sm object-cover" alt="" />
+          {/if}
+          <span class="min-w-0">
+            <span class="block truncate text-sm font-semibold text-white">{song.title}</span>
+            <span class="block truncate text-xs text-white/36">{song.album}</span>
+          </span>
+        </span>
+        <span class="truncate text-xs text-white/42 max-lg:hidden">{song.artist}</span>
+        <span class="text-right text-xs text-white/48">{formatDuration(song.duration)}</span>
+      </button>
+    {/each}
+    {#if !selectedGenreVisibleSongs.length}
+      <div class="mx-auto flex min-h-[220px] max-w-xl flex-col items-center justify-center px-2 text-center">
+        <p class="text-sm font-bold uppercase text-white/34">No songs found</p>
+        <h2 class="mt-3 text-3xl font-black tracking-normal">Oops, no songs in {selectedGenre.name} match :(</h2>
+        <p class="mt-3 text-sm leading-6 text-white/48">Try a different search inside this genre.</p>
+      </div>
+    {/if}
+  </div>
+
+{:else}
+  <!-- Genre grid -->
+  <div class="scrollbar-none grid max-h-full grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-4 overflow-auto pr-2">
+    {#if genreEntries.length}
+      {#each genreEntries as genre}
+        <button class="group text-left transition" on:click={() => openGenre(genre.name)}>
+          <div class="relative aspect-square overflow-hidden rounded-lg bg-white/[0.07] shadow-[0_4px_20px_rgba(0,0,0,0.3)] transition group-hover:scale-[1.03] group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+            {#if artworkUrl(genre.song_artwork)}
+              <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={genre.song_artwork} alt="" />
+            {:else}
+              <img src="/cover.png" class="h-full w-full object-cover" alt="" />
+            {/if}
+            <!-- Genre name badge overlay -->
+            <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-2.5 pb-2.5 pt-8">
+              <span class="block truncate text-xs font-bold leading-tight text-white drop-shadow">{genre.name}</span>
+            </div>
+          </div>
+          <p class="mt-1.5 truncate text-xs text-white/40">{genre.song_count} {genre.song_count === 1 ? 'song' : 'songs'}</p>
+        </button>
+      {/each}
+    {:else}
+      <div class="col-span-full mx-auto flex min-h-[320px] max-w-xl flex-col items-center justify-center text-center">
+        <p class="text-sm font-bold uppercase text-white/34">No genres</p>
+        <h2 class="mt-3 text-4xl font-black tracking-normal">No genre tags found.</h2>
+        <p class="mt-3 text-sm leading-6 text-white/48">Add genre metadata to your music files and rescan your library.</p>
+      </div>
+    {/if}
+  </div>
+{/if}

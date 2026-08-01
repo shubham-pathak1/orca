@@ -42,13 +42,14 @@
   import { createPlaybackStore } from './lib/stores/playback';
   import { createPreferencesStore } from './lib/stores/preferences';
   import { createQueueStore } from './lib/stores/queue';
-  import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate, ArtistEntry, AlbumEntry } from './lib/types';
+  import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate, ArtistEntry, AlbumEntry, GenreEntry } from './lib/types';
 
   const libraryStore = createLibraryStore();
   let songs: LocalSong[] = [];
   let playlists: Playlist[] = [];
   let artists: ArtistEntry[] = [];
   let albums: AlbumEntry[] = [];
+  let genres: GenreEntry[] = [];
   let folderCount = 0;
   let scanRoots: string[] = [];
   let isScanning = false;
@@ -57,6 +58,7 @@
     playlists = state.playlists;
     artists = state.artists;
     albums = state.albums;
+    genres = state.genres;
     folderCount = state.folderCount;
     scanRoots = state.scanRoots;
     isScanning = state.isScanning;
@@ -1045,6 +1047,7 @@
       {filteredSongs}
       {artists}
       {albums}
+      {genres}
       bind:query
       {selectedPath}
       currentPath={playback.current_path}
