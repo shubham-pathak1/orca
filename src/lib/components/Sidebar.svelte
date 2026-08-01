@@ -12,7 +12,7 @@
   $: collapsed = sidebarMode === 'collapsed';
 </script>
 
-<aside class={`row-span-2 flex min-h-0 flex-col border-r border-white/10 bg-black/70 px-3 py-4 transition-all ${collapsed ? 'w-[56px] items-center px-2' : 'max-md:w-[56px] max-md:items-center max-md:px-2'}`}>
+<aside class={`row-span-2 flex min-h-0 flex-col bg-black/42 px-3 py-4 transition-all ${collapsed ? 'w-[56px] items-center px-2' : 'max-md:w-[56px] max-md:items-center max-md:px-2'}`}>
   <div class={`mb-6 flex items-center gap-2 px-1 ${collapsed ? 'justify-center px-0' : 'max-md:justify-center max-md:px-0'}`}>
     <img class="h-6 w-6 rounded-sm object-cover" src="/orca_logo.png" alt="" />
     <span class={`truncate text-base font-bold text-white ${collapsed ? 'hidden' : 'max-md:hidden'}`}>Orca</span>
@@ -25,23 +25,27 @@
         class={`sidebar-item flex h-10 items-center gap-3 rounded-md text-left text-sm font-semibold transition
           ${collapsed ? 'justify-center px-0' : 'px-3 max-md:justify-center max-md:px-0'}
           ${isActive
-            ? `sidebar-item-active bg-white/[0.13] text-white ${!collapsed ? 'shadow-[inset_3px_0_0_var(--accent)] max-md:shadow-none' : ''}`
-            : 'text-white/62 hover:bg-white/[0.06] hover:text-white'}`}
+            ? 'sidebar-item-active bg-white/[0.12] text-white font-semibold'
+            : 'text-white/60 hover:bg-white/[0.06] hover:text-white'}`}
         on:click={() => onSelect(item.id)}
         title={item.label}
       >
-        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d={iconPath(item.icon)} />
-        </svg>
+        {#if item.id === 'albums'}
+          <img src="/album.png" class={`${collapsed ? 'h-5 w-5' : 'h-4 w-4'} shrink-0 object-contain invert opacity-90`} alt="" />
+        {:else}
+          <svg class={`${collapsed ? 'h-5 w-5' : 'h-4 w-4'} shrink-0`} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d={iconPath(item.icon)} />
+          </svg>
+        {/if}
         <span class={collapsed ? 'hidden' : 'max-md:hidden'}>{item.label}</span>
       </button>
     {/each}
   </nav>
 
   <div class="mt-auto flex flex-col gap-2 pt-4 w-full">
-    <button class={`sidebar-item flex items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-semibold text-white/58 hover:bg-white/[0.06] hover:text-white ${collapsed ? 'justify-center px-0' : 'max-md:justify-center max-md:px-0'}`} disabled={isScanning} on:click={onAddFolder} title="Add Folder">
-      <span class="relative grid h-4 w-4 shrink-0 place-items-center">
-        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <button class={`sidebar-item flex items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-semibold text-white/58 hover:bg-white/[0.06] hover:text-white ${collapsed ? 'justify-center px-0 py-2.5' : 'max-md:justify-center max-md:px-0'}`} disabled={isScanning} on:click={onAddFolder} title="Add Folder">
+      <span class="relative grid place-items-center">
+        <svg class={`${collapsed ? 'h-5 w-5' : 'h-4 w-4'} shrink-0`} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2h7A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />
         </svg>
         {#if folderCount > 0}
@@ -50,8 +54,8 @@
       </span>
       <span class={collapsed ? 'hidden' : 'max-md:hidden'}>Folder</span>
     </button>
-    <button class={`sidebar-item flex items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-semibold text-white/58 hover:bg-white/[0.06] hover:text-white ${collapsed ? 'justify-center px-0' : 'max-md:justify-center max-md:px-0'}`} disabled={isScanning} on:click={onRefresh} title={isScanning ? 'Scanning' : 'Refresh'}>
-      <svg class={`h-4 w-4 shrink-0 ${isScanning ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <button class={`sidebar-item flex items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-semibold text-white/58 hover:bg-white/[0.06] hover:text-white ${collapsed ? 'justify-center px-0 py-2.5' : 'max-md:justify-center max-md:px-0'}`} disabled={isScanning} on:click={onRefresh} title={isScanning ? 'Scanning' : 'Refresh'}>
+      <svg class={`${collapsed ? 'h-5 w-5' : 'h-4 w-4'} shrink-0 ${isScanning ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M20 12a8 8 0 1 1-2.34-5.66" />
         <path d="M20 4v5h-5" />
       </svg>
