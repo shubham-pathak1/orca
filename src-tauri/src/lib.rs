@@ -36,6 +36,7 @@ struct LibrarySnapshot {
     playlists: Vec<db::Playlist>,
     artists: Vec<db::ArtistEntry>,
     albums: Vec<db::AlbumEntry>,
+    genres: Vec<db::GenreEntry>,
     playback: PlaybackState,
     folder_count: usize,
 }
@@ -175,6 +176,7 @@ fn snapshot_from_state(state: &OrcaState) -> Result<LibrarySnapshot, String> {
         playlists: db::get_playlists(&state.db_conn)?,
         artists: db::get_artists(&state.db_conn)?,
         albums: db::get_albums(&state.db_conn)?,
+        genres: db::get_genres(&state.db_conn)?,
         playback: playback_snapshot_from(state),
         folder_count: load_scan_roots(state).len(),
     })

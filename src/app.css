@@ -184,8 +184,7 @@ main ::selection {
 
 .theme-white .sidebar-item-active {
   border-color: rgba(17, 19, 24, 0.28);
-  background: transparent !important;
-  box-shadow: inset 3px 0 0 var(--accent) !important;
+  background: rgba(17, 19, 24, 0.08) !important;
 }
 
 .theme-white .back-button {

@@ -56,11 +56,19 @@ export type AlbumEntry = {
   artwork_thumb: string | null;
 };
 
+export type GenreEntry = {
+  name: string;
+  song_count: number;
+  song_artwork: string | null;
+  song_artwork_thumb: string | null;
+};
+
 export type LibrarySnapshot = {
   songs: LocalSong[];
   playlists: Playlist[];
   artists: ArtistEntry[];
   albums: AlbumEntry[];
+  genres: GenreEntry[];
   playback: PlaybackState;
   folder_count?: number;
 };

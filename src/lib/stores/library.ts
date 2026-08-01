@@ -7,13 +7,14 @@ import {
   removeLibraryScanRoot,
   rescanLibrary
 } from '../tauri';
-import type { AlbumEntry, ArtistEntry, LibrarySnapshot, LocalSong, Playlist } from '../types';
+import type { AlbumEntry, ArtistEntry, GenreEntry, LibrarySnapshot, LocalSong, Playlist } from '../types';
 
 type LibraryState = {
   songs: LocalSong[];
   playlists: Playlist[];
   artists: ArtistEntry[];
   albums: AlbumEntry[];
+  genres: GenreEntry[];
   folderCount: number;
   scanRoots: string[];
   isScanning: boolean;
@@ -24,6 +25,7 @@ const initialState: LibraryState = {
   playlists: [],
   artists: [],
   albums: [],
+  genres: [],
   folderCount: 0,
   scanRoots: [],
   isScanning: false
@@ -49,9 +51,11 @@ export function createLibraryStore() {
       playlists: snapshot.playlists,
       artists: snapshot.artists ?? [],
       albums: snapshot.albums ?? [],
+      genres: snapshot.genres ?? [],
       folderCount: snapshot.folder_count ?? state.folderCount
     });
   }
+
 
   async function scan(action: () => Promise<LibrarySnapshot>) {
     setState({ ...state, isScanning: true });
