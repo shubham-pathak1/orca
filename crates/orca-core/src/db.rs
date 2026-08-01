@@ -858,6 +858,54 @@ pub fn get_albums(conn: &Connection) -> Result<Vec<AlbumEntry>, String> {
 }
 
 #[derive(serde::Serialize, Debug)]
+pub struct GenreEntry {
+    pub name: String,
+    pub song_count: i64,
+    /// Artwork from the first song in this genre that has any artwork
+    pub song_artwork: Option<String>,
+    pub song_artwork_thumb: Option<String>,
+}
+
+pub fn get_genres(conn: &Connection) -> Result<Vec<GenreEntry>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT genre, COUNT(*),
+                    (SELECT COALESCE(s2.artwork_preview_url, NULLIF(awa.artwork_path, 'DELETED'))
+                     FROM songs s2
+                     LEFT JOIN album_artworks awa ON awa.album_key = s2.album_artist || ':' || s2.album
+                     WHERE s2.genre = s.genre
+                       AND COALESCE(s2.artwork_preview_url, NULLIF(awa.artwork_path, 'DELETED')) IS NOT NULL
+                     LIMIT 1),
+                    (SELECT COALESCE(s2.artwork_thumb_url, NULLIF(awa.artwork_thumb_path, 'DELETED'))
+                     FROM songs s2
+                     LEFT JOIN album_artworks awa ON awa.album_key = s2.album_artist || ':' || s2.album
+                     WHERE s2.genre = s.genre
+                       AND COALESCE(s2.artwork_thumb_url, NULLIF(awa.artwork_thumb_path, 'DELETED')) IS NOT NULL
+                     LIMIT 1)
+             FROM songs s
+             WHERE genre IS NOT NULL AND genre != ''
+             GROUP BY genre
+             ORDER BY genre COLLATE NOCASE ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt.query_map([], |row| {
+        Ok(GenreEntry {
+            name: row.get(0)?,
+            song_count: row.get(1)?,
+            song_artwork: row.get(2)?,
+            song_artwork_thumb: row.get(3)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut genres = Vec::new();
+    for g in iter {
+        genres.push(g.map_err(|e| e.to_string())?);
+    }
+    Ok(genres)
+}
+
+#[derive(serde::Serialize)]
 pub struct Playlist {
     pub id: i64,
     pub name: String,
