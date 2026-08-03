@@ -27,6 +27,14 @@
   let detailQuery = '';
   let savedScrollTop = 0;
   let albumContextMenu: { x: number; y: number; album: AlbumEntry } | null = null;
+  let albumScrollTop = 0;
+  let albumViewportHeight = 0;
+  let albumViewportWidth = 0;
+
+  const GRID_MIN_COLUMN_WIDTH = 132;
+  const GRID_GAP = 12;
+  const GRID_TEXT_HEIGHT = 46;
+  const OVERSCAN_ROWS = 3;
 
   $: isInDetail = Boolean(selectedAlbumKey);
 
@@ -49,6 +57,26 @@
         .sort((a, b) => (a.track_number ?? 999) - (b.track_number ?? 999) || a.title.localeCompare(b.title))
     : [];
   $: selectedAlbumVisibleSongs = filterDetailSongs(selectedAlbumSongs, detailQuery);
+  $: albumColumnCount = Math.max(1, Math.floor((albumViewportWidth + GRID_GAP) / (GRID_MIN_COLUMN_WIDTH + GRID_GAP)));
+  $: albumItemWidth = Math.max(
+    GRID_MIN_COLUMN_WIDTH,
+    (albumViewportWidth - GRID_GAP * (albumColumnCount - 1)) / albumColumnCount
+  );
+  $: albumRowHeight = albumItemWidth + GRID_TEXT_HEIGHT + GRID_GAP;
+  $: albumRowCount = Math.ceil(albumEntries.length / albumColumnCount);
+  $: albumVisibleRowStart = Math.max(0, Math.floor(albumScrollTop / albumRowHeight) - OVERSCAN_ROWS);
+  $: albumVisibleRowEnd = Math.min(
+    albumRowCount,
+    Math.ceil((albumScrollTop + albumViewportHeight) / albumRowHeight) + OVERSCAN_ROWS
+  );
+  $: albumVisibleStart = albumVisibleRowStart * albumColumnCount;
+  $: albumVisibleEnd = Math.min(albumEntries.length, albumVisibleRowEnd * albumColumnCount);
+  $: visibleAlbums = albumEntries.slice(albumVisibleStart, albumVisibleEnd);
+  $: {
+    albumEntries;
+    albumScrollTop = 0;
+    if (albumListEl) albumListEl.scrollTop = 0;
+  }
 
   function filterDetailSongs(sourceSongs: LocalSong[], searchQuery: string) {
     const needle = searchQuery.trim().toLowerCase();
@@ -72,13 +100,18 @@
     const letters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
     const startIndex = letters.indexOf(letter);
     const searchOrder = startIndex >= 0 ? letters.slice(startIndex) : [letter];
-    const target = searchOrder
-      .map((c) => albumListEl.querySelector(`[data-letter="${c}"]`) as HTMLElement | null)
-      .find(Boolean);
-    if (!target) return;
-    const containerRect = albumListEl.getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
-    albumListEl.scrollTo({ top: albumListEl.scrollTop + targetRect.top - containerRect.top, behavior: 'smooth' });
+    const targetIndex = searchOrder
+      .map((candidate) => albumEntries.findIndex((album) => initialFromText(album.title) === candidate))
+      .find((index) => index >= 0);
+    if (targetIndex === undefined) return;
+    albumListEl.scrollTo({
+      top: Math.floor(targetIndex / albumColumnCount) * albumRowHeight,
+      behavior: 'smooth'
+    });
+  }
+
+  function updateAlbumScroll(event: Event) {
+    albumScrollTop = (event.currentTarget as HTMLDivElement).scrollTop;
   }
 
   export function openAlbum(key: string) {
@@ -245,12 +278,17 @@
 {:else}
   <!-- Album grid -->
   <div class="grid h-full grid-cols-[minmax(0,1fr)_24px]">
-    <div class="scrollbar-none grid max-h-full grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-3 overflow-auto pr-2"
-      bind:this={albumListEl}>
+    <div class="scrollbar-none max-h-full overflow-auto pr-2"
+      bind:this={albumListEl}
+      bind:clientHeight={albumViewportHeight}
+      bind:clientWidth={albumViewportWidth}
+      on:scroll={updateAlbumScroll}>
       {#if albumEntries.length}
-        {#each albumEntries as album}
-          <button data-letter={initialFromText(album.title)}
-            class="text-left opacity-82 transition hover:opacity-100"
+        <div class="relative" style={`height: ${albumRowCount * albumRowHeight}px;`}>
+        {#each visibleAlbums as album, index (album.key)}
+          <button
+            class="absolute text-left opacity-82 transition hover:opacity-100"
+            style={`width: ${albumItemWidth}px; transform: translate(${((albumVisibleStart + index) % albumColumnCount) * (albumItemWidth + GRID_GAP)}px, ${Math.floor((albumVisibleStart + index) / albumColumnCount) * albumRowHeight}px);`}
             on:click={() => openAlbum(album.key)} on:contextmenu={(e) => openAlbumMenu(e, album)}>
             <div class={`relative aspect-square overflow-hidden rounded-md ${artworkUrl(album.artwork) ? 'bg-white/[0.07]' : ''}`}>
               {#if artworkUrl(album.artwork)}
@@ -263,6 +301,7 @@
             <p class="truncate text-xs text-white/40">{album.artist}</p>
           </button>
         {/each}
+        </div>
       {:else}
         <div class="col-span-full mx-auto flex min-h-[320px] max-w-xl flex-col items-center justify-center text-center">
           <p class="text-sm font-bold uppercase text-white/34">No albums found</p>

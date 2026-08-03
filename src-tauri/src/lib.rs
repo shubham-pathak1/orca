@@ -1,13 +1,14 @@
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use orca_core::{audio_engine::PlaybackState, db, library::SongMetadataUpdate};
 use tauri::{Emitter, Manager, State};
 
 mod commands;
+mod library_watcher;
 mod state;
 
 use commands::media_controls::MediaControlsUpdate;
-use state::{load_state, LibrarySnapshot, SharedOrcaState};
+use state::{load_state, LibrarySnapshot, LibraryWatchMessage, SharedOrcaState};
 
 #[tauri::command]
 fn library_snapshot(state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
@@ -325,7 +326,19 @@ pub fn run() {
                 }
             }
 
-            app.manage(SharedOrcaState(Mutex::new(state)));
+            let watched_roots = commands::library::watcher_roots(&state);
+            let (watch_tx, watch_rx) = std::sync::mpsc::channel();
+            state.library_watch_tx = watch_tx.clone();
+
+            let shared_state = Arc::new(Mutex::new(state));
+            library_watcher::start_library_watcher(
+                app.handle().clone(),
+                Arc::clone(&shared_state),
+                watch_rx,
+                watch_tx.clone(),
+            );
+            let _ = watch_tx.send(LibraryWatchMessage::UpdateRoots(watched_roots));
+            app.manage(SharedOrcaState(shared_state));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -36,6 +36,15 @@
   let showDeletePlaylistConfirm = false;
   let playlistToDelete: Playlist | null = null;
   let playlistContextMenu: { x: number; y: number; playlist: Playlist } | null = null;
+  let playlistListEl: HTMLDivElement;
+  let playlistScrollTop = 0;
+  let playlistViewportHeight = 0;
+  let playlistViewportWidth = 0;
+  let windowWidth = 0;
+
+  const PLAYLIST_GRID_GAP = 24;
+  const PLAYLIST_ROW_HEIGHT = 76;
+  const OVERSCAN_ROWS = 4;
 
   $: isInDetail = Boolean(selectedPlaylist);
 
@@ -49,6 +58,31 @@
   $: selectedPlaylistArtwork = selectedPlaylist?.cover_path
     ?? selectedPlaylistSongs.find((s) => s.artwork_preview ?? s.artwork_thumb)?.artwork_preview
     ?? null;
+  $: playlistColumnCount = windowWidth >= 1536
+    ? 5
+    : windowWidth >= 1024
+      ? 4
+      : windowWidth >= 768
+        ? 3
+        : 2;
+  $: playlistItemWidth = Math.max(
+    0,
+    (playlistViewportWidth - PLAYLIST_GRID_GAP * (playlistColumnCount - 1)) / playlistColumnCount
+  );
+  $: playlistRowCount = Math.ceil(filteredPlaylists.length / playlistColumnCount);
+  $: playlistVisibleRowStart = Math.max(0, Math.floor(playlistScrollTop / PLAYLIST_ROW_HEIGHT) - OVERSCAN_ROWS);
+  $: playlistVisibleRowEnd = Math.min(
+    playlistRowCount,
+    Math.ceil((playlistScrollTop + playlistViewportHeight) / PLAYLIST_ROW_HEIGHT) + OVERSCAN_ROWS
+  );
+  $: playlistVisibleStart = playlistVisibleRowStart * playlistColumnCount;
+  $: playlistVisibleEnd = Math.min(filteredPlaylists.length, playlistVisibleRowEnd * playlistColumnCount);
+  $: visiblePlaylists = filteredPlaylists.slice(playlistVisibleStart, playlistVisibleEnd);
+  $: {
+    filteredPlaylists;
+    playlistScrollTop = 0;
+    if (playlistListEl) playlistListEl.scrollTop = 0;
+  }
 
   function filterDetailSongs(sourceSongs: LocalSong[], searchQuery: string) {
     const needle = searchQuery.trim().toLowerCase();
@@ -185,9 +219,13 @@
     showDeletePlaylistConfirm = false;
     playlistToDelete = null;
   }
+
+  function updatePlaylistScroll(event: Event) {
+    playlistScrollTop = (event.currentTarget as HTMLDivElement).scrollTop;
+  }
 </script>
 
-<svelte:window on:click={closePlaylistContextMenu} />
+<svelte:window bind:innerWidth={windowWidth} on:click={closePlaylistContextMenu} />
 
 <div class="scrollbar-none h-full overflow-auto pr-2">
   {#if selectedPlaylist}
@@ -300,9 +338,15 @@
     </form>
 
     {#if filteredPlaylists.length}
-      <div class="scrollbar-none grid max-h-[calc(100%-60px)] grid-cols-5 gap-x-6 overflow-auto pr-2 max-2xl:grid-cols-4 max-lg:grid-cols-3 max-md:grid-cols-2">
-        {#each filteredPlaylists as playlist}
-          <button class="flex min-w-0 items-center gap-3 border-b border-white/[0.04] px-2 py-4 text-left transition hover:bg-white/[0.035]"
+      <div class="scrollbar-none max-h-[calc(100%-60px)] overflow-auto pr-2"
+        bind:this={playlistListEl}
+        bind:clientHeight={playlistViewportHeight}
+        bind:clientWidth={playlistViewportWidth}
+        on:scroll={updatePlaylistScroll}>
+        <div class="relative" style={`height: ${playlistRowCount * PLAYLIST_ROW_HEIGHT}px;`}>
+        {#each visiblePlaylists as playlist, index (playlist.id)}
+          <button class="absolute flex min-w-0 items-center gap-3 border-b border-white/[0.04] px-2 py-4 text-left transition hover:bg-white/[0.035]"
+            style={`width: ${playlistItemWidth}px; height: ${PLAYLIST_ROW_HEIGHT}px; transform: translate(${((playlistVisibleStart + index) % playlistColumnCount) * (playlistItemWidth + PLAYLIST_GRID_GAP)}px, ${Math.floor((playlistVisibleStart + index) / playlistColumnCount) * PLAYLIST_ROW_HEIGHT}px);`}
             on:click={() => openPlaylist(playlist)} on:contextmenu={(e) => openPlaylistMenu(e, playlist)}>
             <span class="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-sm bg-white/[0.07] text-xs font-black text-white/40">
               {#if artworkUrl(playlist.cover_path)}
@@ -317,6 +361,7 @@
             </span>
           </button>
         {/each}
+        </div>
       </div>
     {:else}
       <div class="mx-auto flex h-[calc(100%-60px)] max-w-xl flex-col items-center justify-center text-center">

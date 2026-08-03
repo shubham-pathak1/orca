@@ -54,7 +54,7 @@ where
     Ok(songs)
 }
 
-fn is_supported_audio_file(path: &Path) -> bool {
+pub fn is_supported_audio_file(path: &Path) -> bool {
     let Some(extension) = path.extension() else {
         return false;
     };

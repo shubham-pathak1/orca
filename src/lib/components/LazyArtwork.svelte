@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { artworkUrl } from '../tauri';
+  import { artworkSuspended } from '../stores/artwork-visibility';
 
   export let path: string | null = null;
   export let alt = '';
@@ -13,7 +14,7 @@
   let observer: IntersectionObserver | null = null;
 
   // Only compute the URL when visible — avoids unnecessary convertFileSrc calls
-  $: src = isVisible ? artworkUrl(path) : null;
+  $: src = isVisible && !$artworkSuspended ? artworkUrl(path) : null;
 
   // Reset loaded fade-in whenever src changes
   $: if (src) {

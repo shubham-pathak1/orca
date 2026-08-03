@@ -41,6 +41,7 @@
   import { createPlaybackStore } from './lib/stores/playback';
   import { createPreferencesStore } from './lib/stores/preferences';
   import { createQueueStore } from './lib/stores/queue';
+  import { artworkSuspended } from './lib/stores/artwork-visibility';
   import { createPlaybackFlow } from './lib/stores/playback-flow';
   import {
     applyRootFontSize,
@@ -82,6 +83,8 @@
   let fullPlayerOpen = false;
   let fullPlayerLyricsOpen = false;
   let queueOpen = false;
+
+  $: artworkSuspended.set(fullPlayerOpen);
   let accentRgb = '245,245,245';
   let sampledArtwork: string | null = null;
   const preferencesStore = createPreferencesStore();
@@ -295,6 +298,16 @@
       }
     });
 
+    const unlistenLibraryWatcher = listen('library-watcher-refreshed', async () => {
+      try {
+        const snapshot = await libraryStore.load();
+        applyLibrarySnapshot(snapshot);
+        status = `Library updated: ${snapshot.songs.length} tracks`;
+      } catch (error) {
+        console.error('Failed to get library snapshot after automatic refresh', error);
+      }
+    });
+
     return () => {
       playbackStore.stopPolling();
       unsubscribeLibrary();
@@ -310,6 +323,7 @@
       unlisteners.forEach(u => u());
       void unlisten.then((fn) => fn());
       void unlistenLibrary.then((fn) => fn());
+      void unlistenLibraryWatcher.then((fn) => fn());
     };
   });
 

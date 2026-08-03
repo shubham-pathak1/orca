@@ -334,6 +334,32 @@ pub fn save_songs_to_db(conn: &Connection, songs: &[LocalSong]) -> Result<(), St
     Ok(())
 }
 
+pub fn apply_song_changes(
+    conn: &Connection,
+    updated_songs: &[LocalSong],
+    removed_paths: &[String],
+) -> Result<(), String> {
+    conn.execute_batch("BEGIN IMMEDIATE TRANSACTION")
+        .map_err(|e| e.to_string())?;
+
+    for song in updated_songs {
+        if let Err(error) = upsert_song(conn, song) {
+            let _ = conn.execute_batch("ROLLBACK");
+            return Err(error);
+        }
+    }
+
+    for path in removed_paths {
+        if let Err(error) = conn.execute("DELETE FROM songs WHERE path = ?1", params![path]) {
+            let _ = conn.execute_batch("ROLLBACK");
+            return Err(error.to_string());
+        }
+    }
+
+    conn.execute_batch("COMMIT").map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub fn replace_songs_in_db(conn: &Connection, songs: &[LocalSong]) -> Result<(), String> {
     conn.execute_batch("BEGIN IMMEDIATE TRANSACTION")
         .map_err(|e| e.to_string())?;

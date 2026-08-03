@@ -16,6 +16,14 @@
 
   let selectedGenreName: string | null = null;
   let detailQuery = '';
+  let genreListEl: HTMLDivElement;
+  let genreScrollTop = 0;
+  let genreViewportHeight = 0;
+  let genreViewportWidth = 0;
+
+  const GRID_MIN_COLUMN_WIDTH = 140;
+  const GRID_GAP = 16;
+  const OVERSCAN_ROWS = 3;
 
   $: isInDetail = Boolean(selectedGenreName);
 
@@ -31,6 +39,26 @@
         .sort((a, b) => a.title.localeCompare(b.title))
     : [];
   $: selectedGenreVisibleSongs = filterDetailSongs(selectedGenreSongs, detailQuery);
+  $: genreColumnCount = Math.max(1, Math.floor((genreViewportWidth + GRID_GAP) / (GRID_MIN_COLUMN_WIDTH + GRID_GAP)));
+  $: genreItemWidth = Math.max(
+    GRID_MIN_COLUMN_WIDTH,
+    (genreViewportWidth - GRID_GAP * (genreColumnCount - 1)) / genreColumnCount
+  );
+  $: genreRowHeight = genreItemWidth + GRID_GAP;
+  $: genreRowCount = Math.ceil(genreEntries.length / genreColumnCount);
+  $: genreVisibleRowStart = Math.max(0, Math.floor(genreScrollTop / genreRowHeight) - OVERSCAN_ROWS);
+  $: genreVisibleRowEnd = Math.min(
+    genreRowCount,
+    Math.ceil((genreScrollTop + genreViewportHeight) / genreRowHeight) + OVERSCAN_ROWS
+  );
+  $: genreVisibleStart = genreVisibleRowStart * genreColumnCount;
+  $: genreVisibleEnd = Math.min(genreEntries.length, genreVisibleRowEnd * genreColumnCount);
+  $: visibleGenres = genreEntries.slice(genreVisibleStart, genreVisibleEnd);
+  $: {
+    genreEntries;
+    genreScrollTop = 0;
+    if (genreListEl) genreListEl.scrollTop = 0;
+  }
 
   function filterDetailSongs(sourceSongs: LocalSong[], searchQuery: string) {
     const needle = searchQuery.trim().toLowerCase();
@@ -57,6 +85,10 @@
   function playFirstSong(sourceSongs: LocalSong[]) {
     const first = sourceSongs[0];
     if (first) onChooseSong(first, sourceSongs);
+  }
+
+  function updateGenreScroll(event: Event) {
+    genreScrollTop = (event.currentTarget as HTMLDivElement).scrollTop;
   }
 </script>
 
@@ -139,10 +171,17 @@
 
 {:else}
   <!-- Genre grid -->
-  <div class="scrollbar-none grid max-h-full grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-4 overflow-auto pr-2">
+  <div class="scrollbar-none max-h-full overflow-auto pr-2"
+    bind:this={genreListEl}
+    bind:clientHeight={genreViewportHeight}
+    bind:clientWidth={genreViewportWidth}
+    on:scroll={updateGenreScroll}>
     {#if genreEntries.length}
-      {#each genreEntries as genre}
-        <button class="group text-left transition" on:click={() => openGenre(genre.name)}>
+      <div class="relative" style={`height: ${genreRowCount * genreRowHeight}px;`}>
+      {#each visibleGenres as genre, index (genre.name)}
+        <button class="group absolute text-left transition"
+          style={`width: ${genreItemWidth}px; transform: translate(${((genreVisibleStart + index) % genreColumnCount) * (genreItemWidth + GRID_GAP)}px, ${Math.floor((genreVisibleStart + index) / genreColumnCount) * genreRowHeight}px);`}
+          on:click={() => openGenre(genre.name)}>
           <div class="relative flex aspect-square flex-col items-center justify-center overflow-hidden rounded-lg bg-black/80 shadow-[0_4px_20px_rgba(0,0,0,0.3)] transition group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
             {#if artworkUrl(genre.song_artwork)}
               <LazyArtwork rootClass="absolute inset-0" imageClass="h-full w-full object-cover opacity-40 transition duration-300 group-hover:opacity-20" path={genre.song_artwork} alt="" />
@@ -157,6 +196,7 @@
           </div>
         </button>
       {/each}
+      </div>
     {:else}
       <div class="col-span-full mx-auto flex min-h-[320px] max-w-xl flex-col items-center justify-center text-center">
         <p class="text-sm font-bold uppercase text-white/34">No genres</p>

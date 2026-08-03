@@ -25,8 +25,15 @@
   let selectedArtistName: string | null = null;
   let detailQuery = '';
   let savedScrollTop = 0;
-  let visibleArtistCount = 50;
   let artistContextMenu: { x: number; y: number; artist: ArtistEntry } | null = null;
+  let artistScrollTop = 0;
+  let artistViewportHeight = 0;
+  let artistViewportWidth = 0;
+  let windowWidth = 0;
+
+  const ARTIST_GRID_GAP = 12;
+  const ARTIST_ROW_HEIGHT = 68;
+  const OVERSCAN_ROWS = 4;
 
   $: isInDetail = Boolean(selectedArtistName);
 
@@ -46,6 +53,31 @@
         albums: albums.filter((album) => album.artist === selectedArtistName)
       }
     : null;
+  $: artistColumnCount = windowWidth >= 1536
+    ? 5
+    : artistViewportWidth >= 1024
+      ? 4
+      : artistViewportWidth >= 768
+        ? 3
+        : 2;
+  $: artistItemWidth = Math.max(
+    0,
+    (artistViewportWidth - ARTIST_GRID_GAP * (artistColumnCount - 1)) / artistColumnCount
+  );
+  $: artistRowCount = Math.ceil(artistEntries.length / artistColumnCount);
+  $: artistVisibleRowStart = Math.max(0, Math.floor(artistScrollTop / ARTIST_ROW_HEIGHT) - OVERSCAN_ROWS);
+  $: artistVisibleRowEnd = Math.min(
+    artistRowCount,
+    Math.ceil((artistScrollTop + artistViewportHeight) / ARTIST_ROW_HEIGHT) + OVERSCAN_ROWS
+  );
+  $: artistVisibleStart = artistVisibleRowStart * artistColumnCount;
+  $: artistVisibleEnd = Math.min(artistEntries.length, artistVisibleRowEnd * artistColumnCount);
+  $: visibleArtists = artistEntries.slice(artistVisibleStart, artistVisibleEnd);
+  $: {
+    artistEntries;
+    artistScrollTop = 0;
+    if (artistListEl) artistListEl.scrollTop = 0;
+  }
 
   function filterDetailSongs(sourceSongs: LocalSong[], searchQuery: string) {
     const needle = searchQuery.trim().toLowerCase();
@@ -69,13 +101,18 @@
     const letters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
     const startIndex = letters.indexOf(letter);
     const searchOrder = startIndex >= 0 ? letters.slice(startIndex) : [letter];
-    const target = searchOrder
-      .map((c) => artistListEl.querySelector(`[data-letter="${c}"]`) as HTMLElement | null)
-      .find(Boolean);
-    if (!target) return;
-    const containerRect = artistListEl.getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
-    artistListEl.scrollTo({ top: artistListEl.scrollTop + targetRect.top - containerRect.top, behavior: 'smooth' });
+    const targetIndex = searchOrder
+      .map((candidate) => artistEntries.findIndex((artist) => initialFromText(artist.name) === candidate))
+      .find((index) => index >= 0);
+    if (targetIndex === undefined) return;
+    artistListEl.scrollTo({
+      top: Math.floor(targetIndex / artistColumnCount) * ARTIST_ROW_HEIGHT,
+      behavior: 'smooth'
+    });
+  }
+
+  function updateArtistScroll(event: Event) {
+    artistScrollTop = (event.currentTarget as HTMLDivElement).scrollTop;
   }
 
   function openArtist(name: string) {
@@ -122,7 +159,7 @@
   }
 </script>
 
-<svelte:window on:click={closeArtistContextMenu} />
+<svelte:window bind:innerWidth={windowWidth} on:click={closeArtistContextMenu} />
 
 {#if selectedArtist}
   <div class="scrollbar-none h-full overflow-auto">
@@ -240,13 +277,17 @@
 {:else}
   <!-- Artist grid -->
   <div class="grid h-full grid-cols-[minmax(0,1fr)_24px]">
-    <div class="scrollbar-none grid max-h-full content-start grid-cols-5 gap-x-3 gap-y-1 overflow-auto pr-2 max-2xl:grid-cols-4 max-lg:grid-cols-3 max-md:grid-cols-2"
+    <div class="scrollbar-none max-h-full overflow-auto pr-2"
       bind:this={artistListEl}
-      on:scroll={(e) => { const t = e.currentTarget; if (t.scrollTop + t.clientHeight >= t.scrollHeight - 500) visibleArtistCount += 50; }}>
+      bind:clientHeight={artistViewportHeight}
+      bind:clientWidth={artistViewportWidth}
+      on:scroll={updateArtistScroll}>
       {#if artistEntries.length}
-        {#each artistEntries.slice(0, visibleArtistCount) as artist}
-          <button data-letter={initialFromText(artist.name)}
-            class="flex min-w-0 items-center gap-3 border-b border-white/[0.04] px-2 py-3 text-left transition hover:bg-white/[0.035]"
+        <div class="relative" style={`height: ${artistRowCount * ARTIST_ROW_HEIGHT}px;`}>
+        {#each visibleArtists as artist, index (artist.name)}
+          <button
+            class="absolute flex min-w-0 items-center gap-3 border-b border-white/[0.04] px-2 py-3 text-left transition hover:bg-white/[0.035]"
+            style={`width: ${artistItemWidth}px; height: ${ARTIST_ROW_HEIGHT - 4}px; transform: translate(${((artistVisibleStart + index) % artistColumnCount) * (artistItemWidth + ARTIST_GRID_GAP)}px, ${Math.floor((artistVisibleStart + index) / artistColumnCount) * ARTIST_ROW_HEIGHT}px);`}
             on:click={() => openArtist(artist.name)} on:contextmenu={(e) => openArtistMenu(e, artist)}>
             {#if artworkUrl(artist.artwork ?? artist.song_artwork)}
               <LazyArtwork rootClass="h-10 w-10 shrink-0 rounded-full overflow-hidden opacity-90" imageClass="h-full w-full object-cover"
@@ -260,6 +301,7 @@
             </span>
           </button>
         {/each}
+        </div>
       {:else}
         <div class="col-span-full mx-auto flex min-h-[320px] max-w-xl flex-col items-center justify-center text-center">
           <p class="text-sm font-bold uppercase text-white/34">No artists found</p>

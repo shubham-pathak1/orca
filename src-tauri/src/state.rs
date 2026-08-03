@@ -18,9 +18,16 @@ pub(crate) struct OrcaState {
     #[allow(dead_code)]
     pub(crate) visualizer_data: VisualizerData,
     pub(crate) media_controls: Option<souvlaki::MediaControls>,
+    pub(crate) library_watch_tx: mpsc::Sender<LibraryWatchMessage>,
 }
 
-pub(crate) struct SharedOrcaState(pub(crate) Mutex<OrcaState>);
+pub(crate) enum LibraryWatchMessage {
+    UpdateRoots(Vec<PathBuf>),
+    FilesystemChanged(Vec<PathBuf>),
+    FullRescan,
+}
+
+pub(crate) struct SharedOrcaState(pub(crate) Arc<Mutex<OrcaState>>);
 
 #[derive(serde::Serialize)]
 pub(crate) struct LibrarySnapshot {
@@ -66,6 +73,7 @@ pub(crate) fn load_state() -> Result<OrcaState, String> {
     let songs = db::get_all_songs(&conn)?;
     let (audio_tx, playback_state, visualizer_data) =
         audio_engine::spawn_audio_thread::<fn(&str, u64)>(None);
+    let (library_watch_tx, _) = mpsc::channel();
 
     Ok(OrcaState {
         db_conn: conn,
@@ -75,5 +83,6 @@ pub(crate) fn load_state() -> Result<OrcaState, String> {
         playback_state,
         visualizer_data,
         media_controls: None,
+        library_watch_tx,
     })
 }
