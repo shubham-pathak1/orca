@@ -1,5 +1,6 @@
 <script lang="ts">
   import { formatDuration } from '../format';
+  import { artworkUrl } from '../tauri';
   import type { LocalSong } from '../types';
   import LazyArtwork from './LazyArtwork.svelte';
 
@@ -129,12 +130,16 @@
               }}
             >
               <span class="queue-artwork">
-                <LazyArtwork
-                  rootClass="h-full w-full"
-                  imageClass="h-full w-full object-cover"
-                  path={queuedSong.artwork_thumb ?? queuedSong.artwork_preview ?? queuedSong.artwork}
-                  alt=""
-                />
+                {#if artworkUrl(queuedSong.artwork_thumb ?? queuedSong.artwork_preview ?? queuedSong.artwork)}
+                  <LazyArtwork
+                    rootClass="h-full w-full"
+                    imageClass="h-full w-full object-cover"
+                    path={queuedSong.artwork_thumb ?? queuedSong.artwork_preview ?? queuedSong.artwork}
+                    alt=""
+                  />
+                {:else}
+                  <img src="/cover.png" class="h-full w-full object-cover" alt="" />
+                {/if}
               </span>
 
               <span class="queue-copy">

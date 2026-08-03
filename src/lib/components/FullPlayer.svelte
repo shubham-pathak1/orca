@@ -23,6 +23,7 @@
   export let onSeekTo: (positionMs: number) => Promise<void> | void = () => {};
   export let seekbarStyle: 'standard' | 'waveform' = 'standard';
   export let showQualityInfo = true;
+  export let blurredBackground = true;
   export let lyricsOpen = false;
   export let queueOpen = false;
   export let onToggleQueue: () => void = () => {};
@@ -296,7 +297,9 @@
     on:pointercancel={handleFullPlayerPointerCancel}
     on:wheel={handleFullPlayerWheel}
   >
-    <div class="full-player-artwork-glow absolute inset-0 bg-cover bg-center blur-3xl [background-image:var(--cover-art)]"></div>
+    {#if blurredBackground}
+      <div class="full-player-artwork-glow absolute inset-0 bg-cover bg-center blur-3xl [background-image:var(--cover-art)]"></div>
+    {/if}
     <div class="full-player-wash absolute inset-0"></div>
     <div class="full-player-spotlight absolute inset-0"></div>
 

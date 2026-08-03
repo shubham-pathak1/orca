@@ -887,6 +887,7 @@
       {playback}
       {seekbarStyle}
       {showQualityInfo}
+      blurredBackground={blurredNowPlayingBackground}
       {shuffleEnabled}
       {repeatMode}
       onClose={() => (fullPlayerOpen = false)}

@@ -246,7 +246,7 @@
         <div class="grid grid-cols-[1fr_44px] items-center gap-5">
           <div>
             <h3 class="text-sm font-bold text-white">Blurred now playing background</h3>
-            <p class="text-sm text-white/48">Show cover art ambience behind the app</p>
+            <p class="text-sm text-white/48">Show cover art ambience behind the library and full player</p>
           </div>
           <button
             class={`relative h-6 w-11 rounded-full border transition ${blurredBackground ? 'toggle-switch-on' : 'toggle-switch-off'}`}
