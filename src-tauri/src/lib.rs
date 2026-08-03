@@ -1,23 +1,13 @@
-use std::{
-    path::PathBuf,
-    sync::Mutex,
-    time::Duration,
-};
+use std::sync::Mutex;
 
-use orca_core::{
-    audio_engine::{self, AudioCommand, PlaybackState},
-    db,
-    library::SongMetadataUpdate,
-};
+use orca_core::{audio_engine::PlaybackState, db, library::SongMetadataUpdate};
 use tauri::{Emitter, Manager, State};
 
 mod commands;
 mod state;
 
-use commands::library::{refresh_edited_song, snapshot_from_state};
-use state::{
-    artwork_dir, load_state, playback_snapshot_from, LibrarySnapshot, SharedOrcaState,
-};
+use commands::media_controls::MediaControlsUpdate;
+use state::{load_state, LibrarySnapshot, SharedOrcaState};
 
 #[tauri::command]
 fn library_snapshot(state: State<'_, SharedOrcaState>) -> Result<LibrarySnapshot, String> {
@@ -120,21 +110,7 @@ fn choose_artist_cover(
     artist_name: String,
     state: State<'_, SharedOrcaState>,
 ) -> Result<LibrarySnapshot, String> {
-    let Some(image_path) = rfd::FileDialog::new()
-        .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
-        .pick_file()
-    else {
-        return Err("Cover selection cancelled".to_string());
-    };
-
-    let state = state.0.lock().map_err(|error| error.to_string())?;
-    db::update_artist_artwork(
-        &state.db_conn,
-        &artist_name,
-        Some(&image_path.to_string_lossy()),
-        None,
-    )?;
-    snapshot_from_state(&state)
+    commands::artwork::choose_artist_cover(artist_name, state)
 }
 
 #[tauri::command]
@@ -142,9 +118,7 @@ fn remove_artist_cover(
     artist_name: String,
     state: State<'_, SharedOrcaState>,
 ) -> Result<LibrarySnapshot, String> {
-    let state = state.0.lock().map_err(|error| error.to_string())?;
-    db::remove_artist_artwork(&state.db_conn, &artist_name)?;
-    snapshot_from_state(&state)
+    commands::artwork::remove_artist_cover(artist_name, state)
 }
 
 #[tauri::command]
@@ -152,21 +126,7 @@ fn choose_album_cover(
     album_key: String,
     state: State<'_, SharedOrcaState>,
 ) -> Result<LibrarySnapshot, String> {
-    let Some(image_path) = rfd::FileDialog::new()
-        .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
-        .pick_file()
-    else {
-        return Err("Cover selection cancelled".to_string());
-    };
-
-    let state = state.0.lock().map_err(|error| error.to_string())?;
-    db::update_album_artwork(
-        &state.db_conn,
-        &album_key,
-        Some(&image_path.to_string_lossy()),
-        None,
-    )?;
-    snapshot_from_state(&state)
+    commands::artwork::choose_album_cover(album_key, state)
 }
 
 #[tauri::command]
@@ -174,10 +134,7 @@ async fn remove_album_cover(
     album_key: String,
     state: State<'_, SharedOrcaState>,
 ) -> Result<LibrarySnapshot, String> {
-    let mut state = state.0.lock().map_err(|error| error.to_string())?;
-    db::remove_album_artwork(&state.db_conn, &album_key)?;
-    state.songs = db::get_all_songs(&state.db_conn)?;
-    snapshot_from_state(&state)
+    commands::artwork::remove_album_cover(album_key, state).await
 }
 
 #[tauri::command]
@@ -185,26 +142,7 @@ async fn fetch_artist_artwork_manual(
     artist_name: String,
     state: State<'_, SharedOrcaState>,
 ) -> Result<LibrarySnapshot, String> {
-    let url = orca_core::online_artwork::fetch_itunes_artist_image(&artist_name)
-        .or_else(|| orca_core::online_artwork::fetch_deezer_artist_image(&artist_name));
-    let url = url.ok_or_else(|| "Artist image not found online".to_string())?;
-    
-    let cache_dir = artwork_dir().join("online");
-    let safe_name = artist_name.replace(|c: char| !c.is_alphanumeric(), "_");
-    let prefix = format!("artist_{}", safe_name);
-    
-    let paths = orca_core::online_artwork::download_and_cache(&url, &cache_dir, &prefix)?;
-    
-    let mut state = state.0.lock().map_err(|error| error.to_string())?;
-    db::update_artist_artwork(
-        &state.db_conn,
-        &artist_name,
-        Some(&paths.full),
-        Some(&paths.thumb),
-    )?;
-    
-    state.songs = db::get_all_songs(&state.db_conn)?;
-    snapshot_from_state(&state)
+    commands::artwork::fetch_artist_artwork_manual(artist_name, state).await
 }
 
 #[tauri::command]
@@ -214,25 +152,7 @@ async fn fetch_album_artwork_manual(
     album: String,
     state: State<'_, SharedOrcaState>,
 ) -> Result<LibrarySnapshot, String> {
-    let url = orca_core::online_artwork::fetch_itunes_album_art(&artist, &album);
-    let url = url.ok_or_else(|| "Album art not found online".to_string())?;
-    
-    let cache_dir = artwork_dir().join("online");
-    let safe_name = album_key.replace(|c: char| !c.is_alphanumeric(), "_");
-    let prefix = format!("album_{}", safe_name);
-    
-    let paths = orca_core::online_artwork::download_and_cache(&url, &cache_dir, &prefix)?;
-    
-    let mut state = state.0.lock().map_err(|error| error.to_string())?;
-    db::update_album_artwork(
-        &state.db_conn,
-        &album_key,
-        Some(&paths.full),
-        Some(&paths.thumb),
-    )?;
-    
-    state.songs = db::get_all_songs(&state.db_conn)?;
-    snapshot_from_state(&state)
+    commands::artwork::fetch_album_artwork_manual(album_key, artist, album, state).await
 }
 
 #[tauri::command]
@@ -240,51 +160,7 @@ async fn fetch_all_missing_artwork(
     state: State<'_, SharedOrcaState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    use tauri::Emitter;
-    // This runs on a separate thread so we don't block the UI
-    let state_clone = state.0.lock().map_err(|e| e.to_string())?;
-    let db_conn_path = state_clone.db_conn.path().map(|p| p.to_string());
-    let cache_base = artwork_dir().join("online");
-    
-    if let Some(path) = db_conn_path {
-        std::thread::spawn(move || {
-            let conn = rusqlite::Connection::open(&path).ok()?;
-            
-            // 1. Fetch artists without artwork (tombstoned artists already excluded by query)
-            if let Ok(artists) = db::get_artists_needing_artwork(&conn) {
-                for artist_name in artists {
-                    if let Some(url) = orca_core::online_artwork::fetch_itunes_artist_image(&artist_name)
-                        .or_else(|| orca_core::online_artwork::fetch_deezer_artist_image(&artist_name)) {
-                        let safe_name = artist_name.replace(|c: char| !c.is_alphanumeric(), "_");
-                        let prefix = format!("artist_{}", safe_name);
-                        if let Ok(paths) = orca_core::online_artwork::download_and_cache(&url, &cache_base, &prefix) {
-                            let _ = db::update_artist_artwork(&conn, &artist_name, Some(&paths.full), Some(&paths.thumb));
-                        }
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(300));
-                }
-            }
-            
-            // 2. Fetch albums without artwork (tombstoned albums already excluded by query)
-            if let Ok(albums) = db::get_albums_needing_artwork(&conn) {
-                for (album_key, album_title, album_artist) in albums {
-                    if let Some(url) = orca_core::online_artwork::fetch_itunes_album_art(&album_artist, &album_title) {
-                        let safe_name = album_key.replace(|c: char| !c.is_alphanumeric(), "_");
-                        let prefix = format!("album_{}", safe_name);
-                        if let Ok(paths) = orca_core::online_artwork::download_and_cache(&url, &cache_base, &prefix) {
-                            let _ = db::update_album_artwork(&conn, &album_key, Some(&paths.full), Some(&paths.thumb));
-                        }
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(300));
-                }
-            }
-            
-            let _ = app.emit("library-refreshed", ());
-            Some(())
-        });
-    }
-    
-    Ok(())
+    commands::artwork::fetch_all_missing_artwork(state, app).await
 }
 
 #[tauri::command]
@@ -292,15 +168,7 @@ async fn update_song_metadata(
     update: SongMetadataUpdate,
     state: State<'_, SharedOrcaState>,
 ) -> Result<LibrarySnapshot, String> {
-    let path = PathBuf::from(&update.path);
-    let edit_path = path.clone();
-
-    tauri::async_runtime::spawn_blocking(move || orca_core::library::update_song_metadata(update))
-        .await
-        .map_err(|error| error.to_string())??;
-
-    let mut state = state.0.lock().map_err(|error| error.to_string())?;
-    refresh_edited_song(&mut state, edit_path)
+    commands::artwork::update_song_metadata(update, state).await
 }
 
 #[tauri::command]
@@ -308,23 +176,7 @@ async fn choose_song_cover(
     path: String,
     state: State<'_, SharedOrcaState>,
 ) -> Result<LibrarySnapshot, String> {
-    let Some(image_path) = rfd::FileDialog::new()
-        .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
-        .pick_file()
-    else {
-        return Err("Cover selection cancelled".to_string());
-    };
-
-    let song_path = PathBuf::from(path);
-    let edit_path = song_path.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        orca_core::library::replace_song_cover(&song_path, &image_path)
-    })
-    .await
-    .map_err(|error| error.to_string())??;
-
-    let mut state = state.0.lock().map_err(|error| error.to_string())?;
-    refresh_edited_song(&mut state, edit_path)
+    commands::artwork::choose_song_cover(path, state).await
 }
 
 #[tauri::command]
@@ -332,20 +184,12 @@ async fn remove_song_cover(
     path: String,
     state: State<'_, SharedOrcaState>,
 ) -> Result<LibrarySnapshot, String> {
-    let song_path = PathBuf::from(path);
-    let edit_path = song_path.clone();
-    tauri::async_runtime::spawn_blocking(move || orca_core::library::remove_song_cover(&song_path))
-        .await
-        .map_err(|error| error.to_string())??;
-
-    let mut state = state.0.lock().map_err(|error| error.to_string())?;
-    refresh_edited_song(&mut state, edit_path)
+    commands::artwork::remove_song_cover(path, state).await
 }
 
 #[tauri::command]
 fn playback_snapshot(state: State<'_, SharedOrcaState>) -> Result<PlaybackState, String> {
-    let state = state.0.lock().map_err(|error| error.to_string())?;
-    Ok(playback_snapshot_from(&state))
+    commands::playback::playback_snapshot(state)
 }
 
 #[tauri::command]
@@ -366,18 +210,7 @@ async fn rescan_library(
 
 #[tauri::command]
 fn play_song(path: String, state: State<'_, SharedOrcaState>) -> Result<PlaybackState, String> {
-    if !std::path::Path::new(&path).exists() {
-        return Err(
-            "File not found. Your music folder may have moved — try rescanning.".to_string(),
-        );
-    }
-    let state = state.0.lock().map_err(|error| error.to_string())?;
-    state
-        .audio_tx
-        .send(AudioCommand::Play(path))
-        .map_err(|error| error.to_string())?;
-    std::thread::sleep(Duration::from_millis(40));
-    Ok(playback_snapshot_from(&state))
+    commands::playback::play_song(path, state)
 }
 
 #[tauri::command]
@@ -385,43 +218,17 @@ fn queue_next_playback(
     path: String,
     state: State<'_, SharedOrcaState>,
 ) -> Result<PlaybackState, String> {
-    if !std::path::Path::new(&path).exists() {
-        return Err(
-            "File not found. Your music folder may have moved — try rescanning.".to_string(),
-        );
-    }
-    let state = state.0.lock().map_err(|error| error.to_string())?;
-    state
-        .audio_tx
-        .send(AudioCommand::QueueNext(path))
-        .map_err(|error| error.to_string())?;
-    Ok(playback_snapshot_from(&state))
+    commands::playback::queue_next_playback(path, state)
 }
 
 #[tauri::command]
 fn pause_playback(state: State<'_, SharedOrcaState>) -> Result<PlaybackState, String> {
-    let state = state.0.lock().map_err(|error| error.to_string())?;
-    state
-        .audio_tx
-        .send(AudioCommand::Pause)
-        .map_err(|error| error.to_string())?;
-    if let Ok(mut playback) = state.playback_state.lock() {
-        playback.is_playing = false;
-    }
-    Ok(playback_snapshot_from(&state))
+    commands::playback::pause_playback(state)
 }
 
 #[tauri::command]
 fn resume_playback(state: State<'_, SharedOrcaState>) -> Result<PlaybackState, String> {
-    let state = state.0.lock().map_err(|error| error.to_string())?;
-    state
-        .audio_tx
-        .send(AudioCommand::Resume)
-        .map_err(|error| error.to_string())?;
-    if let Ok(mut playback) = state.playback_state.lock() {
-        playback.is_playing = true;
-    }
-    Ok(playback_snapshot_from(&state))
+    commands::playback::resume_playback(state)
 }
 
 #[tauri::command]
@@ -429,29 +236,12 @@ fn seek_playback(
     position_ms: u64,
     state: State<'_, SharedOrcaState>,
 ) -> Result<PlaybackState, String> {
-    let state = state.0.lock().map_err(|error| error.to_string())?;
-    state
-        .audio_tx
-        .send(AudioCommand::Seek(Duration::from_millis(position_ms)))
-        .map_err(|error| error.to_string())?;
-    if let Ok(mut playback) = state.playback_state.lock() {
-        playback.position_ms = position_ms;
-    }
-    Ok(playback_snapshot_from(&state))
+    commands::playback::seek_playback(position_ms, state)
 }
 
 #[tauri::command]
 fn set_volume(volume: f32, state: State<'_, SharedOrcaState>) -> Result<PlaybackState, String> {
-    let volume = volume.clamp(0.0, 1.0);
-    let state = state.0.lock().map_err(|error| error.to_string())?;
-    state
-        .audio_tx
-        .send(AudioCommand::SetVolume(volume))
-        .map_err(|error| error.to_string())?;
-    if let Ok(mut playback) = state.playback_state.lock() {
-        playback.volume = volume;
-    }
-    Ok(playback_snapshot_from(&state))
+    commands::playback::set_volume(volume, state)
 }
 
 #[tauri::command]
@@ -460,77 +250,12 @@ async fn waveform_peaks(
     buckets: usize,
     state: State<'_, SharedOrcaState>,
 ) -> Result<Vec<f32>, String> {
-    // --- Cache read (lock briefly, then release) ---
-    {
-        let guard = state.0.lock().map_err(|e| e.to_string())?;
-        if let Ok(Some(cached)) = db::get_cached_waveform(&guard.db_conn, &path, buckets) {
-            return Ok(cached);
-        }
-    }
-
-    // --- Cache miss: decode on a blocking thread ---
-    let path_clone = path.clone();
-    let peaks = tauri::async_runtime::spawn_blocking(move || {
-        audio_engine::compute_waveform_peaks(&path_clone, buckets)
-    })
-    .await
-    .map_err(|e| e.to_string())??;
-
-    // --- Persist so next call is instant ---
-    {
-        let guard = state.0.lock().map_err(|e| e.to_string())?;
-        // Non-fatal: if caching fails we still return the computed peaks.
-        let _ = db::save_waveform(&guard.db_conn, &path, buckets, &peaks);
-    }
-
-    Ok(peaks)
-}
-
-#[derive(serde::Deserialize)]
-pub struct MediaControlsUpdate {
-    title: Option<String>,
-    artist: Option<String>,
-    album: Option<String>,
-    duration: Option<f64>,
-    playing: bool,
-    progress: Option<f64>,
-    cover_url: Option<String>,
+    commands::playback::waveform_peaks(path, buckets, state).await
 }
 
 #[tauri::command]
 fn update_media_controls(update: MediaControlsUpdate, state: State<'_, SharedOrcaState>) -> Result<(), String> {
-    let mut state = state.0.lock().map_err(|error| error.to_string())?;
-    
-    #[cfg(target_os = "windows")]
-    {
-        if let Some(controls) = &mut state.media_controls {
-            use souvlaki::{MediaMetadata, MediaPlayback, MediaPosition};
-            use std::time::Duration;
-            
-            let metadata = MediaMetadata {
-                title: update.title.as_deref(),
-                album: update.album.as_deref(),
-                artist: update.artist.as_deref(),
-                duration: update.duration.map(Duration::from_secs_f64),
-                cover_url: update.cover_url.as_deref(),
-                ..Default::default()
-            };
-            println!("Updating media controls metadata: {:?}", update.title);
-            
-            controls.set_metadata(metadata).map_err(|e| e.to_string())?;
-
-            let progress = update.progress.map(|p| MediaPosition(Duration::from_secs_f64(p)));
-            let playback = if update.playing {
-                MediaPlayback::Playing { progress }
-            } else {
-                MediaPlayback::Paused { progress }
-            };
-            
-            controls.set_playback(playback).map_err(|e| e.to_string())?;
-        }
-    }
-    
-    Ok(())
+    commands::media_controls::update_media_controls(update, state)
 }
 
 #[tauri::command]
