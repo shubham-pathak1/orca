@@ -1,17 +1,29 @@
-use std::collections::hash_map::DefaultHasher;
-use std::fs;
-use std::hash::{Hash, Hasher};
-use std::io::Cursor;
-use std::path::{Path, PathBuf};
-
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use base64::Engine;
-use image::codecs::webp::WebPEncoder;
-use image::imageops::FilterType;
-use image::ExtendedColorType;
-use rusqlite::{params, Connection, OptionalExtension};
+use std::path::PathBuf;
+use rusqlite::{params, Connection};
 
 use crate::library::LocalSong;
+
+mod artwork;
+mod cache;
+mod catalog;
+mod media_artwork;
+mod playlists;
+
+pub use artwork::{
+    get_albums_needing_artwork, get_artists_needing_artwork, remove_album_artwork,
+    remove_artist_artwork, update_album_artwork, update_artist_artwork,
+};
+
+pub use cache::{get_cached_waveform, get_lyrics, get_setting, save_waveform, set_lyrics, set_setting};
+
+pub use catalog::{get_albums, get_artists, get_genres, AlbumEntry, ArtistEntry, GenreEntry};
+
+pub use media_artwork::migrate_inline_artwork_to_files;
+
+pub use playlists::{
+    add_to_playlist, create_playlist, delete_playlist, get_playlist_song_ids, get_playlists,
+    remove_from_playlist, rename_playlist, update_playlist_cover, Playlist,
+};
 
 pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
     let db_path = app_dir.join("orca.db");
@@ -22,7 +34,6 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
          PRAGMA cache_size = -16000;",
     )
     .map_err(|e| e.to_string())?;
-
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS songs (
@@ -53,18 +64,14 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
     .map_err(|e| e.to_string())?;
 
     // add lyrics column if missing
-    let has_lyrics: bool = conn
-        .prepare("SELECT lyrics FROM songs LIMIT 0")
-        .is_ok();
+    let has_lyrics: bool = conn.prepare("SELECT lyrics FROM songs LIMIT 0").is_ok();
     if !has_lyrics {
         conn.execute("ALTER TABLE songs ADD COLUMN lyrics TEXT", [])
             .ok();
     }
 
     // add album column if missing
-    let has_album: bool = conn
-        .prepare("SELECT album FROM songs LIMIT 0")
-        .is_ok();
+    let has_album: bool = conn.prepare("SELECT album FROM songs LIMIT 0").is_ok();
     if !has_album {
         conn.execute(
             "ALTER TABLE songs ADD COLUMN album TEXT NOT NULL DEFAULT 'Unknown Album'",
@@ -73,7 +80,9 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
         .ok();
     }
 
-    let has_album_artist: bool = conn.prepare("SELECT album_artist FROM songs LIMIT 0").is_ok();
+    let has_album_artist: bool = conn
+        .prepare("SELECT album_artist FROM songs LIMIT 0")
+        .is_ok();
     if !has_album_artist {
         conn.execute(
             "ALTER TABLE songs ADD COLUMN album_artist TEXT NOT NULL DEFAULT 'Unknown Artist'",
@@ -84,16 +93,21 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
 
     let has_year: bool = conn.prepare("SELECT year FROM songs LIMIT 0").is_ok();
     if !has_year {
-        conn.execute("ALTER TABLE songs ADD COLUMN year INTEGER", []).ok();
+        conn.execute("ALTER TABLE songs ADD COLUMN year INTEGER", [])
+            .ok();
     }
 
-    let has_track_number: bool = conn.prepare("SELECT track_number FROM songs LIMIT 0").is_ok();
+    let has_track_number: bool = conn
+        .prepare("SELECT track_number FROM songs LIMIT 0")
+        .is_ok();
     if !has_track_number {
         conn.execute("ALTER TABLE songs ADD COLUMN track_number INTEGER", [])
             .ok();
     }
 
-    let has_disc_number: bool = conn.prepare("SELECT disc_number FROM songs LIMIT 0").is_ok();
+    let has_disc_number: bool = conn
+        .prepare("SELECT disc_number FROM songs LIMIT 0")
+        .is_ok();
     if !has_disc_number {
         conn.execute("ALTER TABLE songs ADD COLUMN disc_number INTEGER", [])
             .ok();
@@ -101,17 +115,24 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
 
     let has_genre: bool = conn.prepare("SELECT genre FROM songs LIMIT 0").is_ok();
     if !has_genre {
-        conn.execute("ALTER TABLE songs ADD COLUMN genre TEXT", []).ok();
+        conn.execute("ALTER TABLE songs ADD COLUMN genre TEXT", [])
+            .ok();
     }
 
-    let has_artwork_thumb: bool = conn.prepare("SELECT artwork_thumb_url FROM songs LIMIT 0").is_ok();
+    let has_artwork_thumb: bool = conn
+        .prepare("SELECT artwork_thumb_url FROM songs LIMIT 0")
+        .is_ok();
     if !has_artwork_thumb {
-        conn.execute("ALTER TABLE songs ADD COLUMN artwork_thumb_url TEXT", []).ok();
+        conn.execute("ALTER TABLE songs ADD COLUMN artwork_thumb_url TEXT", [])
+            .ok();
     }
 
-    let has_artwork_preview: bool = conn.prepare("SELECT artwork_preview_url FROM songs LIMIT 0").is_ok();
+    let has_artwork_preview: bool = conn
+        .prepare("SELECT artwork_preview_url FROM songs LIMIT 0")
+        .is_ok();
     if !has_artwork_preview {
-        conn.execute("ALTER TABLE songs ADD COLUMN artwork_preview_url TEXT", []).ok();
+        conn.execute("ALTER TABLE songs ADD COLUMN artwork_preview_url TEXT", [])
+            .ok();
     }
 
     conn.execute(
@@ -166,9 +187,15 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
     )
     .map_err(|e| e.to_string())?;
 
-    let has_artist_thumb: bool = conn.prepare("SELECT artwork_thumb_path FROM artist_artworks LIMIT 0").is_ok();
+    let has_artist_thumb: bool = conn
+        .prepare("SELECT artwork_thumb_path FROM artist_artworks LIMIT 0")
+        .is_ok();
     if !has_artist_thumb {
-        conn.execute("ALTER TABLE artist_artworks ADD COLUMN artwork_thumb_path TEXT", []).ok();
+        conn.execute(
+            "ALTER TABLE artist_artworks ADD COLUMN artwork_thumb_path TEXT",
+            [],
+        )
+        .ok();
     }
 
     conn.execute(
@@ -181,12 +208,20 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
     )
     .map_err(|e| e.to_string())?;
 
-    let has_album_thumb: bool = conn.prepare("SELECT artwork_thumb_path FROM album_artworks LIMIT 0").is_ok();
+    let has_album_thumb: bool = conn
+        .prepare("SELECT artwork_thumb_path FROM album_artworks LIMIT 0")
+        .is_ok();
     if !has_album_thumb {
-        conn.execute("ALTER TABLE album_artworks ADD COLUMN artwork_thumb_path TEXT", []).ok();
+        conn.execute(
+            "ALTER TABLE album_artworks ADD COLUMN artwork_thumb_path TEXT",
+            [],
+        )
+        .ok();
     }
 
-    let has_quality: bool = conn.prepare("SELECT sample_rate FROM songs LIMIT 0").is_ok();
+    let has_quality: bool = conn
+        .prepare("SELECT sample_rate FROM songs LIMIT 0")
+        .is_ok();
     if !has_quality {
         let _ = conn.execute("ALTER TABLE songs ADD COLUMN sample_rate INTEGER", []);
         let _ = conn.execute("ALTER TABLE songs ADD COLUMN bitrate INTEGER", []);
@@ -194,7 +229,9 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
         let _ = conn.execute("ALTER TABLE songs ADD COLUMN format TEXT", []);
     }
 
-    let has_modified_at: bool = conn.prepare("SELECT modified_at FROM songs LIMIT 0").is_ok();
+    let has_modified_at: bool = conn
+        .prepare("SELECT modified_at FROM songs LIMIT 0")
+        .is_ok();
     if !has_modified_at {
         let _ = conn.execute("ALTER TABLE songs ADD COLUMN modified_at INTEGER", []);
     }
@@ -321,7 +358,9 @@ pub fn replace_songs_in_db(conn: &Connection, songs: &[LocalSong]) -> Result<(),
                 return Err(error.to_string());
             }
         };
-        let rows = match stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))) {
+        let rows = match stmt.query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        }) {
             Ok(rows) => rows,
             Err(error) => {
                 let _ = conn.execute_batch("ROLLBACK");
@@ -347,7 +386,10 @@ pub fn replace_songs_in_db(conn: &Connection, songs: &[LocalSong]) -> Result<(),
             continue;
         }
 
-        if let Err(error) = conn.execute("DELETE FROM playlist_songs WHERE song_id = ?1", params![song_id]) {
+        if let Err(error) = conn.execute(
+            "DELETE FROM playlist_songs WHERE song_id = ?1",
+            params![song_id],
+        ) {
             let _ = conn.execute_batch("ROLLBACK");
             return Err(error.to_string());
         }
@@ -462,7 +504,9 @@ pub fn get_all_songs(conn: &Connection) -> Result<Vec<LocalSong>, String> {
     Ok(songs)
 }
 
-pub fn get_existing_songs_map(conn: &Connection) -> Result<std::collections::HashMap<String, (i64, u64, LocalSong)>, String> {
+pub fn get_existing_songs_map(
+    conn: &Connection,
+) -> Result<std::collections::HashMap<String, (i64, u64, LocalSong)>, String> {
     let songs = get_all_songs(conn)?;
     let mut map = std::collections::HashMap::new();
     for song in songs {
@@ -472,7 +516,6 @@ pub fn get_existing_songs_map(conn: &Connection) -> Result<std::collections::Has
     }
     Ok(map)
 }
-
 
 pub fn migrate_legacy_songs_if_needed(
     conn: &Connection,
@@ -543,575 +586,8 @@ pub fn migrate_legacy_songs_if_needed(
     Ok(imported)
 }
 
-pub fn migrate_inline_artwork_to_files(
-    conn: &Connection,
-    artwork_dir: &Path,
-) -> Result<usize, String> {
-    fs::create_dir_all(artwork_dir).map_err(|e| e.to_string())?;
-
-    let mut inline_rows: Vec<(i64, String, String)> = Vec::new();
-    {
-        let mut stmt = conn
-            .prepare("SELECT id, path, artwork_url FROM songs WHERE artwork_url LIKE 'data:%'")
-            .map_err(|e| e.to_string())?;
-        let rows = stmt
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                ))
-            })
-            .map_err(|e| e.to_string())?;
-
-        for row in rows {
-            inline_rows.push(row.map_err(|e| e.to_string())?);
-        }
-    }
-
-    let mut migrated = 0usize;
-    for (id, song_path, artwork_url) in inline_rows {
-        let Some((mime, base64_payload)) = parse_data_url(&artwork_url) else {
-            continue;
-        };
-
-        let decoded = match BASE64_STANDARD.decode(base64_payload.as_bytes()) {
-            Ok(bytes) => bytes,
-            Err(_) => continue,
-        };
-        if decoded.is_empty() {
-            continue;
-        }
-
-        let ext = artwork_extension_from_mime(mime);
-        let hash = hash_song_path(&song_path);
-        let file_path = artwork_dir.join(format!("{}.{}", hash, ext));
-        let thumb_path = artwork_dir.join(format!("thumb_{}_80.webp", hash));
-        let preview_path = artwork_dir.join(format!("preview_{}_256.webp", hash));
-        fs::write(&file_path, &decoded).map_err(|e| e.to_string())?;
-        let (thumb_url, preview_url) = write_artwork_derivatives(&decoded, &thumb_path, &preview_path)
-            .unwrap_or((None, None));
-
-        conn.execute(
-            "UPDATE songs SET artwork_url = ?1, artwork_thumb_url = ?2, artwork_preview_url = ?3 WHERE id = ?4",
-            params![
-                file_path.to_string_lossy().to_string(),
-                thumb_url,
-                preview_url,
-                id
-            ],
-        )
-        .map_err(|e| e.to_string())?;
-        migrated += 1;
-    }
-
-    Ok(migrated)
-}
-
-fn parse_data_url(value: &str) -> Option<(&str, &str)> {
-    if !value.starts_with("data:") {
-        return None;
-    }
-    let mut segments = value.splitn(2, ',');
-    let header = segments.next()?;
-    let payload = segments.next()?.trim();
-    if !header.contains(";base64") {
-        return None;
-    }
-    let mime = header
-        .trim_start_matches("data:")
-        .split(';')
-        .next()
-        .unwrap_or("image/jpeg");
-    Some((mime, payload))
-}
-
-fn hash_song_path(path: &str) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    path.hash(&mut hasher);
-    hasher.finish()
-}
-
-fn write_artwork_derivatives(
-    bytes: &[u8],
-    thumb_path: &Path,
-    preview_path: &Path,
-) -> Result<(Option<String>, Option<String>), String> {
-    let image = image::load_from_memory(bytes).map_err(|error| error.to_string())?;
-    let thumb = write_webp_derivative(&image, thumb_path, 80).ok().map(|_| thumb_path.to_string_lossy().to_string());
-    let preview = write_webp_derivative(&image, preview_path, 256).ok().map(|_| preview_path.to_string_lossy().to_string());
-    Ok((thumb, preview))
-}
-
-fn write_webp_derivative(
-    image: &image::DynamicImage,
-    output_path: &Path,
-    size: u32,
-) -> Result<(), String> {
-    let resized = image.resize(size, size, FilterType::Triangle).to_rgba8();
-    let mut output: Vec<u8> = Vec::new();
-    let encoder = WebPEncoder::new_lossless(Cursor::new(&mut output));
-    encoder
-        .encode(
-            resized.as_raw(),
-            resized.width(),
-            resized.height(),
-            ExtendedColorType::Rgba8,
-        )
-        .map_err(|error| error.to_string())?;
-    fs::write(output_path, &output).map_err(|error| error.to_string())
-}
-
-fn artwork_extension_from_mime(mime: &str) -> &'static str {
-    let normalized = mime.to_ascii_lowercase();
-    if normalized.contains("png") {
-        "png"
-    } else if normalized.contains("webp") {
-        "webp"
-    } else if normalized.contains("gif") {
-        "gif"
-    } else if normalized.contains("bmp") {
-        "bmp"
-    } else {
-        "jpg"
-    }
-}
-
-pub fn get_setting(conn: &Connection, key: &str) -> Option<String> {
-    conn.query_row(
-        "SELECT value FROM settings WHERE key = ?1",
-        params![key],
-        |row| row.get(0),
-    )
-    .ok()
-}
-
-pub fn set_setting(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
-    conn.execute(
-        "INSERT INTO settings (key, value) VALUES (?1, ?2)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        params![key, value],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
 pub fn delete_song_by_path(conn: &Connection, path: &str) -> Result<(), String> {
     conn.execute("DELETE FROM songs WHERE path = ?1", params![path])
         .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-pub fn get_lyrics(conn: &Connection, song_path: &str) -> Option<String> {
-    conn.query_row(
-        "SELECT lyrics_text FROM lyrics WHERE song_path = ?1",
-        params![song_path],
-        |row| row.get(0),
-    )
-    .ok()
-}
-
-pub fn set_lyrics(conn: &Connection, song_path: &str, lyrics_text: &str) -> Result<(), String> {
-    conn.execute(
-        "INSERT INTO lyrics (song_path, lyrics_text) VALUES (?1, ?2)
-         ON CONFLICT(song_path) DO UPDATE SET lyrics_text = excluded.lyrics_text",
-        params![song_path, lyrics_text],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-/// Returns cached waveform peaks for `song_path` with the exact `buckets` resolution,
-/// or `None` if no entry exists yet.
-pub fn get_cached_waveform(
-    conn: &Connection,
-    song_path: &str,
-    buckets: usize,
-) -> Result<Option<Vec<f32>>, String> {
-    let row: Option<String> = conn
-        .query_row(
-            "SELECT peaks FROM waveforms WHERE song_path = ?1 AND buckets = ?2",
-            params![song_path, buckets as i64],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(|e| e.to_string())?;
-
-    match row {
-        None => Ok(None),
-        Some(s) => {
-            let peaks: Vec<f32> = s
-                .split(',')
-                .filter_map(|v| v.parse::<f32>().ok())
-                .collect();
-            Ok(Some(peaks))
-        }
-    }
-}
-
-/// Persists waveform peaks for `song_path` so future lookups are instant.
-pub fn save_waveform(
-    conn: &Connection,
-    song_path: &str,
-    buckets: usize,
-    peaks: &[f32],
-) -> Result<(), String> {
-    let peaks_str: String = peaks
-        .iter()
-        .map(|v| v.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
-
-    conn.execute(
-        "INSERT INTO waveforms (song_path, buckets, peaks)
-         VALUES (?1, ?2, ?3)
-         ON CONFLICT(song_path, buckets) DO UPDATE SET peaks = excluded.peaks",
-        params![song_path, buckets as i64, peaks_str],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[derive(serde::Serialize, Debug)]
-pub struct ArtistEntry {
-    pub name: String,
-    pub song_count: i64,
-    pub artwork: Option<String>,
-    pub artwork_thumb: Option<String>,
-    /// Fallback: first song's artwork when no artist-specific image was fetched
-    pub song_artwork: Option<String>,
-    pub song_artwork_thumb: Option<String>,
-}
-
-#[derive(serde::Serialize, Debug)]
-pub struct AlbumEntry {
-    pub key: String,
-    pub title: String,
-    pub artist: String,
-    pub song_count: i64,
-    pub duration: i64,
-    pub artwork: Option<String>,
-    pub artwork_thumb: Option<String>,
-}
-
-pub fn get_artists(conn: &Connection) -> Result<Vec<ArtistEntry>, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT s.artist, COUNT(*), NULLIF(aa.artwork_path, 'DELETED'), NULLIF(aa.artwork_thumb_path, 'DELETED'),
-                    (SELECT COALESCE(s2.artwork_url, NULLIF(awa.artwork_path, 'DELETED')) FROM songs s2 LEFT JOIN album_artworks awa ON awa.album_key = s2.album_artist || ':' || s2.album WHERE s2.artist = s.artist AND COALESCE(s2.artwork_url, NULLIF(awa.artwork_path, 'DELETED')) IS NOT NULL LIMIT 1),
-                    (SELECT COALESCE(s2.artwork_thumb_url, NULLIF(awa.artwork_thumb_path, 'DELETED')) FROM songs s2 LEFT JOIN album_artworks awa ON awa.album_key = s2.album_artist || ':' || s2.album WHERE s2.artist = s.artist AND COALESCE(s2.artwork_thumb_url, NULLIF(awa.artwork_thumb_path, 'DELETED')) IS NOT NULL LIMIT 1)
-             FROM songs s
-             LEFT JOIN artist_artworks aa ON s.artist = aa.artist_name
-             GROUP BY s.artist
-             ORDER BY s.artist COLLATE NOCASE ASC"
-        )
-        .map_err(|e| e.to_string())?;
-    
-    let iter = stmt.query_map([], |row| {
-        Ok(ArtistEntry {
-            name: row.get(0)?,
-            song_count: row.get(1)?,
-            artwork: row.get(2)?,
-            artwork_thumb: row.get(3)?,
-            song_artwork: row.get(4)?,
-            song_artwork_thumb: row.get(5)?,
-        })
-    }).map_err(|e| e.to_string())?;
-
-    let mut artists = Vec::new();
-    for a in iter {
-        artists.push(a.map_err(|e| e.to_string())?);
-    }
-    Ok(artists)
-}
-
-pub fn get_albums(conn: &Connection) -> Result<Vec<AlbumEntry>, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT album_artist || ':' || album as key, album, album_artist, COUNT(*), SUM(duration), 
-                    COALESCE(NULLIF(awa.artwork_path, 'DELETED'), MAX(s.artwork_preview_url)), 
-                    COALESCE(NULLIF(awa.artwork_thumb_path, 'DELETED'), MAX(s.artwork_thumb_url))
-             FROM songs s
-             LEFT JOIN album_artworks awa ON (s.album_artist || ':' || s.album) = awa.album_key
-             GROUP BY album_artist, album
-             ORDER BY album COLLATE NOCASE ASC"
-        )
-        .map_err(|e| e.to_string())?;
-    
-    let iter = stmt.query_map([], |row| {
-        Ok(AlbumEntry {
-            key: row.get(0)?,
-            title: row.get(1)?,
-            artist: row.get(2)?,
-            song_count: row.get(3)?,
-            duration: row.get(4)?,
-            artwork: row.get(5)?,
-            artwork_thumb: row.get(6)?,
-        })
-    }).map_err(|e| e.to_string())?;
-
-    let mut albums = Vec::new();
-    for a in iter {
-        albums.push(a.map_err(|e| e.to_string())?);
-    }
-    Ok(albums)
-}
-
-#[derive(serde::Serialize, Debug)]
-pub struct GenreEntry {
-    pub name: String,
-    pub song_count: i64,
-    /// Artwork from the first song in this genre that has any artwork
-    pub song_artwork: Option<String>,
-    pub song_artwork_thumb: Option<String>,
-}
-
-pub fn get_genres(conn: &Connection) -> Result<Vec<GenreEntry>, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT genre, COUNT(*),
-                    (SELECT COALESCE(s2.artwork_preview_url, NULLIF(awa.artwork_path, 'DELETED'))
-                     FROM songs s2
-                     LEFT JOIN album_artworks awa ON awa.album_key = s2.album_artist || ':' || s2.album
-                     WHERE s2.genre = s.genre
-                       AND COALESCE(s2.artwork_preview_url, NULLIF(awa.artwork_path, 'DELETED')) IS NOT NULL
-                     LIMIT 1),
-                    (SELECT COALESCE(s2.artwork_thumb_url, NULLIF(awa.artwork_thumb_path, 'DELETED'))
-                     FROM songs s2
-                     LEFT JOIN album_artworks awa ON awa.album_key = s2.album_artist || ':' || s2.album
-                     WHERE s2.genre = s.genre
-                       AND COALESCE(s2.artwork_thumb_url, NULLIF(awa.artwork_thumb_path, 'DELETED')) IS NOT NULL
-                     LIMIT 1)
-             FROM songs s
-             WHERE genre IS NOT NULL AND genre != ''
-             GROUP BY genre
-             ORDER BY genre COLLATE NOCASE ASC",
-        )
-        .map_err(|e| e.to_string())?;
-
-    let iter = stmt.query_map([], |row| {
-        Ok(GenreEntry {
-            name: row.get(0)?,
-            song_count: row.get(1)?,
-            song_artwork: row.get(2)?,
-            song_artwork_thumb: row.get(3)?,
-        })
-    }).map_err(|e| e.to_string())?;
-
-    let mut genres = Vec::new();
-    for g in iter {
-        genres.push(g.map_err(|e| e.to_string())?);
-    }
-    Ok(genres)
-}
-
-#[derive(serde::Serialize)]
-pub struct Playlist {
-    pub id: i64,
-    pub name: String,
-    pub cover_path: Option<String>,
-    pub song_count: i64,
-}
-
-pub fn create_playlist(conn: &Connection, name: &str, cover_path: Option<&str>) -> Result<i64, String> {
-    conn.execute(
-        "INSERT INTO playlists (name, cover_path) VALUES (?1, ?2)",
-        params![name, cover_path],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(conn.last_insert_rowid())
-}
-
-pub fn update_playlist_cover(conn: &Connection, playlist_id: i64, cover_path: Option<&str>) -> Result<(), String> {
-    conn.execute(
-        "UPDATE playlists SET cover_path = ?1 WHERE id = ?2",
-        params![cover_path, playlist_id],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-pub fn update_artist_artwork(conn: &Connection, artist_name: &str, artwork_path: Option<&str>, artwork_thumb_path: Option<&str>) -> Result<(), String> {
-    conn.execute(
-        "INSERT INTO artist_artworks (artist_name, artwork_path, artwork_thumb_path) VALUES (?1, ?2, ?3) ON CONFLICT(artist_name) DO UPDATE SET artwork_path = excluded.artwork_path, artwork_thumb_path = excluded.artwork_thumb_path",
-        params![artist_name, artwork_path, artwork_thumb_path],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-pub fn remove_artist_artwork(conn: &Connection, artist_name: &str) -> Result<(), String> {
-    conn.execute(
-        "INSERT INTO artist_artworks (artist_name, artwork_path, artwork_thumb_path) VALUES (?1, 'DELETED', 'DELETED') ON CONFLICT(artist_name) DO UPDATE SET artwork_path = 'DELETED', artwork_thumb_path = 'DELETED'",
-        params![artist_name],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-/// Returns artist names that have no artwork and have NOT been explicitly deleted by the user.
-/// Uses a single query: the 'DELETED' tombstone is non-NULL so WHERE aa.artwork_path IS NULL
-/// naturally excludes both tombstoned entries and those that already have real artwork.
-pub fn get_artists_needing_artwork(conn: &Connection) -> Result<Vec<String>, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT DISTINCT s.artist FROM songs s
-             LEFT JOIN artist_artworks aa ON s.artist = aa.artist_name
-             WHERE aa.artwork_path IS NULL
-             ORDER BY s.artist COLLATE NOCASE ASC",
-        )
-        .map_err(|e| e.to_string())?;
-    let iter = stmt
-        .query_map([], |row| row.get(0))
-        .map_err(|e| e.to_string())?;
-    let mut names = Vec::new();
-    for item in iter {
-        names.push(item.map_err(|e| e.to_string())?);
-    }
-    Ok(names)
-}
-
-/// Returns (album_key, album_title, album_artist) tuples that have no artwork and have NOT
-/// been explicitly deleted by the user. Same tombstone logic as get_artists_needing_artwork.
-pub fn get_albums_needing_artwork(conn: &Connection) -> Result<Vec<(String, String, String)>, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT DISTINCT s.album_artist || ':' || s.album, s.album, s.album_artist
-             FROM songs s
-             LEFT JOIN album_artworks aa ON (s.album_artist || ':' || s.album) = aa.album_key
-             WHERE aa.artwork_path IS NULL
-             ORDER BY s.album COLLATE NOCASE ASC",
-        )
-        .map_err(|e| e.to_string())?;
-    let iter = stmt
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
-        .map_err(|e| e.to_string())?;
-    let mut albums = Vec::new();
-    for item in iter {
-        albums.push(item.map_err(|e| e.to_string())?);
-    }
-    Ok(albums)
-}
-
-pub fn update_album_artwork(conn: &Connection, album_key: &str, artwork_path: Option<&str>, artwork_thumb_path: Option<&str>) -> Result<(), String> {
-    conn.execute(
-        "INSERT INTO album_artworks (album_key, artwork_path, artwork_thumb_path) VALUES (?1, ?2, ?3) ON CONFLICT(album_key) DO UPDATE SET artwork_path = excluded.artwork_path, artwork_thumb_path = excluded.artwork_thumb_path",
-        params![album_key, artwork_path, artwork_thumb_path],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-pub fn remove_album_artwork(conn: &Connection, album_key: &str) -> Result<(), String> {
-    conn.execute(
-        "INSERT INTO album_artworks (album_key, artwork_path, artwork_thumb_path) VALUES (?1, 'DELETED', 'DELETED') ON CONFLICT(album_key) DO UPDATE SET artwork_path = 'DELETED', artwork_thumb_path = 'DELETED'",
-        params![album_key],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-pub fn get_playlists(conn: &Connection) -> Result<Vec<Playlist>, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT p.id, p.name, p.cover_path, COUNT(ps.id) as song_count
-             FROM playlists p
-             LEFT JOIN playlist_songs ps ON p.id = ps.playlist_id
-             GROUP BY p.id
-             ORDER BY p.created_at DESC"
-        )
-        .map_err(|e| e.to_string())?;
-        
-    let iter = stmt.query_map([], |row| {
-        Ok(Playlist {
-            id: row.get(0)?,
-            name: row.get(1)?,
-            cover_path: row.get(2)?,
-            song_count: row.get(3)?,
-        })
-    }).map_err(|e| e.to_string())?;
-
-    let mut playlists = Vec::new();
-    for p in iter {
-        playlists.push(p.map_err(|e| e.to_string())?);
-    }
-    Ok(playlists)
-}
-
-pub fn add_to_playlist(conn: &Connection, playlist_id: i64, song_id: i64) -> Result<(), String> {
-    let already_exists: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM playlist_songs WHERE playlist_id = ?1 AND song_id = ?2",
-        params![playlist_id, song_id],
-        |row| row.get(0),
-    ).map_err(|e| e.to_string())?;
-    if already_exists > 0 {
-        return Ok(());
-    }
-
-    // Get max position
-    let current_max: Option<i64> = conn.query_row(
-        "SELECT MAX(position) FROM playlist_songs WHERE playlist_id = ?1",
-        params![playlist_id],
-        |row| row.get(0)
-    ).unwrap_or(None);
-    
-    let next_pos = current_max.unwrap_or(0) + 1;
-
-    conn.execute(
-        "INSERT INTO playlist_songs (playlist_id, song_id, position) VALUES (?1, ?2, ?3)",
-        params![playlist_id, song_id, next_pos],
-    )
-    .map_err(|e| e.to_string())?;
-    
-    Ok(())
-}
-
-pub fn remove_from_playlist(conn: &Connection, playlist_id: i64, song_id: i64) -> Result<(), String> {
-    conn.execute(
-        "DELETE FROM playlist_songs WHERE playlist_id = ?1 AND song_id = ?2",
-        params![playlist_id, song_id],
-    )
-    .map_err(|e| e.to_string())?;
-
-    Ok(())
-}
-
-pub fn get_playlist_song_ids(conn: &Connection, playlist_id: i64) -> Result<Vec<i64>, String> {
-    let mut stmt = conn
-        .prepare("SELECT song_id FROM playlist_songs WHERE playlist_id = ?1 ORDER BY position ASC")
-        .map_err(|e| e.to_string())?;
-        
-    let iter = stmt.query_map(params![playlist_id], |row| row.get(0))
-        .map_err(|e| e.to_string())?;
-        
-    let mut ids = Vec::new();
-    for id in iter {
-        ids.push(id.map_err(|e| e.to_string())?);
-    }
-    Ok(ids)
-}
-
-pub fn delete_playlist(conn: &Connection, playlist_id: i64) -> Result<(), String> {
-    conn.execute(
-        "DELETE FROM playlist_songs WHERE playlist_id = ?1",
-        params![playlist_id],
-    )
-    .map_err(|e| e.to_string())?;
-
-    conn.execute(
-        "DELETE FROM playlists WHERE id = ?1",
-        params![playlist_id],
-    )
-    .map_err(|e| e.to_string())?;
-    
-    Ok(())
-}
-
-pub fn rename_playlist(conn: &Connection, playlist_id: i64, new_name: &str) -> Result<(), String> {
-    conn.execute(
-        "UPDATE playlists SET name = ?1 WHERE id = ?2",
-        params![new_name, playlist_id],
-    )
-    .map_err(|e| e.to_string())?;
     Ok(())
 }
