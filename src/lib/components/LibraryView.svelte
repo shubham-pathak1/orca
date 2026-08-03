@@ -242,10 +242,10 @@
         />
       {:else if activeView === 'playlists'}
         <PlaylistsView
-          {playlists} {songs} {currentPath}
+          {playlists} {songs} {query} {currentPath}
           {onChooseSong} {onCreatePlaylist} {onLoadPlaylistSongIds}
           {onRenamePlaylist} {onDeletePlaylist}
-          {onChoosePlaylistCover} {onRemovePlaylistCover} {onRemoveSongFromPlaylist}
+          {onChoosePlaylistCover} {onRemovePlaylistCover}
           onOpenSongMenu={openSongMenu}
           bind:selectedPlaylist={activePlaylist}
           bind:selectedPlaylistSongIds={activePlaylistSongIds}

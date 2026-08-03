@@ -27,6 +27,7 @@ export async function getLibrarySnapshot(): Promise<LibrarySnapshot> {
     playlists: [],
     artists: [],
     albums: [],
+    genres: [],
     playback: fallbackPlayback,
     folder_count: 0
   }));

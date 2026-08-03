@@ -269,7 +269,7 @@
           <select 
             class="h-10 w-full appearance-none rounded-md border border-white/12 bg-black/20 pl-3 pr-10 text-sm font-semibold text-white outline-none transition hover:border-white/35 focus:border-[color:var(--accent-mid)]"
             value={playerPlacement} 
-            on:change={(e) => onPlayerPlacementChange(e.currentTarget.value)}
+            on:change={(e) => onPlayerPlacementChange(e.currentTarget.value as 'right' | 'bottom')}
           >
             {#each playerPlacements as placement}
               <option class="bg-[#111] text-white" value={placement.id}>{placement.title}</option>
@@ -290,7 +290,7 @@
           <select 
             class="h-10 w-full appearance-none rounded-md border border-white/12 bg-black/20 pl-3 pr-10 text-sm font-semibold text-white outline-none transition hover:border-white/35 focus:border-[color:var(--accent-mid)]"
             value={sidebarMode} 
-            on:change={(e) => onSidebarModeChange(e.currentTarget.value)}
+            on:change={(e) => onSidebarModeChange(e.currentTarget.value as 'expanded' | 'collapsed')}
           >
             {#each sidebarModes as mode}
               <option class="bg-[#111] text-white" value={mode.id}>{mode.title}</option>
@@ -311,7 +311,7 @@
           <select 
             class="h-10 w-full appearance-none rounded-md border border-white/12 bg-black/20 pl-3 pr-10 text-sm font-semibold text-white outline-none transition hover:border-white/35 focus:border-[color:var(--accent-mid)]"
             value={seekbarStyle} 
-            on:change={(e) => onSeekbarStyleChange(e.currentTarget.value)}
+            on:change={(e) => onSeekbarStyleChange(e.currentTarget.value as 'standard' | 'waveform')}
           >
             {#each seekbarStyles as style}
               <option class="bg-[#111] text-white" value={style.id}>{style.title}</option>

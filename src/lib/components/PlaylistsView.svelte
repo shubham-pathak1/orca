@@ -320,9 +320,9 @@
       </div>
     {:else}
       <div class="mx-auto flex h-[calc(100%-60px)] max-w-xl flex-col items-center justify-center text-center">
-        <p class="text-sm font-bold uppercase text-white/34">{playlistQuery.trim() ? 'No playlists found' : 'No playlists yet'}</p>
-        <h2 class="mt-3 text-4xl font-black tracking-normal">{playlistQuery.trim() ? 'Oops, no such playlist found :(' : 'Build a queue worth keeping.'}</h2>
-        <p class="mt-3 text-sm leading-6 text-white/48">{playlistQuery.trim() ? 'Try another playlist name.' : 'Create a playlist, then right-click songs in Library to add them.'}</p>
+        <p class="text-sm font-bold uppercase text-white/34">{query.trim() ? 'No playlists found' : 'No playlists yet'}</p>
+        <h2 class="mt-3 text-4xl font-black tracking-normal">{query.trim() ? 'Oops, no such playlist found :(' : 'Build a queue worth keeping.'}</h2>
+        <p class="mt-3 text-sm leading-6 text-white/48">{query.trim() ? 'Try another playlist name.' : 'Create a playlist, then right-click songs in Library to add them.'}</p>
       </div>
     {/if}
   {/if}
