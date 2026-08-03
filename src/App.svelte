@@ -42,6 +42,13 @@
   import { createPlaybackStore } from './lib/stores/playback';
   import { createPreferencesStore } from './lib/stores/preferences';
   import { createQueueStore } from './lib/stores/queue';
+  import {
+    applyRootFontSize,
+    fontStack,
+    readStoredString,
+    sampleArtworkAccent,
+    syncCustomFont
+  } from './lib/app-utils';
   import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate, ArtistEntry, AlbumEntry, GenreEntry } from './lib/types';
 
   const libraryStore = createLibraryStore();
@@ -186,7 +193,7 @@
 
   onMount(() => {
     preferencesStore.load();
-    theme = readPreference('orca.theme', 'default', ['default']);
+    theme = readStoredString('orca.theme', 'default', ['default']);
 
     const lastPlayedPath = window.localStorage.getItem('orca.lastPlayedPath');
     if (lastPlayedPath) {
@@ -285,61 +292,7 @@
     };
   });
 
-  function readPreference<T extends string>(key: string, fallback: T, allowed: T[]): T {
-    const value = window.localStorage.getItem(key);
-    return allowed.includes(value as T) ? (value as T) : fallback;
-  }
-
-  function readBooleanPreference(key: string, fallback: boolean) {
-    const value = window.localStorage.getItem(key);
-    return value === null ? fallback : value === 'true';
-  }
-
-  function readNumberPreference(key: string, fallback: number, min: number, max: number) {
-    const value = Number(window.localStorage.getItem(key));
-    return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
-  }
-
-  function fontStack(value: string) {
-    if (value === 'System') {
-      return 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-    }
-    if (value === 'Plus Jakarta Sans') {
-      return '"Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif';
-    }
-    if (value.startsWith('file:')) {
-      return '"OrcaCustomFont", ui-sans-serif, system-ui, sans-serif';
-    }
-    // Custom font name — wrap in quotes and fall back gracefully
-    return `"${value}", ui-sans-serif, system-ui, sans-serif`;
-  }
-
-  import { convertFileSrc } from '@tauri-apps/api/core';
-
-  function registerFontFile(filePath: string) {
-    const existing = document.getElementById('orca-custom-font-face');
-    if (existing) existing.remove();
-    const assetUrl = convertFileSrc(filePath);
-    const style = document.createElement('style');
-    style.id = 'orca-custom-font-face';
-    style.textContent = `@font-face { font-family: 'OrcaCustomFont'; src: url('${assetUrl}'); font-display: swap; }`;
-    document.head.appendChild(style);
-  }
-
-  $: if (fontFamily.startsWith('file:')) {
-    registerFontFile(fontFamily.slice(5));
-  } else {
-    const existing = document.getElementById('orca-custom-font-face');
-    if (existing) existing.remove();
-  }
-
-  function applyRootFontSize(value: number) {
-    if (typeof document === 'undefined') {
-      return;
-    }
-
-    document.documentElement.style.fontSize = `${16 * (value / 100)}px`;
-  }
+  $: syncCustomFont(fontFamily);
 
   function setPlayerPlacement(placement: 'right' | 'bottom') {
     preferencesStore.setPlayerPlacement(placement);
@@ -678,45 +631,7 @@
     sampledArtwork = src;
 
     try {
-      const image = new Image();
-      image.crossOrigin = 'anonymous';
-      image.src = src;
-      await image.decode();
-
-      const canvas = document.createElement('canvas');
-      canvas.width = 48;
-      canvas.height = 48;
-      const context = canvas.getContext('2d', { willReadFrequently: true });
-      if (!context) {
-        return;
-      }
-
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
-      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-      let r = 0;
-      let g = 0;
-      let b = 0;
-      let count = 0;
-
-      for (let index = 0; index < pixels.length; index += 16) {
-        const red = pixels[index];
-        const green = pixels[index + 1];
-        const blue = pixels[index + 2];
-        const max = Math.max(red, green, blue);
-        const min = Math.min(red, green, blue);
-        const brightness = (red + green + blue) / 3;
-
-        if (max - min > 18 && brightness > 34 && brightness < 232) {
-          r += red;
-          g += green;
-          b += blue;
-          count += 1;
-        }
-      }
-
-      if (count > 0) {
-        accentRgb = `${Math.round(r / count)},${Math.round(g / count)},${Math.round(b / count)}`;
-      }
+      accentRgb = await sampleArtworkAccent(src);
     } catch {
       sampledArtwork = null;
       accentRgb = defaultAccentRgb;
