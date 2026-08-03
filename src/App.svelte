@@ -20,7 +20,6 @@
     createPlaylist,
     deletePlaylist,
     libraryFolderCount,
-    queueNextPlayback,
     playlistSongIds,
     removePlaylistCover,
     removeSongCover,
@@ -42,6 +41,7 @@
   import { createPlaybackStore } from './lib/stores/playback';
   import { createPreferencesStore } from './lib/stores/preferences';
   import { createQueueStore } from './lib/stores/queue';
+  import { createPlaybackFlow } from './lib/stores/playback-flow';
   import {
     applyRootFontSize,
     fontStack,
@@ -120,10 +120,6 @@
   });
   let metadataEditorSong: LocalSong | null = null;
   let isSavingMetadata = false;
-  let isHandlingTrackEnd = false;
-  let handledEndedPath: string | null = null;
-  let queuedNextForPath: string | null = null;
-  let queuedNextPath: string | null = null;
   let taskbarSupported = false;
   let previousControlSync = { path: null as string | null, playing: false };
   $: bottomRowSize = '96px';
@@ -191,6 +187,31 @@
     window.localStorage.setItem('orca.fullPlayerLyricsOpen', String(fullPlayerLyricsOpen));
   }
 
+  const playbackFlow = createPlaybackFlow({
+    playbackStore,
+    queueStore,
+    getPlayback: () => playback,
+    getSongs: () => songs,
+    getSelectedSong: () => selectedSong,
+    getSelectedPath: () => selectedPath,
+    setSelectedPath: (path) => (selectedPath = path),
+    getOrderedPlaybackSongs: () => orderedPlaybackSongs,
+    getQueueOrderPaths: () => queueOrderPaths,
+    getQueueRemovedPathSet: () => queueRemovedPathSet,
+    getShufflePlayedPathSet: () => queueState.shufflePlayedPaths,
+    getGaplessPlayback: () => gaplessPlayback,
+    getShuffleEnabled: () => shuffleEnabled,
+    getRepeatMode: () => repeatMode,
+    onPlaybackStateChange: (isPlaying) => {
+      if (taskbarSupported) {
+        void setPlaybackState(isPlaying).catch(() => {});
+      }
+    },
+    onPlaybackError: (error) => {
+      status = error instanceof Error ? error.message : String(error);
+    }
+  });
+
   onMount(() => {
     preferencesStore.load();
     theme = readStoredString('orca.theme', 'default', ['default']);
@@ -225,7 +246,7 @@
       await playbackStore.restoreVolume();
     })();
 
-    playbackStore.startPolling(handlePlaybackSnapshot);
+    playbackStore.startPolling(playbackFlow.handlePlaybackSnapshot);
 
     window.addEventListener('keydown', handleKeydown);
 
@@ -344,8 +365,7 @@
   function setGaplessPlayback(enabled: boolean) {
     preferencesStore.setGaplessPlayback(enabled);
     if (!enabled) {
-      queuedNextForPath = null;
-      queuedNextPath = null;
+      playbackFlow.clearQueuedNext();
     }
   }
 
@@ -386,122 +406,6 @@
 
     if (metadataEditorSong) {
       metadataEditorSong = songs.find((song) => song.path === metadataEditorSong?.path) ?? metadataEditorSong;
-    }
-  }
-
-  async function handlePlaybackSnapshot(nextPlayback: PlaybackState) {
-    const previousPlayback = playback;
-    playbackStore.set(nextPlayback);
-
-    if (previousPlayback.current_path !== nextPlayback.current_path) {
-      selectedPath = nextPlayback.current_path;
-      queuedNextForPath = null;
-      queuedNextPath = null;
-      handledEndedPath = null;
-      
-      // If we seamlessly transitioned out of the context (artist/album) into the full library,
-      // clear the context so UI and Prev/Next buttons use the full library again.
-      if (nextPlayback.current_path && queueStore.hasContext() && !queueOrderPaths.includes(nextPlayback.current_path)) {
-        queueStore.clearContext();
-      }
-    } else if (previousPlayback.is_playing && previousPlayback.position_ms > nextPlayback.position_ms + 1000) {
-      queuedNextForPath = null;
-      queuedNextPath = null;
-      handledEndedPath = null;
-    }
-
-    if (taskbarSupported && previousPlayback.is_playing !== nextPlayback.is_playing) {
-      void setPlaybackState(nextPlayback.is_playing).catch(() => {});
-    }
-
-    await maybeQueueNextTrack(nextPlayback);
-
-    if (!nextPlayback.current_path || isHandlingTrackEnd || handledEndedPath === nextPlayback.current_path) {
-      return;
-    }
-
-    const endingPosition = Math.max(previousPlayback.position_ms, nextPlayback.position_ms);
-    const nearEnd = nextPlayback.duration_ms > 0 && endingPosition >= Math.max(0, nextPlayback.duration_ms - 1500);
-    const playbackStoppedAtEnd =
-      previousPlayback.current_path === nextPlayback.current_path &&
-      previousPlayback.is_playing &&
-      !nextPlayback.is_playing &&
-      nearEnd;
-
-    if (!playbackStoppedAtEnd) {
-      return;
-    }
-
-    handledEndedPath = nextPlayback.current_path;
-    isHandlingTrackEnd = true;
-    try {
-      await handleTrackEnded(nextPlayback.current_path);
-    } finally {
-      isHandlingTrackEnd = false;
-    }
-  }
-
-  async function maybeQueueNextTrack(nextPlayback: PlaybackState) {
-    if (!gaplessPlayback || !nextPlayback.current_path || !nextPlayback.is_playing || nextPlayback.duration_ms <= 0) {
-      return;
-    }
-
-    const remainingMs = nextPlayback.duration_ms - nextPlayback.position_ms;
-    if (remainingMs > 5000 || remainingMs < 0) {
-      return;
-    }
-
-    if (queuedNextForPath === nextPlayback.current_path && queuedNextPath) {
-      return;
-    }
-
-    let nextSong = pickNextSong(nextPlayback.current_path);
-
-    // Same fallback as handleTrackEnded: if context is done, peek into full library
-    if (!nextSong && queueStore.hasContext() && repeatMode === 'off') {
-      const fullLibrary = songs.filter((s) => !queueRemovedPathSet.has(s.path) || s.path === nextPlayback.current_path);
-      const currentIndexInLibrary = fullLibrary.findIndex((s) => s.path === nextPlayback.current_path);
-      if (currentIndexInLibrary >= 0 && currentIndexInLibrary < fullLibrary.length - 1) {
-        nextSong = fullLibrary[currentIndexInLibrary + 1];
-      }
-    }
-
-    if (!nextSong) {
-      return;
-    }
-
-    queuedNextForPath = nextPlayback.current_path;
-    queuedNextPath = nextSong.path;
-
-    try {
-      await queueNextPlayback(nextSong.path);
-    } catch {
-      queuedNextForPath = null;
-      queuedNextPath = null;
-    }
-  }
-
-  function pickNextSong(currentPath: string) {
-    return queueStore.pickNext(orderedPlaybackSongs, currentPath, shuffleEnabled, repeatMode);
-  }
-
-
-  async function handleTrackEnded(path: string) {
-    let nextSong = pickNextSong(path);
-
-    // If the context (artist/album) is exhausted and repeat is off,
-    // fall back to the full library and continue from the next song.
-    if (!nextSong && queueStore.hasContext() && repeatMode === 'off') {
-      const fullLibrary = songs.filter((s) => !queueRemovedPathSet.has(s.path) || s.path === path);
-      const currentIndexInLibrary = fullLibrary.findIndex((s) => s.path === path);
-      if (currentIndexInLibrary >= 0 && currentIndexInLibrary < fullLibrary.length - 1) {
-        queueStore.clearContext();
-        nextSong = fullLibrary[currentIndexInLibrary + 1];
-      }
-    }
-
-    if (nextSong) {
-      await chooseSong(nextSong);
     }
   }
 
@@ -818,106 +722,28 @@
   }
 
   async function chooseSong(song: LocalSong, contextSongs?: LocalSong[]) {
-    handledEndedPath = null;
-    queuedNextForPath = null;
-    queuedNextPath = null;
-    selectedPath = song.path;
-    if (contextSongs && contextSongs.length) {
-      queueStore.setContext(contextSongs, song.path);
-    } else {
-      queueStore.recordPlayed(song.path);
-    }
-    try {
-      await playbackStore.play(song.path);
-    } catch (error) {
-      status = error instanceof Error ? error.message : String(error);
-    }
-  }
-
-  async function playSongByOffset(offset: number) {
-    const currentPath = playback.current_path ?? selectedPath;
-    const currentIndex = orderedPlaybackSongs.findIndex((song) => song.path === currentPath);
-    if (currentIndex < 0 || orderedPlaybackSongs.length === 0) {
-      return;
-    }
-
-    if (orderedPlaybackSongs.length === 1) {
-      return;
-    }
-
-    if (shuffleEnabled && orderedPlaybackSongs.length > 1) {
-      // In shuffle mode: pick a random unplayed song.
-      // If all songs have been played and repeat is off, stop.
-      const unplayed = orderedPlaybackSongs.filter((s) => !queueState.shufflePlayedPaths.has(s.path));
-      if (unplayed.length === 0) {
-        if (repeatMode === 'off') {
-          return; // album/context is over
-        }
-        // repeat all: reset and play again
-        queueStore.resetShuffle(currentPath ?? '');
-        const candidates = orderedPlaybackSongs.filter((s) => s.path !== currentPath);
-        if (!candidates.length) return;
-        const next = candidates[Math.floor(Math.random() * candidates.length)];
-        await chooseSong(next);
-        return;
-      }
-      const next = unplayed[Math.floor(Math.random() * unplayed.length)];
-      await chooseSong(next);
-      return;
-    }
-
-    let nextIndex = currentIndex + offset;
-    
-    // If skipping past the end of the context (artist/album) and repeat is off,
-    // transition to the next song in the full library instead of looping back.
-    if (nextIndex >= orderedPlaybackSongs.length && queueStore.hasContext() && repeatMode === 'off') {
-      const fullLibrary = songs.filter((s) => !queueRemovedPathSet.has(s.path) || s.path === currentPath);
-      const currentIndexInLibrary = fullLibrary.findIndex((s) => s.path === currentPath);
-      if (currentIndexInLibrary >= 0 && currentIndexInLibrary < fullLibrary.length - 1) {
-        queueStore.clearContext();
-        await chooseSong(fullLibrary[currentIndexInLibrary + 1]);
-        return;
-      }
-    }
-
-    // Wrap around for Prev button, or Next button if repeat is 'all' or no context is set
-    nextIndex = (nextIndex + orderedPlaybackSongs.length) % orderedPlaybackSongs.length;
-    await chooseSong(orderedPlaybackSongs[nextIndex]);
+    await playbackFlow.chooseSong(song, contextSongs);
   }
 
   async function playPreviousSong() {
-    await playSongByOffset(-1);
+    await playbackFlow.playPreviousSong();
   }
 
   async function playNextSong() {
-    await playSongByOffset(1);
+    await playbackFlow.playNextSong();
   }
 
   async function togglePlayback() {
-    if (!playback.current_path && selectedSong) {
-      await chooseSong(selectedSong);
-      return;
-    }
-
-    handledEndedPath = null;
-    queuedNextForPath = null;
-    queuedNextPath = null;
-    await (playback.is_playing ? playbackStore.pause() : playbackStore.resume());
+    await playbackFlow.togglePlayback();
   }
 
   async function seek(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
-    handledEndedPath = null;
-    queuedNextForPath = null;
-    queuedNextPath = null;
-    await playbackStore.seek(Number(target.value));
+    await playbackFlow.seek(Number(target.value));
   }
 
   async function seekToPosition(positionMs: number) {
-    handledEndedPath = null;
-    queuedNextForPath = null;
-    queuedNextPath = null;
-    await playbackStore.seek(positionMs);
+    await playbackFlow.seek(positionMs);
   }
 
   async function changeVolume(event: Event) {
