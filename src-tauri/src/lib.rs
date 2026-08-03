@@ -3,57 +3,26 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicUsize, Ordering},
-        mpsc, Arc, Mutex,
+        Arc, Mutex,
     },
     time::Duration,
 };
 
 use orca_core::{
-    audio_engine::{self, AudioCommand, PlaybackState, VisualizerData},
+    audio_engine::{self, AudioCommand, PlaybackState},
     db,
     library::{LocalSong, SongMetadataUpdate},
 };
 use tauri::{Emitter, Manager, State};
 
+mod state;
+
+use state::{
+    artwork_dir, load_state, normalize_path, playback_snapshot_from, LibrarySnapshot, OrcaState,
+    SharedOrcaState,
+};
+
 const SETTING_LIBRARY_SCAN_ROOTS: &str = "library_scan_roots";
-
-struct OrcaState {
-    db_conn: rusqlite::Connection,
-    artwork_dir: PathBuf,
-    songs: Vec<LocalSong>,
-    audio_tx: mpsc::Sender<AudioCommand>,
-    playback_state: Arc<Mutex<PlaybackState>>,
-    #[allow(dead_code)]
-    visualizer_data: VisualizerData,
-    media_controls: Option<souvlaki::MediaControls>,
-}
-
-struct SharedOrcaState(Mutex<OrcaState>);
-
-#[derive(serde::Serialize)]
-struct LibrarySnapshot {
-    songs: Vec<LocalSong>,
-    playlists: Vec<db::Playlist>,
-    artists: Vec<db::ArtistEntry>,
-    albums: Vec<db::AlbumEntry>,
-    genres: Vec<db::GenreEntry>,
-    playback: PlaybackState,
-    folder_count: usize,
-}
-
-fn app_data_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
-        .join("orca")
-}
-
-fn artwork_dir() -> PathBuf {
-    app_data_dir().join("artwork")
-}
-
-fn normalize_path(path: PathBuf) -> PathBuf {
-    path.canonicalize().unwrap_or(path)
-}
 
 fn load_scan_roots(state: &OrcaState) -> Vec<PathBuf> {
     db::get_setting(&state.db_conn, SETTING_LIBRARY_SCAN_ROOTS)
@@ -162,14 +131,6 @@ where
     Ok(songs)
 }
 
-fn playback_snapshot_from(state: &OrcaState) -> PlaybackState {
-    state
-        .playback_state
-        .lock()
-        .map(|snapshot| snapshot.clone())
-        .unwrap_or_default()
-}
-
 fn snapshot_from_state(state: &OrcaState) -> Result<LibrarySnapshot, String> {
     Ok(LibrarySnapshot {
         songs: state.songs.clone(),
@@ -187,29 +148,6 @@ fn refresh_edited_song(state: &mut OrcaState, path: PathBuf) -> Result<LibrarySn
     db::save_songs_to_db(&state.db_conn, &[song])?;
     state.songs = db::get_all_songs(&state.db_conn)?;
     snapshot_from_state(state)
-}
-
-fn load_state() -> Result<OrcaState, String> {
-    let app_dir = app_data_dir();
-    let artwork_dir = artwork_dir();
-    std::fs::create_dir_all(&app_dir).map_err(|error| error.to_string())?;
-    std::fs::create_dir_all(&artwork_dir).map_err(|error| error.to_string())?;
-
-    let conn = db::init_db(app_dir)?;
-    db::migrate_inline_artwork_to_files(&conn, &artwork_dir)?;
-    let songs = db::get_all_songs(&conn)?;
-    let (audio_tx, playback_state, visualizer_data) =
-        audio_engine::spawn_audio_thread::<fn(&str, u64)>(None);
-
-    Ok(OrcaState {
-        db_conn: conn,
-        artwork_dir,
-        songs,
-        audio_tx,
-        playback_state,
-        visualizer_data,
-        media_controls: None,
-    })
 }
 
 #[tauri::command]
