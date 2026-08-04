@@ -9,25 +9,8 @@
   import QueuePanel from './lib/components/QueuePanel.svelte';
   import Sidebar from './lib/components/Sidebar.svelte';
   import {
-    addSongToPlaylist,
     artworkUrl,
-    chooseSongCover,
-    choosePlaylistCover,
-    chooseArtistCover,
-    removeArtistCover,
-    chooseAlbumCover,
-    removeAlbumCover,
-    createPlaylist,
-    deletePlaylist,
-    libraryFolderCount,
-    playlistSongIds,
-    removePlaylistCover,
-    removeSongCover,
-    removeSongFromPlaylist,
-    renamePlaylist,
-    updateSongMetadata,
     updateMediaControls,
-    fetchArtistArtworkManual,
     fetchAlbumArtworkManual,
     fetchAllMissingArtwork
   } from './lib/tauri';
@@ -42,6 +25,7 @@
   import { createPreferencesStore } from './lib/stores/preferences';
   import { createQueueStore } from './lib/stores/queue';
   import { artworkSuspended } from './lib/stores/artwork-visibility';
+  import { createLibraryActions } from './lib/stores/library-actions';
   import { createPlaybackFlow } from './lib/stores/playback-flow';
   import {
     applyRootFontSize,
@@ -50,7 +34,7 @@
     sampleArtworkAccent,
     syncCustomFont
   } from './lib/app-utils';
-  import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, SongMetadataUpdate, ArtistEntry, AlbumEntry, GenreEntry } from './lib/types';
+  import type { LibrarySnapshot, LocalSong, PlaybackState, Playlist, ArtistEntry, AlbumEntry, GenreEntry } from './lib/types';
 
   const libraryStore = createLibraryStore();
   let songs: LocalSong[] = [];
@@ -423,6 +407,37 @@
     }
   }
 
+  const {
+    addFolder,
+    refreshLibrary,
+    addPlaylist,
+    removeScanRoot,
+    renameExistingPlaylist,
+    deleteExistingPlaylist,
+    handleChoosePlaylistCover,
+    handleRemovePlaylistCover,
+    handleFetchArtistArtworkManual,
+    handleFetchAlbumArtworkManual,
+    chooseExistingArtistCover,
+    clearExistingArtistCover,
+    chooseExistingAlbumCover,
+    clearExistingAlbumCover,
+    loadPlaylistSongs,
+    addToPlaylist,
+    editSongMetadata,
+    saveSongMetadata,
+    replaceSongCover,
+    clearSongCover,
+    removeFromPlaylist
+  } = createLibraryActions({
+    libraryStore,
+    applySnapshot: applyLibrarySnapshot,
+    getAutoFetchArtwork: () => autoFetchArtwork,
+    setStatus: (message) => (status = message),
+    setMetadataEditorSong: (song) => (metadataEditorSong = song),
+    setSavingMetadata: (saving) => (isSavingMetadata = saving)
+  });
+
   async function handleKeydown(event: KeyboardEvent) {
     const key = event.key.toLowerCase();
     if (event.key === 'F11') {
@@ -554,185 +569,6 @@
       sampledArtwork = null;
       accentRgb = defaultAccentRgb;
     }
-  }
-
-  async function addFolder() {
-    status = 'Scanning folder...';
-    try {
-      const snapshot = await libraryStore.addFolder();
-      applyLibrarySnapshot(snapshot);
-      status = `${snapshot.songs.length} tracks loaded`;
-    } catch (error) {
-      status = error instanceof Error ? error.message : 'Scan cancelled';
-    }
-  }
-
-  async function refreshLibrary() {
-    status = 'Refreshing library...';
-    try {
-      const snapshot = await libraryStore.rescan();
-      applyLibrarySnapshot(snapshot);
-      status = `${snapshot.songs.length} tracks loaded`;
-      if (autoFetchArtwork) {
-        void fetchAllMissingArtwork();
-      }
-    } catch (error) {
-      status = error instanceof Error ? error.message : 'Refresh failed';
-    }
-  }
-
-  async function addPlaylist(name: string) {
-    libraryStore.setPlaylists(await createPlaylist(name));
-  }
-
-  async function removeScanRoot(root: string) {
-    status = 'Removing folder...';
-    try {
-      const snapshot = await libraryStore.removeScanRoot(root);
-      applyLibrarySnapshot(snapshot);
-      status = `${snapshot.songs.length} tracks loaded`;
-    } catch (error) {
-      status = error instanceof Error ? error.message : 'Could not remove folder';
-    }
-  }
-
-  async function renameExistingPlaylist(playlistId: number, name: string) {
-    libraryStore.setPlaylists(await renamePlaylist(playlistId, name));
-    status = `Renamed playlist to ${name}`;
-  }
-
-  async function deleteExistingPlaylist(playlistId: number) {
-    libraryStore.setPlaylists(await deletePlaylist(playlistId));
-    status = 'Deleted playlist';
-  }
-
-  async function handleChoosePlaylistCover(playlistId: number) {
-    libraryStore.setPlaylists(await choosePlaylistCover(playlistId));
-    status = 'Updated playlist cover';
-  }
-
-  async function handleRemovePlaylistCover(playlistId: number) {
-    libraryStore.setPlaylists(await removePlaylistCover(playlistId));
-    status = 'Removed playlist cover';
-  }
-
-  async function handleFetchArtistArtworkManual(artistName: string) {
-    try {
-      const snapshot = await fetchArtistArtworkManual(artistName);
-      applyLibrarySnapshot(snapshot);
-      status = 'Fetched artist artwork';
-    } catch (e: any) {
-      status = `Error: ${e}`;
-      console.error(e);
-    }
-  }
-
-  async function handleFetchAlbumArtworkManual(albumKey: string, artist: string, album: string) {
-    try {
-      const snapshot = await fetchAlbumArtworkManual(albumKey, artist, album);
-      applyLibrarySnapshot(snapshot);
-      status = 'Fetched album artwork';
-    } catch (e: any) {
-      status = `Error: ${e}`;
-      console.error(e);
-    }
-  }
-
-  async function chooseExistingArtistCover(artistName: string) {
-    const snapshot = await chooseArtistCover(artistName);
-    applyLibrarySnapshot(snapshot);
-    status = 'Updated artist cover';
-  }
-
-  async function clearExistingArtistCover(artistName: string) {
-    const snapshot = await removeArtistCover(artistName);
-    applyLibrarySnapshot(snapshot);
-    status = 'Removed artist cover';
-  }
-
-  async function chooseExistingAlbumCover(albumKey: string) {
-    const snapshot = await chooseAlbumCover(albumKey);
-    applyLibrarySnapshot(snapshot);
-    status = 'Updated album cover';
-  }
-
-  async function clearExistingAlbumCover(albumKey: string) {
-    const snapshot = await removeAlbumCover(albumKey);
-    applyLibrarySnapshot(snapshot);
-    status = 'Removed album cover';
-  }
-
-  async function loadPlaylistSongs(playlistId: number) {
-    return playlistSongIds(playlistId);
-  }
-
-  async function addToPlaylist(playlistId: number, song: LocalSong) {
-    if (song.id === null) {
-      status = 'Song is not saved in the library yet';
-      return;
-    }
-
-    const updatedPlaylists = await addSongToPlaylist(playlistId, song.id);
-    libraryStore.setPlaylists(updatedPlaylists);
-    const playlist = updatedPlaylists.find((item) => item.id === playlistId);
-    status = playlist ? `Added to ${playlist.name}` : 'Added to playlist';
-  }
-
-  function editSongMetadata(song: LocalSong) {
-    metadataEditorSong = song;
-  }
-
-  async function saveSongMetadata(update: SongMetadataUpdate) {
-    isSavingMetadata = true;
-    status = 'Saving metadata...';
-    try {
-      const snapshot = await updateSongMetadata(update);
-      applyLibrarySnapshot(snapshot);
-      metadataEditorSong = null;
-      status = 'Updated song metadata';
-    } catch (error) {
-      status = error instanceof Error ? error.message : 'Could not save metadata';
-    } finally {
-      isSavingMetadata = false;
-    }
-  }
-
-  async function replaceSongCover(song: LocalSong) {
-    isSavingMetadata = true;
-    status = 'Choosing cover...';
-    try {
-      const snapshot = await chooseSongCover(song.path);
-      applyLibrarySnapshot(snapshot);
-      status = 'Updated song cover';
-    } catch (error) {
-      status = error instanceof Error ? error.message : 'Cover change cancelled';
-    } finally {
-      isSavingMetadata = false;
-    }
-  }
-
-  async function clearSongCover(song: LocalSong) {
-    isSavingMetadata = true;
-    status = 'Removing cover...';
-    try {
-      const snapshot = await removeSongCover(song.path);
-      applyLibrarySnapshot(snapshot);
-      status = 'Removed song cover';
-    } catch (error) {
-      status = error instanceof Error ? error.message : 'Could not remove cover';
-    } finally {
-      isSavingMetadata = false;
-    }
-  }
-
-  async function removeFromPlaylist(playlistId: number, song: LocalSong) {
-    if (song.id === null) {
-      status = 'Song is not saved in the library yet';
-      return;
-    }
-
-    libraryStore.setPlaylists(await removeSongFromPlaylist(playlistId, song.id));
-    status = `Removed ${song.title} from playlist`;
   }
 
   async function chooseSong(song: LocalSong, contextSongs?: LocalSong[]) {
