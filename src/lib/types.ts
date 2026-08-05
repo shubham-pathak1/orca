@@ -37,6 +37,17 @@ export type Playlist = {
   song_count: number;
 };
 
+export type PlaylistImportResult = {
+  playlists: Playlist[];
+  playlist_name: string;
+  imported_tracks: number;
+  unavailable_tracks: number;
+};
+
+export type PlaylistExportResult = {
+  exported_tracks: number;
+};
+
 export type ArtistEntry = {
   name: string;
   song_count: number;

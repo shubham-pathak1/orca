@@ -416,6 +416,8 @@
     deleteExistingPlaylist,
     handleChoosePlaylistCover,
     handleRemovePlaylistCover,
+    importExistingPlaylist,
+    exportExistingPlaylist,
     handleFetchArtistArtworkManual,
     handleFetchAlbumArtworkManual,
     chooseExistingArtistCover,
@@ -652,6 +654,8 @@
       onDeletePlaylist={deleteExistingPlaylist}
       onChoosePlaylistCover={handleChoosePlaylistCover}
       onRemovePlaylistCover={handleRemovePlaylistCover}
+      onImportPlaylist={importExistingPlaylist}
+      onExportPlaylist={exportExistingPlaylist}
       onChooseArtistCover={chooseExistingArtistCover}
       onRemoveArtistCover={clearExistingArtistCover}
       onChooseAlbumCover={chooseExistingAlbumCover}

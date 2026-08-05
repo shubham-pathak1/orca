@@ -21,8 +21,9 @@ pub use catalog::{get_albums, get_artists, get_genres, AlbumEntry, ArtistEntry, 
 pub use media_artwork::migrate_inline_artwork_to_files;
 
 pub use playlists::{
-    add_to_playlist, create_playlist, delete_playlist, get_playlist_song_ids, get_playlists,
-    remove_from_playlist, rename_playlist, update_playlist_cover, Playlist,
+    add_to_playlist, create_playlist, delete_playlist, get_playlist_export_songs,
+    get_playlist_song_ids, get_playlists, get_song_path_index, remove_from_playlist,
+    rename_playlist, update_playlist_cover, Playlist,
 };
 
 pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {

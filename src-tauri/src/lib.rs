@@ -107,6 +107,21 @@ fn remove_playlist_cover(
 }
 
 #[tauri::command]
+fn import_playlist(
+    state: State<'_, SharedOrcaState>,
+) -> Result<commands::playlists::PlaylistImportResult, String> {
+    commands::playlists::import_playlist(state)
+}
+
+#[tauri::command]
+fn export_playlist(
+    playlist_id: i64,
+    state: State<'_, SharedOrcaState>,
+) -> Result<commands::playlists::PlaylistExportResult, String> {
+    commands::playlists::export_playlist(playlist_id, state)
+}
+
+#[tauri::command]
 fn choose_artist_cover(
     artist_name: String,
     state: State<'_, SharedOrcaState>,
@@ -356,6 +371,8 @@ pub fn run() {
             playlist_song_ids,
             choose_playlist_cover,
             remove_playlist_cover,
+            import_playlist,
+            export_playlist,
             choose_artist_cover,
             remove_artist_cover,
             choose_album_cover,

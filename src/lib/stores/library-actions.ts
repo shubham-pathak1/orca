@@ -9,6 +9,8 @@ import {
   fetchAlbumArtworkManual,
   fetchArtistArtworkManual,
   fetchAllMissingArtwork,
+  exportPlaylist,
+  importPlaylist,
   playlistSongIds,
   removeAlbumCover,
   removeArtistCover,
@@ -106,6 +108,30 @@ export function createLibraryActions({
   async function handleRemovePlaylistCover(playlistId: number) {
     libraryStore.setPlaylists(await removePlaylistCover(playlistId));
     setStatus('Removed playlist cover');
+  }
+
+  async function importExistingPlaylist() {
+    setStatus('Importing playlist...');
+    try {
+      const result = await importPlaylist();
+      libraryStore.setPlaylists(result.playlists);
+      const unavailable = result.unavailable_tracks
+        ? `, ${result.unavailable_tracks} unavailable`
+        : '';
+      setStatus(`Imported ${result.imported_tracks} tracks into ${result.playlist_name}${unavailable}`);
+    } catch (error) {
+      setStatus(messageFrom(error, 'Could not import playlist'));
+    }
+  }
+
+  async function exportExistingPlaylist(playlistId: number) {
+    setStatus('Exporting playlist...');
+    try {
+      const result = await exportPlaylist(playlistId);
+      setStatus(`Exported ${result.exported_tracks} tracks`);
+    } catch (error) {
+      setStatus(messageFrom(error, 'Could not export playlist'));
+    }
   }
 
   async function handleFetchArtistArtworkManual(artistName: string) {
@@ -227,6 +253,8 @@ export function createLibraryActions({
     deleteExistingPlaylist,
     handleChoosePlaylistCover,
     handleRemovePlaylistCover,
+    importExistingPlaylist,
+    exportExistingPlaylist,
     handleFetchArtistArtworkManual,
     handleFetchAlbumArtworkManual,
     chooseExistingArtistCover,

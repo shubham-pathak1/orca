@@ -16,6 +16,8 @@
   export let onDeletePlaylist: (playlistId: number) => Promise<void> | void = () => {};
   export let onChoosePlaylistCover: (playlistId: number) => Promise<void> | void = () => {};
   export let onRemovePlaylistCover: (playlistId: number) => Promise<void> | void = () => {};
+  export let onImportPlaylist: () => Promise<void> | void = () => {};
+  export let onExportPlaylist: (playlistId: number) => Promise<void> | void = () => {};
   export let onOpenSongMenu: (event: MouseEvent, song: LocalSong) => void = () => {};
 
   // Exported so LibraryView's shared song context menu knows we're inside a playlist
@@ -164,6 +166,10 @@
     if (selectedPlaylist) await onRemovePlaylistCover(selectedPlaylist.id);
   }
 
+  async function exportSelectedPlaylist() {
+    if (selectedPlaylist) await onExportPlaylist(selectedPlaylist.id);
+  }
+
   function playFirstSong(sourceSongs: LocalSong[]) {
     const first = sourceSongs[0];
     if (first) onChooseSong(first, sourceSongs);
@@ -204,6 +210,12 @@
     const playlist = playlistContextMenu?.playlist;
     closePlaylistContextMenu();
     if (playlist) await onChoosePlaylistCover(playlist.id);
+  }
+
+  async function exportContextPlaylist() {
+    const playlist = playlistContextMenu?.playlist;
+    closePlaylistContextMenu();
+    if (playlist) await onExportPlaylist(playlist.id);
   }
 
   async function confirmDeletePlaylist() {
@@ -288,6 +300,12 @@
               title="Play playlist" on:click={() => playFirstSong(selectedPlaylistVisibleSongs)}>
               <svg class="ml-0.5 h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
             </button>
+            <button class="grid h-11 w-11 place-items-center rounded-full border border-white/12 text-white/72 transition hover:border-white/24 hover:bg-white/[0.08] hover:text-white"
+              type="button" title="Export playlist as M3U" aria-label="Export playlist as M3U" on:click={exportSelectedPlaylist}>
+              <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -334,6 +352,10 @@
       <button class="h-10 rounded-md border border-white/14 px-4 text-sm font-bold text-white transition hover:bg-white/[0.08] disabled:opacity-40"
         disabled={!newPlaylistName.trim() || isCreatingPlaylist}>
         Create Playlist
+      </button>
+      <button class="h-10 rounded-md border border-white/14 px-4 text-sm font-bold text-white/78 transition hover:bg-white/[0.08] hover:text-white"
+        type="button" on:click={onImportPlaylist}>
+        Import M3U
       </button>
     </form>
 
@@ -393,6 +415,12 @@
         <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" />
       </svg>
       Add Cover
+    </button>
+    <button role="menuitem" class="flex h-9 w-full items-center gap-2.5 px-3 text-left text-xs font-semibold text-white/78 transition hover:bg-white/[0.08] hover:text-white" on:click={exportContextPlaylist}>
+      <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
+      </svg>
+      Export M3U
     </button>
     <button role="menuitem" class="flex h-9 w-full items-center gap-2.5 px-3 text-left text-xs font-semibold text-red-100/72 transition hover:bg-red-500/10 hover:text-red-100" on:click={deleteContextPlaylist}>
       <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

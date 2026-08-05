@@ -38,6 +38,8 @@
   export let onDeletePlaylist: (playlistId: number) => Promise<void> | void = () => {};
   export let onChoosePlaylistCover: (playlistId: number) => Promise<void> | void = () => {};
   export let onRemovePlaylistCover: (playlistId: number) => Promise<void> | void = () => {};
+  export let onImportPlaylist: () => Promise<void> | void = () => {};
+  export let onExportPlaylist: (playlistId: number) => Promise<void> | void = () => {};
   export let onRemoveSongFromPlaylist: (playlistId: number, song: LocalSong) => Promise<void> | void = () => {};
 
   // ── Cover actions ──────────────────────────────────────────────────────────
@@ -246,6 +248,7 @@
           {onChooseSong} {onCreatePlaylist} {onLoadPlaylistSongIds}
           {onRenamePlaylist} {onDeletePlaylist}
           {onChoosePlaylistCover} {onRemovePlaylistCover}
+          {onImportPlaylist} {onExportPlaylist}
           onOpenSongMenu={openSongMenu}
           bind:selectedPlaylist={activePlaylist}
           bind:selectedPlaylistSongIds={activePlaylistSongIds}

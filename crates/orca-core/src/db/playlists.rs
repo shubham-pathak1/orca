@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use rusqlite::{params, Connection};
 
 #[derive(serde::Serialize)]
@@ -6,6 +8,13 @@ pub struct Playlist {
     pub name: String,
     pub cover_path: Option<String>,
     pub song_count: i64,
+}
+
+pub struct PlaylistSongExport {
+    pub path: String,
+    pub title: String,
+    pub artist: String,
+    pub duration: u32,
 }
 
 pub fn create_playlist(
@@ -107,6 +116,46 @@ pub fn get_playlist_song_ids(conn: &Connection, playlist_id: i64) -> Result<Vec<
         .map_err(|error| error.to_string())?;
     let rows = statement
         .query_map(params![playlist_id], |row| row.get(0))
+        .map_err(|error| error.to_string())?;
+
+    rows.map(|row| row.map_err(|error| error.to_string()))
+        .collect()
+}
+
+pub fn get_song_path_index(conn: &Connection) -> Result<HashMap<String, i64>, String> {
+    let mut statement = conn
+        .prepare("SELECT id, path FROM songs")
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|error| error.to_string())?;
+
+    rows.map(|row| row.map_err(|error| error.to_string()))
+        .collect()
+}
+
+pub fn get_playlist_export_songs(
+    conn: &Connection,
+    playlist_id: i64,
+) -> Result<Vec<PlaylistSongExport>, String> {
+    let mut statement = conn
+        .prepare(
+            "SELECT s.path, s.title, s.artist, s.duration
+             FROM playlist_songs ps
+             INNER JOIN songs s ON s.id = ps.song_id
+             WHERE ps.playlist_id = ?1
+             ORDER BY ps.position ASC",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(params![playlist_id], |row| {
+            Ok(PlaylistSongExport {
+                path: row.get(0)?,
+                title: row.get(1)?,
+                artist: row.get(2)?,
+                duration: row.get(3)?,
+            })
+        })
         .map_err(|error| error.to_string())?;
 
     rows.map(|row| row.map_err(|error| error.to_string()))
