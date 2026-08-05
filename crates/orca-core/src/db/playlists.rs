@@ -127,7 +127,7 @@ pub fn get_song_path_index(conn: &Connection) -> Result<HashMap<String, i64>, St
         .prepare("SELECT id, path FROM songs")
         .map_err(|error| error.to_string())?;
     let rows = statement
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .query_map([], |row| Ok((row.get::<_, String>(1)?, row.get::<_, i64>(0)?)))
         .map_err(|error| error.to_string())?;
 
     rows.map(|row| row.map_err(|error| error.to_string()))

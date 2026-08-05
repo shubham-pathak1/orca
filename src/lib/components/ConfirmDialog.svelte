@@ -4,6 +4,7 @@
   export let message: string = '';
   export let confirmLabel: string = 'OK';
   export let cancelLabel: string = 'Cancel';
+  export let showCancel: boolean = true;
   export let onConfirm: () => void = () => {};
   export let onCancel: () => void = () => {};
 
@@ -35,7 +36,9 @@
         <p class="mt-2 text-sm text-white/64">{message}</p>
       </div>
       <div class="flex justify-end gap-3 border-t border-white/6 px-4 py-3">
-        <button type="button" class="h-9 rounded-md border border-white/10 px-3 text-sm text-white/64 hover:bg-white/[0.03]" on:click={onCancel}>{cancelLabel}</button>
+        {#if showCancel}
+          <button type="button" class="h-9 rounded-md border border-white/10 px-3 text-sm text-white/64 hover:bg-white/[0.03]" on:click={onCancel}>{cancelLabel}</button>
+        {/if}
         <button type="button" class="h-9 rounded-md bg-[var(--accent)] px-3 text-sm font-bold text-black" on:click={onConfirm}>{confirmLabel}</button>
       </div>
     </div>

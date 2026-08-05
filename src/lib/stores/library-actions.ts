@@ -42,6 +42,15 @@ function messageFrom(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
+function playlistImportMessage(error: unknown): string {
+  if (error === 'Playlist import cancelled') return 'Playlist import cancelled';
+  if (error === 'No tracks from this playlist are in your library') {
+    return 'None of this playlist\'s tracks are currently in your library';
+  }
+  console.error(error);
+  return 'Could not import playlist';
+}
+
 export function createLibraryActions({
   libraryStore,
   applySnapshot,
@@ -118,9 +127,13 @@ export function createLibraryActions({
       const unavailable = result.unavailable_tracks
         ? `, ${result.unavailable_tracks} unavailable`
         : '';
-      setStatus(`Imported ${result.imported_tracks} tracks into ${result.playlist_name}${unavailable}`);
+      const message = `Imported ${result.imported_tracks} tracks into ${result.playlist_name}${unavailable}`;
+      setStatus(message);
+      return message;
     } catch (error) {
-      setStatus(messageFrom(error, 'Could not import playlist'));
+      const message = playlistImportMessage(error);
+      setStatus(message);
+      return message;
     }
   }
 

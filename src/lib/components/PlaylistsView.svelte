@@ -16,7 +16,7 @@
   export let onDeletePlaylist: (playlistId: number) => Promise<void> | void = () => {};
   export let onChoosePlaylistCover: (playlistId: number) => Promise<void> | void = () => {};
   export let onRemovePlaylistCover: (playlistId: number) => Promise<void> | void = () => {};
-  export let onImportPlaylist: () => Promise<void> | void = () => {};
+  export let onImportPlaylist: () => Promise<string> | string = () => '';
   export let onExportPlaylist: (playlistId: number) => Promise<void> | void = () => {};
   export let onOpenSongMenu: (event: MouseEvent, song: LocalSong) => void = () => {};
 
@@ -30,6 +30,8 @@
   let detailQuery = '';
   let newPlaylistName = '';
   let isCreatingPlaylist = false;
+  let isImportingPlaylist = false;
+  let playlistTransferDialog: { title: string; message: string } | null = null;
   let editingPlaylistName = '';
   let playlistNameInput: HTMLInputElement;
   let isEditingPlaylistName = false;
@@ -108,6 +110,24 @@
     } finally {
       isCreatingPlaylist = false;
     }
+  }
+
+  async function importPlaylistFromFile() {
+    if (isImportingPlaylist) return;
+    isImportingPlaylist = true;
+    try {
+      const message = await onImportPlaylist();
+      playlistTransferDialog = {
+        title: message.startsWith('Imported ') ? 'Playlist imported' : 'Could not import playlist',
+        message
+      };
+    } finally {
+      isImportingPlaylist = false;
+    }
+  }
+
+  function closePlaylistTransferDialog() {
+    playlistTransferDialog = null;
   }
 
   export async function openPlaylist(playlist: Playlist) {
@@ -354,8 +374,8 @@
         Create Playlist
       </button>
       <button class="h-10 rounded-md border border-white/14 px-4 text-sm font-bold text-white/78 transition hover:bg-white/[0.08] hover:text-white"
-        type="button" on:click={onImportPlaylist}>
-        Import M3U
+        type="button" disabled={isImportingPlaylist} on:click={importPlaylistFromFile}>
+        {isImportingPlaylist ? 'Importing...' : 'Import M3U'}
       </button>
     </form>
 
@@ -439,4 +459,14 @@
   cancelLabel="Cancel"
   onConfirm={confirmDeletePlaylist}
   onCancel={cancelDeletePlaylist}
+/>
+
+<ConfirmDialog
+  open={Boolean(playlistTransferDialog)}
+  title={playlistTransferDialog?.title ?? ''}
+  message={playlistTransferDialog?.message ?? ''}
+  confirmLabel="OK"
+  showCancel={false}
+  onConfirm={closePlaylistTransferDialog}
+  onCancel={closePlaylistTransferDialog}
 />
