@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import { cacheLyrics, cachedLyrics } from '../tauri';
   import { estimateActiveLyricIndex, findActiveLyricIndex, lyricSeekPosition, parseLyrics, type LyricLine } from '../lyrics';
   import type { LocalSong, PlaybackState } from '../types';
 
@@ -15,6 +16,7 @@
   let centeredLyricIndex = -1;
   let centeredSongPath: string | null = null;
   let lastOpenSongPath: string | null = null;
+  let lyricsRequestId = 0;
 
   $: rawLyrics = song?.lyrics || (song?.path === fetchedLyricsSongPath ? fetchedLyrics : '');
   $: lyricLines = parseLyrics(rawLyrics);
@@ -35,7 +37,7 @@
     void centerActiveLyric();
   }
   $: if (open && song && !song.lyrics && song.path !== fetchedLyricsSongPath && lyricsStatus !== 'loading') {
-    void fetchLyrics(song);
+    void loadLyrics(song);
   }
 
   function seekToLyric(line: LyricLine) {
@@ -74,10 +76,21 @@
     });
   }
 
-  async function fetchLyrics(targetSong: LocalSong) {
+  async function loadLyrics(targetSong: LocalSong) {
+    const requestId = ++lyricsRequestId;
     fetchedLyricsSongPath = targetSong.path;
     fetchedLyrics = '';
     lyricsStatus = 'loading';
+
+    const cached = await cachedLyrics(targetSong.path);
+    if (requestId !== lyricsRequestId || song?.path !== targetSong.path) {
+      return;
+    }
+    if (cached) {
+      fetchedLyrics = cached;
+      lyricsStatus = 'idle';
+      return;
+    }
 
     if (!navigator.onLine) {
       lyricsStatus = 'offline';
@@ -107,8 +120,14 @@
       }
 
       const data = await response.json();
+      if (requestId !== lyricsRequestId || song?.path !== targetSong.path) {
+        return;
+      }
       fetchedLyrics = data.syncedLyrics || data.plainLyrics || '';
       lyricsStatus = fetchedLyrics ? 'idle' : 'not-found';
+      if (fetchedLyrics) {
+        void cacheLyrics(targetSong.path, fetchedLyrics);
+      }
     } catch {
       lyricsStatus = navigator.onLine ? 'error' : 'offline';
     }

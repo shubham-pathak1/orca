@@ -10,6 +10,7 @@
   export let onReplaceCover: (song: LocalSong) => Promise<void> | void = () => {};
   export let onRemoveCover: (song: LocalSong) => Promise<void> | void = () => {};
   export let onFetchAlbumArtwork: (song: LocalSong) => Promise<void> | void = () => {};
+  export let onImportLyrics: () => Promise<string | null> | string | null = () => null;
 
   let loadedPath: string | null = null;
   let title = '';
@@ -21,6 +22,7 @@
   let discNumber = '';
   let genre = '';
   let lyrics = '';
+  let isImportingLyrics = false;
 
   $: if (open && song && song.path !== loadedPath) {
     loadedPath = song.path;
@@ -66,6 +68,19 @@
       genre: genre.trim() || null,
       lyrics: lyrics.trim() || null
     });
+  }
+
+  async function importLyrics() {
+    if (isImportingLyrics) return;
+    isImportingLyrics = true;
+    try {
+      const importedLyrics = await onImportLyrics();
+      if (importedLyrics !== null) {
+        lyrics = importedLyrics;
+      }
+    } finally {
+      isImportingLyrics = false;
+    }
   }
 </script>
 
@@ -160,8 +175,15 @@
           </label>
         </div>
 
-        <label class="mt-5 grid gap-1 text-xs font-bold uppercase text-white/38">
-          Lyrics
+        <div class="mt-5 flex items-center justify-between gap-3 text-xs font-bold uppercase text-white/38">
+          <span>Lyrics</span>
+          <button class="h-8 rounded-md border border-white/10 px-2.5 text-[11px] font-bold normal-case text-white/64 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-45"
+            type="button" disabled={isImportingLyrics} on:click={importLyrics}>
+            {isImportingLyrics ? 'Importing...' : 'Import .lrc'}
+          </button>
+        </div>
+        <label class="mt-1 grid gap-1 text-xs font-bold uppercase text-white/38">
+          <span class="sr-only">Lyrics</span>
           <textarea
             class="min-h-56 resize-y rounded-md border border-white/10 bg-white/[0.045] p-3 text-sm normal-case leading-6 text-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--accent-mid)]"
             bind:value={lyrics}

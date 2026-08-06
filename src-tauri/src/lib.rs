@@ -122,6 +122,28 @@ fn export_playlist(
 }
 
 #[tauri::command]
+fn cached_lyrics(
+    path: String,
+    state: State<'_, SharedOrcaState>,
+) -> Result<Option<String>, String> {
+    commands::lyrics::cached_lyrics(path, state)
+}
+
+#[tauri::command]
+fn cache_lyrics(
+    path: String,
+    lyrics: String,
+    state: State<'_, SharedOrcaState>,
+) -> Result<(), String> {
+    commands::lyrics::cache_lyrics(path, lyrics, state)
+}
+
+#[tauri::command]
+fn pick_lyrics_file() -> Result<Option<String>, String> {
+    commands::lyrics::pick_lyrics_file()
+}
+
+#[tauri::command]
 fn choose_artist_cover(
     artist_name: String,
     state: State<'_, SharedOrcaState>,
@@ -373,6 +395,9 @@ pub fn run() {
             remove_playlist_cover,
             import_playlist,
             export_playlist,
+            cached_lyrics,
+            cache_lyrics,
+            pick_lyrics_file,
             choose_artist_cover,
             remove_artist_cover,
             choose_album_cover,

@@ -12,7 +12,8 @@
     artworkUrl,
     updateMediaControls,
     fetchAlbumArtworkManual,
-    fetchAllMissingArtwork
+    fetchAllMissingArtwork,
+    pickLyricsFile
   } from './lib/tauri';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { invoke } from '@tauri-apps/api/core';
@@ -772,6 +773,15 @@
       onSave={saveSongMetadata}
       onReplaceCover={replaceSongCover}
       onRemoveCover={clearSongCover}
+      onImportLyrics={async () => {
+        try {
+          return await pickLyricsFile();
+        } catch (error) {
+          status = 'Could not read lyrics file';
+          console.error(error);
+          return null;
+        }
+      }}
       onFetchAlbumArtwork={async (song) => {
         try {
           const albumKey = `${song.album_artist}:${song.album}`;

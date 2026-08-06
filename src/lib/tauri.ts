@@ -103,6 +103,18 @@ export async function exportPlaylist(playlistId: number): Promise<PlaylistExport
   return invoke<PlaylistExportResult>('export_playlist', { playlistId });
 }
 
+export async function cachedLyrics(path: string): Promise<string | null> {
+  return invoke<string | null>('cached_lyrics', { path }).catch(() => null);
+}
+
+export async function cacheLyrics(path: string, lyrics: string): Promise<void> {
+  return invoke<void>('cache_lyrics', { path, lyrics });
+}
+
+export async function pickLyricsFile(): Promise<string | null> {
+  return invoke<string | null>('pick_lyrics_file');
+}
+
 export async function chooseArtistCover(artistName: string): Promise<LibrarySnapshot> {
   return invoke<LibrarySnapshot>('choose_artist_cover', { artistName });
 }
