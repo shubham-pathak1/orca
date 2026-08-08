@@ -1,6 +1,6 @@
 {
   "name": "orca",
-  "version": "0.1.4",
+  "version": "0.1.5-alpha",
   "description": "Local-first desktop music player built with Svelte, Tauri, and Rust.",
   "private": true,
   "license": "MIT",
