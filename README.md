@@ -3,20 +3,20 @@
 Orca is a local music player for Windows built using Svelte 5, Tauri 2, and Rust.
 
 > [!IMPORTANT]
-> **Alpha Stage Release:** Orca is currently in active alpha. While it is fully ready for daily listening, it has not yet been benchmarked or stress-tested on libraries exceeding **5,000+ tracks**. If you encounter any visual quirks, bugs, or performance lags, please open an issue to help improve the project!
+> **Alpha release:** Orca is in active development. Performance and stability on libraries larger than **5,000 tracks** have not been broadly tested yet. Please report bugs or regressions through GitHub Issues.
 
 ---
 
 ## Key Features
 
-- **Fast Scanning**: Add local directories to scan and build your database instantly. Supports `MP3`, `FLAC`, `M4A`, `WAV`, `OGG`, `OPUS`, and `AIFF` / `AIF` audio files.
-- **Audio Engine**: Powered by `rodio` with crossfading support.
-- **Waveform Seekbars**: Smooth waveform seekbars generated from the track's audio channels.
-- **LRC Lyrics**: Sync with LRCLIB to fetch lyrics, with support for clicking lyric lines to seek.
-- **Metadata Editing**: Edit tags (title, artist, album, genre, cover art) directly in the app.
-- **Playlists**: Create and manage playlists, including custom playlist cover art.
-- **System Integration**: Taskbar hover controls, global media keys, and Windows SMTC media overlay support.
-- **Layouts**: Ambient artwork color backgrounds, sidebar navigation, queue management, and toggleable layout modes.
+- **Local library**: Scan local folders and keep them updated as files change. Supports `MP3`, `FLAC`, `M4A`, `WAV`, `OGG`, `OPUS`, and `AIFF` / `AIF`.
+- **Playback**: Rodio-based audio playback with gapless playback, queue controls, shuffle, repeat, and waveform or standard seeking.
+- **Waveforms**: Decode and cache waveform seekbars from the track audio.
+- **Lyrics**: Read embedded lyrics first, then fetch and cache timed or plain lyrics from LRCLIB. Click a lyric line to seek, or import a local `.lrc` file through the metadata editor.
+- **Metadata**: Edit track tags and cover art directly in the app.
+- **Playlists**: Create playlists, set custom covers, and import or export standard M3U playlists.
+- **Windows integration**: Taskbar controls, global media shortcuts, and Windows media controls.
+- **Player views**: Library, artists, albums, genres, playlists, queue, and a full-player lyrics view.
 
 ---
 
@@ -72,16 +72,16 @@ Start the development server with live reload:
 bun run tauri:dev
 ```
 
-To run the dev server with Rust optimizations (release-level audio decoding speed):
+To run the desktop app with Rust release optimizations:
 ```bash
-bun run tauri dev --release
+bun run tauri:dev -- --release
 ```
 
 ---
 
 ## Building a Release
 
-Orca uses **NSIS** to bundle a lightweight executable installer for Windows. Building MSI installers is disabled to simplify packaging.
+Orca uses **NSIS** to bundle a Windows executable installer. MSI installers are disabled to keep packaging simple.
 
 To build the NSIS installer:
 ```bash
