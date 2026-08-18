@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { artworkUrl } from '../tauri';
   import type { LocalSong, Playlist, ArtistEntry, AlbumEntry, GenreEntry } from '../types';
   import type { ActiveView } from '../navigation';
@@ -90,6 +91,8 @@
 
   // For cross-view navigation: artist detail → album detail
   let initialAlbumKey: string | null = null;
+  let artistsView: { openArtist: (name: string) => void } | null = null;
+  let albumsView: { openAlbum: (key: string) => void } | null = null;
 
   // Synced from child views to toggle page header visibility / height
   let artistsInDetail = false;
@@ -178,6 +181,19 @@
     initialAlbumKey = key;
     activeView = 'albums';
   }
+
+  export async function openArtist(name: string) {
+    activeView = 'artists';
+    await tick();
+    artistsView?.openArtist(name);
+  }
+
+  export async function openAlbum(key: string) {
+    activeView = 'albums';
+    await tick();
+    albumsView?.openAlbum(key);
+  }
+
 </script>
 
 <svelte:window on:click={closeAllFloating} on:keydown={handleGlobalKeydown} />
@@ -264,6 +280,7 @@
         />
       {:else if activeView === 'albums'}
         <AlbumsView
+          bind:this={albumsView}
           {albums} {songs} {query} {currentPath} {showQualityInfo}
           {onChooseSong} {onChooseAlbumCover} {onRemoveAlbumCover} {onFetchAlbumArtworkManual}
           {onAddSongsToQueue}
@@ -282,6 +299,7 @@
       {:else}
         <!-- artists (default fallback) -->
         <ArtistsView
+          bind:this={artistsView}
           {artists} {albums} {songs} {query} {currentPath}
           {onChooseSong} {onChooseArtistCover} {onRemoveArtistCover} {onFetchArtistArtworkManual}
           {onAddSongsToQueue}

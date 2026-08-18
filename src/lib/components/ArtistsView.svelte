@@ -116,7 +116,7 @@
     artistScrollTop = (event.currentTarget as HTMLDivElement).scrollTop;
   }
 
-  function openArtist(name: string) {
+  export function openArtist(name: string) {
     if (artistListEl) savedScrollTop = artistListEl.scrollTop;
     selectedArtistName = name;
     detailQuery = '';

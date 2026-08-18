@@ -23,6 +23,8 @@
   export let onToggleMute: () => void = () => {};
   export let onAdjustVolume: (amount: number) => void = () => {};
   export let onOpenFullPlayer: () => void = () => {};
+  export let onOpenArtist: (artist: string) => void = () => {};
+  export let onOpenAlbum: (albumKey: string) => void = () => {};
   export let queueOpen = false;
   export let onToggleQueue: () => void = () => {};
   export let alwaysVisible = false;
@@ -130,7 +132,19 @@
     </button>
     <div class="min-w-0">
       <p class="truncate text-sm font-bold">{nowPlaying?.title ?? 'No track playing'}</p>
-      <p class="truncate text-xs text-white/42">{nowPlaying?.artist ?? 'Ready'}</p>
+      {#if nowPlaying}
+        <div class="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-white/42">
+          {#if nowPlaying.artist}
+            <button class="min-w-0 truncate transition hover:text-white focus-visible:text-white" type="button" title={`Open ${nowPlaying.artist}`} on:click={() => onOpenArtist(nowPlaying.artist)}>{nowPlaying.artist}</button>
+          {/if}
+          {#if nowPlaying.album}
+            <span class="shrink-0 text-white/22">&bull;</span>
+            <button class="min-w-0 truncate transition hover:text-white focus-visible:text-white" type="button" title={`Open ${nowPlaying.album}`} on:click={() => onOpenAlbum(`${nowPlaying.album_artist}:${nowPlaying.album}`)}>{nowPlaying.album}</button>
+          {/if}
+        </div>
+      {:else}
+        <p class="truncate text-xs text-white/42">Ready</p>
+      {/if}
       {#if nowPlaying && showQualityInfo}
         <p class="mt-0.5 truncate text-[10px] font-bold uppercase text-white/32">{formatQuality(nowPlaying.format, nowPlaying.sample_rate, nowPlaying.bitrate)}</p>
       {/if}

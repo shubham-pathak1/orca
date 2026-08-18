@@ -66,6 +66,10 @@
   let activeView: ActiveView = 'songs';
   let status = 'Ready';
   let selectedPath: string | null = null;
+  let libraryView: {
+    openArtist: (name: string) => Promise<void>;
+    openAlbum: (key: string) => Promise<void>;
+  } | null = null;
   let fullPlayerOpen = false;
   let fullPlayerLyricsOpen = false;
   let queueOpen = false;
@@ -448,6 +452,14 @@
     queueOpen = !queueOpen;
   }
 
+  function openArtistFromPlayer(artist: string) {
+    void libraryView?.openArtist(artist);
+  }
+
+  function openAlbumFromPlayer(albumKey: string) {
+    void libraryView?.openAlbum(albumKey);
+  }
+
   function reorderQueueSong(sourcePath: string, targetPath: string) {
     queueStore.reorder(songs, playback.current_path ?? selectedPath, sourcePath, targetPath);
   }
@@ -706,6 +718,7 @@
   >
     <Sidebar {activeView} {isScanning} {folderCount} {sidebarMode} onSelect={(view) => (activeView = view)} onAddFolder={addFolder} onRefresh={refreshLibrary} />
     <LibraryView
+      bind:this={libraryView}
       bind:activeView
       {songs}
       {playlists}
@@ -803,6 +816,8 @@
       onToggleMute={toggleMute}
       onAdjustVolume={adjustVolumeByAmount}
       onOpenFullPlayer={() => (fullPlayerOpen = true)}
+      onOpenArtist={openArtistFromPlayer}
+      onOpenAlbum={openAlbumFromPlayer}
       {queueOpen}
       onToggleQueue={toggleQueue}
     />
