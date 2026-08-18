@@ -29,6 +29,21 @@ pub(crate) fn play_song(
     Ok(playback_snapshot_from(&state))
 }
 
+pub(crate) fn restore_playback_session(
+    path: String,
+    position_ms: u64,
+    state: State<'_, SharedOrcaState>,
+) -> Result<PlaybackState, String> {
+    ensure_song_exists(&path)?;
+    let state = state.0.lock().map_err(|error| error.to_string())?;
+    state
+        .audio_tx
+        .send(AudioCommand::LoadPaused(path, Duration::from_millis(position_ms)))
+        .map_err(|error| error.to_string())?;
+    std::thread::sleep(Duration::from_millis(40));
+    Ok(playback_snapshot_from(&state))
+}
+
 pub(crate) fn queue_next_playback(
     path: String,
     state: State<'_, SharedOrcaState>,

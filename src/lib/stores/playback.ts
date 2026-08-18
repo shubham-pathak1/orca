@@ -4,6 +4,7 @@ import {
   pausePlayback,
   playSong,
   playbackSnapshot,
+  restorePlaybackSession,
   resumePlayback,
   seekPlayback,
   setVolume
@@ -69,6 +70,10 @@ export function createPlaybackStore(initialState: PlaybackState = initialPlaybac
 
     play(path: string) {
       return update(() => playSong(path));
+    },
+
+    restoreSession(path: string, positionMs: number) {
+      return update(() => restorePlaybackSession(path, positionMs));
     },
 
     pause() {

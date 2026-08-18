@@ -25,6 +25,7 @@
   import { createPlaybackStore } from './lib/stores/playback';
   import { createPreferencesStore } from './lib/stores/preferences';
   import { createQueueStore } from './lib/stores/queue';
+  import { loadPlaybackSession, savePlaybackSession, type PlaybackSession } from './lib/playback-session';
   import { artworkSuspended } from './lib/stores/artwork-visibility';
   import { createLibraryActions } from './lib/stores/library-actions';
   import { createPlaybackFlow } from './lib/stores/playback-flow';
@@ -102,10 +103,18 @@
     fullPlayerLyricsOpen = preferences.fullPlayerLyricsOpen;
   });
   const queueStore = createQueueStore();
-  let queueState = { orderPaths: [] as string[], removedPaths: [] as string[], shufflePlayedPaths: new Set<string>() };
+  let queueState = {
+    orderPaths: [] as string[],
+    removedPaths: [] as string[],
+    manualPaths: [] as string[],
+    shufflePlayedPaths: new Set<string>()
+  };
   const unsubscribeQueue = queueStore.subscribe((state) => {
     queueState = state;
   });
+  let playbackSessionReady = false;
+  let playbackSessionTimer: ReturnType<typeof setTimeout> | undefined;
+  let pendingPlaybackSession: PlaybackSession | null = null;
   let metadataEditorSong: LocalSong | null = null;
   let isSavingMetadata = false;
   let taskbarSupported = false;
@@ -153,8 +162,6 @@
   $: selectedSong = songs.find((song) => song.path === selectedPath) ?? nowPlaying ?? filteredSongs[0] ?? null;
   $: currentQueuePath = playback.current_path ?? selectedPath;
   $: queueOrderPaths = queueState.orderPaths;
-  $: queueRemovedPaths = queueState.removedPaths;
-  $: queueRemovedPathSet = new Set(queueRemovedPaths);
   $: orderedPlaybackSongs = queueStore.playableSongs(songs, currentQueuePath);
   $: queueSongs = queueStore.queueSongs(songs, playback.current_path ?? selectedPath, repeatMode);
   $: albumCount = albums.length;
@@ -174,18 +181,28 @@
   $: if (typeof window !== 'undefined') {
     window.localStorage.setItem('orca.fullPlayerLyricsOpen', String(fullPlayerLyricsOpen));
   }
+  $: if (playbackSessionReady && (playback.current_path ?? selectedPath)) {
+    schedulePlaybackSessionSave({
+      currentPath: playback.current_path ?? selectedPath ?? '',
+      positionMs: playback.current_path ? playback.position_ms : 0,
+      queue: {
+        orderPaths: [...queueState.orderPaths],
+        removedPaths: [...queueState.removedPaths],
+        manualPaths: [...queueState.manualPaths],
+        shufflePlayedPaths: [...queueState.shufflePlayedPaths]
+      }
+    });
+  }
 
   const playbackFlow = createPlaybackFlow({
     playbackStore,
     queueStore,
     getPlayback: () => playback,
-    getSongs: () => songs,
     getSelectedSong: () => selectedSong,
     getSelectedPath: () => selectedPath,
     setSelectedPath: (path) => (selectedPath = path),
     getOrderedPlaybackSongs: () => orderedPlaybackSongs,
     getQueueOrderPaths: () => queueOrderPaths,
-    getQueueRemovedPathSet: () => queueRemovedPathSet,
     getShufflePlayedPathSet: () => queueState.shufflePlayedPaths,
     getGaplessPlayback: () => gaplessPlayback,
     getShuffleEnabled: () => shuffleEnabled,
@@ -204,9 +221,10 @@
     preferencesStore.load();
     theme = readStoredString('orca.theme', 'default', ['default']);
 
+    const savedPlaybackSession = loadPlaybackSession();
     const lastPlayedPath = window.localStorage.getItem('orca.lastPlayedPath');
-    if (lastPlayedPath) {
-      selectedPath = lastPlayedPath;
+    if (savedPlaybackSession?.currentPath ?? lastPlayedPath) {
+      selectedPath = savedPlaybackSession?.currentPath ?? lastPlayedPath;
     }
 
     void (async () => {
@@ -232,11 +250,28 @@
       status = snapshot.songs && snapshot.songs.length ? `${snapshot.songs.length} tracks loaded` : 'Add a folder to build your library';
 
       await playbackStore.restoreVolume();
+
+      if (savedPlaybackSession) {
+        const restoredSong = snapshot.songs.find((song) => song.path === savedPlaybackSession.currentPath);
+        if (restoredSong) {
+          queueStore.restore(savedPlaybackSession.queue, snapshot.songs);
+          queueStore.recordPlayed(restoredSong.path);
+          selectedPath = restoredSong.path;
+          try {
+            await playbackStore.restoreSession(restoredSong.path, savedPlaybackSession.positionMs);
+          } catch (error) {
+            console.warn('Could not restore the previous playback session', error);
+          }
+        }
+      }
+
+      playbackSessionReady = true;
     })();
 
     playbackStore.startPolling(playbackFlow.handlePlaybackSnapshot);
 
     window.addEventListener('keydown', handleKeydown);
+    window.addEventListener('pagehide', flushPlaybackSession);
 
     let unlisteners: Array<() => void> = [];
     listen('media-play', () => playbackStore.resume()).then(u => unlisteners.push(u));
@@ -294,6 +329,7 @@
     });
 
     return () => {
+      flushPlaybackSession();
       playbackStore.stopPolling();
       unsubscribeLibrary();
       unsubscribePreferences();
@@ -301,6 +337,7 @@
       unsubscribeQueue();
       if (typeof window !== 'undefined') {
         window.removeEventListener('keydown', handleKeydown);
+        window.removeEventListener('pagehide', flushPlaybackSession);
       }
       void unregister('MediaPlayPause');
       void unregister('MediaTrackNext');
@@ -313,6 +350,31 @@
   });
 
   $: syncCustomFont(fontFamily);
+
+  function schedulePlaybackSessionSave(session: PlaybackSession) {
+    pendingPlaybackSession = session;
+    if (playbackSessionTimer !== undefined) {
+      return;
+    }
+
+    playbackSessionTimer = setTimeout(() => {
+      playbackSessionTimer = undefined;
+      flushPlaybackSession();
+    }, 2_000);
+  }
+
+  function flushPlaybackSession() {
+    if (playbackSessionTimer !== undefined) {
+      clearTimeout(playbackSessionTimer);
+      playbackSessionTimer = undefined;
+    }
+    if (!pendingPlaybackSession) {
+      return;
+    }
+
+    savePlaybackSession(pendingPlaybackSession);
+    pendingPlaybackSession = null;
+  }
 
   function setPlayerPlacement(placement: 'right' | 'bottom') {
     preferencesStore.setPlayerPlacement(placement);
@@ -396,6 +458,15 @@
 
   function clearQueue() {
     queueStore.clear(songs, playback.current_path ?? selectedPath);
+  }
+
+  function addSongsToQueue(songsToQueue: LocalSong[]) {
+    const currentPath = playback.current_path ?? selectedPath;
+    const addedCount = new Set(songsToQueue.map((song) => song.path)).size - (songsToQueue.some((song) => song.path === currentPath) ? 1 : 0);
+    queueStore.enqueue(songs, currentPath, songsToQueue);
+    if (addedCount > 0) {
+      status = `${addedCount} ${addedCount === 1 ? 'song' : 'songs'} added to queue`;
+    }
   }
 
   function applyLibrarySnapshot(snapshot: LibrarySnapshot) {
@@ -648,6 +719,7 @@
       {artistCount}
       {albumCount}
       onChooseSong={chooseSong}
+      onAddSongsToQueue={addSongsToQueue}
       onCreatePlaylist={addPlaylist}
       onAddSongToPlaylist={addToPlaylist}
       onLoadPlaylistSongIds={loadPlaylistSongs}

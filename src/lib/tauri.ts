@@ -159,6 +159,10 @@ export async function playSong(path: string): Promise<PlaybackState> {
   return invoke<PlaybackState>('play_song', { path });
 }
 
+export async function restorePlaybackSession(path: string, positionMs: number): Promise<PlaybackState> {
+  return invoke<PlaybackState>('restore_playback_session', { path, positionMs });
+}
+
 export async function queueNextPlayback(path: string): Promise<PlaybackState> {
   return invoke<PlaybackState>('queue_next_playback', { path });
 }

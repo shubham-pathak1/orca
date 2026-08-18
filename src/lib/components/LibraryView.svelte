@@ -28,6 +28,7 @@
 
   // ── Song actions ───────────────────────────────────────────────────────────
   export let onChooseSong: (song: LocalSong, contextSongs?: LocalSong[]) => void = () => {};
+  export let onAddSongsToQueue: (songs: LocalSong[]) => void = () => {};
   export let onEditSong: (song: LocalSong) => void = () => {};
   export let onAddSongToPlaylist: (playlistId: number, song: LocalSong) => Promise<void> | void = () => {};
 
@@ -146,6 +147,12 @@
     if (song) onEditSong(song);
   }
 
+  function addContextSongToQueue() {
+    const song = contextMenu?.song;
+    closeContextMenu();
+    if (song) onAddSongsToQueue([song]);
+  }
+
   async function addContextSongToPlaylist(playlistId: number) {
     const song = contextMenu?.song;
     closeContextMenu();
@@ -246,6 +253,7 @@
         <PlaylistsView
           {playlists} {songs} {query} {currentPath}
           {onChooseSong} {onCreatePlaylist} {onLoadPlaylistSongIds}
+          {onAddSongsToQueue}
           {onRenamePlaylist} {onDeletePlaylist}
           {onChoosePlaylistCover} {onRemovePlaylistCover}
           {onImportPlaylist} {onExportPlaylist}
@@ -258,6 +266,7 @@
         <AlbumsView
           {albums} {songs} {query} {currentPath} {showQualityInfo}
           {onChooseSong} {onChooseAlbumCover} {onRemoveAlbumCover} {onFetchAlbumArtworkManual}
+          {onAddSongsToQueue}
           onOpenSongMenu={openSongMenu}
           {initialAlbumKey}
           bind:isInDetail={albumsInDetail}
@@ -266,6 +275,7 @@
         <GenreView
           {genres} {songs} {query} {currentPath}
           {onChooseSong}
+          {onAddSongsToQueue}
           onOpenSongMenu={openSongMenu}
           bind:isInDetail={genreInDetail}
         />
@@ -274,6 +284,7 @@
         <ArtistsView
           {artists} {albums} {songs} {query} {currentPath}
           {onChooseSong} {onChooseArtistCover} {onRemoveArtistCover} {onFetchArtistArtworkManual}
+          {onAddSongsToQueue}
           onOpenSongMenu={openSongMenu}
           onOpenAlbum={handleOpenAlbum}
           bind:isInDetail={artistsInDetail}
@@ -292,6 +303,11 @@
         <p class="truncate text-xs font-bold text-white">{contextMenu.song.title}</p>
         <p class="truncate text-[11px] text-white/42">{contextMenu.song.artist}</p>
       </div>
+      <button role="menuitem"
+        class="flex h-9 w-full items-center px-3 text-left text-xs font-semibold text-white/78 transition hover:bg-white/[0.08] hover:text-white"
+        on:click={addContextSongToQueue}>
+        Add to queue
+      </button>
       <button role="menuitem"
         class="flex h-9 w-full items-center px-3 text-left text-xs font-semibold text-white/78 transition hover:bg-white/[0.08] hover:text-white"
         on:click={editContextSong}>

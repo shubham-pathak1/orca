@@ -10,6 +10,7 @@
   export let songs: LocalSong[] = [];
   export let currentPath: string | null = null;
   export let onChooseSong: (song: LocalSong, contextSongs?: LocalSong[]) => void = () => {};
+  export let onAddSongsToQueue: (songs: LocalSong[]) => void = () => {};
   export let onCreatePlaylist: (name: string) => Promise<void> | void = () => {};
   export let onLoadPlaylistSongIds: (playlistId: number) => Promise<number[]> = async () => [];
   export let onRenamePlaylist: (playlistId: number, name: string) => Promise<void> | void = () => {};
@@ -319,6 +320,12 @@
             <button class="grid h-11 w-11 place-items-center rounded-full bg-[var(--accent)] text-black transition hover:scale-105"
               title="Play playlist" on:click={() => playFirstSong(selectedPlaylistVisibleSongs)}>
               <svg class="ml-0.5 h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+            </button>
+            <button class="grid h-11 w-11 place-items-center rounded-full border border-white/12 text-white/72 transition hover:border-white/24 hover:bg-white/[0.08] hover:text-white"
+              type="button" title="Add playlist to queue" aria-label="Add playlist to queue" on:click={() => onAddSongsToQueue(selectedPlaylistSongs)}>
+              <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 6h11" /><path d="M4 12h11" /><path d="M4 18h7" /><path d="m18 9 3 3-3 3" /><path d="M15 12h6" />
+              </svg>
             </button>
             <button class="grid h-11 w-11 place-items-center rounded-full border border-white/12 text-white/72 transition hover:border-white/24 hover:bg-white/[0.08] hover:text-white"
               type="button" title="Export playlist as M3U" aria-label="Export playlist as M3U" on:click={exportSelectedPlaylist}>

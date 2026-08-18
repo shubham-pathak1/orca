@@ -49,6 +49,7 @@ impl Default for VisualizerData {
 
 pub enum AudioCommand {
     Play(String), // Sudden play (clears both)
+    LoadPaused(String, Duration),
     PlayCrossfade(String, Duration), // Smooth transition
     Pause,
     Resume,
@@ -446,6 +447,31 @@ where
                                 }
                             }
                             Err(e) => error!("Audio Engine: Play error: {e}"),
+                        }
+                    }
+                    AudioCommand::LoadPaused(path, start_position) => {
+                        primary.stop();
+                        secondary.stop();
+                        fading_out_sink = None;
+                        fade_start = None;
+
+                        match load_track_into_sink(&primary, &path, start_position, eq_enabled, eq_gains, &thread_vis) {
+                            Ok(d) => {
+                                primary.set_volume(global_volume);
+                                primary.pause();
+                                playing = false;
+                                position_base_ms = start_position.as_millis() as u64;
+                                track_started_at = None;
+                                current_path = Some(path.clone());
+
+                                if let Ok(mut s) = thread_state.lock() {
+                                    s.current_path = Some(path);
+                                    s.is_playing = false;
+                                    s.position_ms = position_base_ms;
+                                    s.duration_ms = d;
+                                }
+                            }
+                            Err(e) => error!("Audio Engine: Session restore error: {e}"),
                         }
                     }
                     AudioCommand::PlayCrossfade(path, cross_dur) => {

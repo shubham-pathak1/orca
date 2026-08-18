@@ -29,13 +29,11 @@ type PlaybackFlowOptions = {
   playbackStore: PlaybackStore;
   queueStore: QueueStore;
   getPlayback: () => PlaybackState;
-  getSongs: () => LocalSong[];
   getSelectedSong: () => LocalSong | null;
   getSelectedPath: () => string | null;
   setSelectedPath: (path: string | null) => void;
   getOrderedPlaybackSongs: () => LocalSong[];
   getQueueOrderPaths: () => string[];
-  getQueueRemovedPathSet: () => Set<string>;
   getShufflePlayedPathSet: () => Set<string>;
   getGaplessPlayback: () => boolean;
   getShuffleEnabled: () => boolean;
@@ -63,18 +61,6 @@ export function createPlaybackFlow(options: PlaybackFlowOptions) {
       options.getShuffleEnabled(),
       options.getRepeatMode()
     );
-  }
-
-  function nextSongFromLibrary(currentPath: string) {
-    if (!options.queueStore.hasContext() || options.getRepeatMode() !== 'off') {
-      return null;
-    }
-
-    const songs = options.getSongs().filter((song) => {
-      return !options.getQueueRemovedPathSet().has(song.path) || song.path === currentPath;
-    });
-    const currentIndex = songs.findIndex((song) => song.path === currentPath);
-    return currentIndex >= 0 && currentIndex < songs.length - 1 ? songs[currentIndex + 1] : null;
   }
 
   async function chooseSong(song: LocalSong, contextSongs?: LocalSong[]) {
@@ -163,7 +149,7 @@ export function createPlaybackFlow(options: PlaybackFlowOptions) {
       return;
     }
 
-    const nextSong = pickNextSong(nextPlayback.current_path) ?? nextSongFromLibrary(nextPlayback.current_path);
+    const nextSong = pickNextSong(nextPlayback.current_path);
     if (!nextSong) {
       return;
     }
@@ -180,13 +166,7 @@ export function createPlaybackFlow(options: PlaybackFlowOptions) {
   }
 
   async function handleTrackEnded(path: string) {
-    let nextSong = pickNextSong(path);
-    if (!nextSong) {
-      nextSong = nextSongFromLibrary(path);
-      if (nextSong) {
-        options.queueStore.clearContext();
-      }
-    }
+    const nextSong = pickNextSong(path);
 
     if (nextSong) {
       await chooseSong(nextSong);
@@ -220,16 +200,12 @@ export function createPlaybackFlow(options: PlaybackFlowOptions) {
     }
 
     let nextIndex = currentIndex + offset;
-    if (nextIndex >= songs.length) {
-      const nextSong = nextSongFromLibrary(currentPath ?? '');
-      if (nextSong) {
-        options.queueStore.clearContext();
-        await chooseSong(nextSong);
+    if (nextIndex < 0 || nextIndex >= songs.length) {
+      if (options.getRepeatMode() !== 'all') {
         return;
       }
+      nextIndex = (nextIndex + songs.length) % songs.length;
     }
-
-    nextIndex = (nextIndex + songs.length) % songs.length;
     await chooseSong(songs[nextIndex]);
   }
 

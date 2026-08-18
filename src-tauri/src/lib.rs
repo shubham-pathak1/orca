@@ -252,6 +252,15 @@ fn play_song(path: String, state: State<'_, SharedOrcaState>) -> Result<Playback
 }
 
 #[tauri::command]
+fn restore_playback_session(
+    path: String,
+    position_ms: u64,
+    state: State<'_, SharedOrcaState>,
+) -> Result<PlaybackState, String> {
+    commands::playback::restore_playback_session(path, position_ms, state)
+}
+
+#[tauri::command]
 fn queue_next_playback(
     path: String,
     state: State<'_, SharedOrcaState>,
@@ -411,6 +420,7 @@ pub fn run() {
             pick_and_scan_folder,
             rescan_library,
             play_song,
+            restore_playback_session,
             queue_next_playback,
             pause_playback,
             resume_playback,
