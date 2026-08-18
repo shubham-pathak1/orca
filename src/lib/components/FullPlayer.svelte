@@ -413,65 +413,30 @@
   }
 
   .lyrics-toggle-button {
-    position: relative;
-    isolation: isolate;
     display: grid;
     width: 2.5rem;
     height: 2.5rem;
     place-items: center;
-    overflow: hidden;
-    border: 0;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 999px;
-    background: linear-gradient(135deg, rgba(32, 34, 34, 0.96), rgba(3, 4, 4, 0.96));
-    color: rgba(255, 255, 255, 0.94);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 0.8rem 1.8rem rgba(0, 0, 0, 0.26);
+    background: rgba(255, 255, 255, 0.035);
+    color: rgba(255, 255, 255, 0.62);
     transition:
-      box-shadow 160ms ease,
+      background 160ms ease,
+      border-color 160ms ease,
       color 160ms ease,
-      filter 160ms ease,
-      transform 160ms ease;
-    z-index: 40;
-    pointer-events: auto;
-  }
-
-  .lyrics-toggle-button::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    border-radius: inherit;
-    padding: 0;
-    background-image:
-      var(--cover-art),
-      linear-gradient(135deg, var(--accent-mid), var(--accent-soft));
-    background-position: center;
-    background-size: cover;
-    -webkit-mask:
-      linear-gradient(#000 0 0) content-box,
-      linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask:
-      linear-gradient(#000 0 0) content-box,
-      linear-gradient(#000 0 0);
-    mask-composite: exclude;
-    pointer-events: none;
   }
 
   .lyrics-toggle-icon {
-    position: relative;
-    z-index: 1;
     width: 1.12rem;
     height: 1.12rem;
   }
 
+  .lyrics-toggle-button:hover,
   .lyrics-toggle-button-active {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.08);
     color: white;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.12),
-      0 0.9rem 2rem rgba(0, 0, 0, 0.3),
-      0 0 0 1px rgba(255, 255, 255, 0.08);
   }
 
   .lyrics-player-layout {

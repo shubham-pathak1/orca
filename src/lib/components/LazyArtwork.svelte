@@ -7,6 +7,8 @@
   export let alt = '';
   export let rootClass = '';
   export let imageClass = 'h-full w-full object-cover';
+  export let suspendable = true;
+  export let fallbackSrc: string | null = null;
 
   let root: HTMLSpanElement;
   let isVisible = false;
@@ -14,7 +16,7 @@
   let observer: IntersectionObserver | null = null;
 
   // Only compute the URL when visible — avoids unnecessary convertFileSrc calls
-  $: src = isVisible && !$artworkSuspended ? artworkUrl(path) : null;
+  $: src = isVisible && (!suspendable || !$artworkSuspended) ? artworkUrl(path) ?? fallbackSrc : null;
 
   // Reset loaded fade-in whenever src changes
   $: if (src) {

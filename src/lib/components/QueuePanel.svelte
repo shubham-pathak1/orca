@@ -135,6 +135,7 @@
                     rootClass="h-full w-full"
                     imageClass="h-full w-full object-cover"
                     path={queuedSong.artwork_thumb ?? queuedSong.artwork_preview ?? queuedSong.artwork}
+                    suspendable={false}
                     alt=""
                   />
                 {:else}

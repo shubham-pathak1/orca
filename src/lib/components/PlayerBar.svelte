@@ -121,6 +121,7 @@
           rootClass="h-full w-full"
           imageClass="h-full w-full object-cover"
           path={nowPlaying.artwork_thumb ?? nowPlaying.artwork_preview ?? nowPlaying.artwork}
+          suspendable={false}
           alt=""
         />
       {:else}

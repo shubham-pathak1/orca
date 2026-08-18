@@ -240,7 +240,7 @@
               {#if artworkUrl(song.artwork)}
                 <LazyArtwork rootClass="h-7 w-7 shrink-0 rounded-sm overflow-hidden" imageClass="h-full w-full object-cover" path={rowArtwork(song)} alt="" />
               {:else}
-                <img src="/cover.png" class="h-7 w-7 shrink-0 rounded-sm object-cover" alt="" />
+                <LazyArtwork rootClass="h-7 w-7 shrink-0 rounded-sm overflow-hidden" imageClass="h-full w-full object-cover" path={null} fallbackSrc="/cover.png" alt="" />
               {/if}
               <span class="min-w-0">
                 <span class="block truncate text-sm font-semibold text-white">{song.title}</span>
@@ -295,7 +295,7 @@
               {#if artworkUrl(song.artwork)}
                 <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={previewArtwork(song)} alt="" />
               {:else}
-                <img src="/cover.png" class="h-full w-full object-cover" alt="" />
+                <LazyArtwork rootClass="h-full w-full" imageClass="h-full w-full object-cover" path={null} fallbackSrc="/cover.png" alt="" />
               {/if}
             </span>
             <span class="mt-2 block truncate text-sm font-bold text-white">{song.title}</span>
