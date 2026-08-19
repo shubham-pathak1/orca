@@ -91,6 +91,9 @@ impl<S: Source<Item = f32>> Source for TransitionSource<S> {
     fn channels(&self) -> u16 { self.inner.channels() }
     fn sample_rate(&self) -> u32 { self.inner.sample_rate() }
     fn total_duration(&self) -> Option<Duration> { self.inner.total_duration() }
+    fn try_seek(&mut self, pos: Duration) -> Result<(), rodio::source::SeekError> {
+        self.inner.try_seek(pos)
+    }
 }
 
 #[allow(dead_code)]
@@ -212,6 +215,11 @@ impl<S: Source<Item = f32>> Source for VisualizerSource<S> {
     fn channels(&self) -> u16 { self.inner.channels() }
     fn sample_rate(&self) -> u32 { self.inner.sample_rate() }
     fn total_duration(&self) -> Option<Duration> { self.inner.total_duration() }
+    fn try_seek(&mut self, pos: Duration) -> Result<(), rodio::source::SeekError> {
+        self.sample_counter = 0;
+        self.current_peak = 0.0;
+        self.inner.try_seek(pos)
+    }
 }
 
 impl<S: Source<Item = f32>> Source for EqSource<S> {
@@ -229,6 +237,16 @@ impl<S: Source<Item = f32>> Source for EqSource<S> {
 
     fn total_duration(&self) -> Option<Duration> {
         self.inner.total_duration()
+    }
+
+    fn try_seek(&mut self, pos: Duration) -> Result<(), rodio::source::SeekError> {
+        for channel_filters in &mut self.filters {
+            for filter in channel_filters {
+                filter.reset_state();
+            }
+        }
+        self.channel_cursor = 0;
+        self.inner.try_seek(pos)
     }
 }
 
@@ -377,7 +395,7 @@ pub fn spawn_audio_thread<F>(
     event_callback: Option<F>,
 ) -> (mpsc::Sender<AudioCommand>, Arc<Mutex<PlaybackState>>, VisualizerData)
 where
-    F: Fn(&str, u64) + Send + 'static,
+    F: for<'a> Fn(&'a str, u64) + Send + 'static,
 {
     let (tx, rx) = mpsc::channel::<AudioCommand>();
     let state = Arc::new(Mutex::new(PlaybackState::default()));
@@ -528,16 +546,35 @@ where
                         if let Ok(mut s) = thread_state.lock() { s.is_playing = true; }
                     }
                     AudioCommand::Seek(pos) => {
-                        match load_track_into_sink(&primary, current_path.as_ref().unwrap_or(&"".to_string()), pos, eq_enabled, eq_gains, &thread_vis) {
-                            Ok(d) => {
+                        let duration = thread_state
+                            .lock()
+                            .ok()
+                            .map(|state| state.duration_ms)
+                            .unwrap_or_default();
+                        let seek_result = primary.try_seek(pos).or_else(|seek_error| {
+                            let Some(path) = current_path.as_deref() else {
+                                return Err(seek_error);
+                            };
+
+                            // Some decoders cannot seek in place. Rebuild only for those.
+                            load_track_into_sink(&primary, path, pos, eq_enabled, eq_gains, &thread_vis)
+                                .map(|_| ())
+                                .map_err(|_| seek_error)
+                        });
+
+                        match seek_result {
+                            Ok(()) => {
                                 position_base_ms = pos.as_millis() as u64;
-                                track_started_at = Some(Instant::now());
-                                primary.play();
-                                playing = true;
+                                track_started_at = playing.then(Instant::now);
+                                if playing {
+                                    primary.play();
+                                } else {
+                                    primary.pause();
+                                }
                                 if let Ok(mut s) = thread_state.lock() {
                                     s.position_ms = position_base_ms;
-                                    s.duration_ms = d;
-                                    s.is_playing = true;
+                                    s.duration_ms = duration;
+                                    s.is_playing = playing;
                                 }
                             }
                             Err(e) => error!("Audio Engine: Seek error: {e}"),

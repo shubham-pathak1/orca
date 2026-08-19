@@ -49,7 +49,11 @@
   let loadedPath: string | null = null;
   let isLoadingWaveform = false;
   let canvas: HTMLCanvasElement | null = null;
+  let progressCanvas: HTMLCanvasElement | null = null;
+  let waveformContainer: HTMLSpanElement | null = null;
   let drawFrame = 0;
+  let resizeObserver: ResizeObserver | null = null;
+  let observedWaveformContainer: HTMLSpanElement | null = null;
 
   let isDragging = false;
   let dragPositionMs = 0;
@@ -91,10 +95,20 @@
 
   onDestroy(() => {
     cancelAnimationFrame(animationFrame);
+    resizeObserver?.disconnect();
     if (seekGraceTimer) {
       clearTimeout(seekGraceTimer);
     }
   });
+
+  $: if (waveformContainer !== observedWaveformContainer) {
+    resizeObserver?.disconnect();
+    observedWaveformContainer = waveformContainer;
+    resizeObserver = waveformContainer ? new ResizeObserver(() => scheduleDraw()) : null;
+    if (waveformContainer && resizeObserver) {
+      resizeObserver.observe(waveformContainer);
+    }
+  }
 
   $: displayPosition = isDragging 
     ? dragPositionMs 
@@ -113,9 +127,9 @@
   $: remainingMs = Math.max(0, totalMs - displayPosition);
   $: rightLabel = showRemaining ? `-${formatDuration(remainingMs)}` : formatDuration(totalMs);
 
-  $: if (variant === 'waveform' && canvas) {
-    progress;
+  $: if (variant === 'waveform' && canvas && progressCanvas) {
     peaks;
+    song?.path;
     scheduleDraw();
   }
   $: if (variant === 'waveform' && song?.path && song.path !== loadedPath && !isLoadingWaveform) {
@@ -200,7 +214,7 @@
 
   async function drawWaveform() {
     await tick();
-    if (!canvas) {
+    if (!canvas || !progressCanvas) {
       return;
     }
 
@@ -212,23 +226,24 @@
       canvas.width = width;
       canvas.height = height;
     }
+    if (progressCanvas.width !== width || progressCanvas.height !== height) {
+      progressCanvas.width = width;
+      progressCanvas.height = height;
+    }
 
     const ctx = canvas.getContext('2d');
-    if (!ctx) {
+    const progressCtx = progressCanvas.getContext('2d');
+    if (!ctx || !progressCtx) {
       return;
     }
 
     ctx.clearRect(0, 0, width, height);
+    progressCtx.clearRect(0, 0, width, height);
     const styles = getComputedStyle(canvas);
     const accent = styles.getPropertyValue('--accent').trim() || 'rgba(255,255,255,0.96)';
     const rest = styles.getPropertyValue(waveformLayout === 'stacked' ? '--waveform-rest-stacked' : '--waveform-rest').trim();
     drawShape(ctx, width, height, rest || (waveformLayout === 'stacked' ? 'rgba(255,255,255,0.13)' : 'rgba(255,255,255,0.14)'));
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, width * progress, height);
-    ctx.clip();
-    drawShape(ctx, width, height, accent);
-    ctx.restore();
+    drawShape(progressCtx, width, height, accent);
   }
 
   function drawShape(ctx: CanvasRenderingContext2D, width: number, height: number, fillStyle: string) {
@@ -298,8 +313,12 @@
       <span
         class={`relative block min-w-0 overflow-hidden ${isLoadingWaveform ? 'opacity-70' : ''}`}
         style={`height: ${waveformHeight}px;`}
+        bind:this={waveformContainer}
       >
         <canvas bind:this={canvas} class="absolute inset-0 h-full w-full" aria-hidden="true"></canvas>
+        <span class="pointer-events-none absolute inset-0" style={`clip-path: inset(0 ${100 - progress * 100}% 0 0);`} aria-hidden="true">
+          <canvas bind:this={progressCanvas} class="h-full w-full"></canvas>
+        </span>
         <input
           class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
           type="range"
