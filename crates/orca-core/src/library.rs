@@ -68,6 +68,17 @@ fn parse_tag_i32(value: Option<&str>) -> Option<i32> {
 }
 
 pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, String> {
+    scan_music_file_with_metadata(path, artwork_dir, |_| {})
+}
+
+pub fn scan_music_file_with_metadata<F>(
+    path: &Path,
+    artwork_dir: &Path,
+    on_metadata: F,
+) -> Result<LocalSong, String>
+where
+    F: Fn(&LocalSong),
+{
     let tagged_file = match Probe::open(path)
         .map_err(|e| e.to_string())
         .and_then(|p| p.read().map_err(|e| e.to_string()))
@@ -90,7 +101,7 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
             let format = path
                 .extension()
                 .map(|e| e.to_string_lossy().to_uppercase().to_string());
-            return Ok(LocalSong {
+            let song = LocalSong {
                 id: None,
                 path: path.to_string_lossy().to_string(),
                 title,
@@ -112,7 +123,9 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
                 format,
                 modified_at,
                 file_size,
-            });
+            };
+            on_metadata(&song);
+            return Ok(song);
         }
     };
 
@@ -189,15 +202,6 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
 
     let lyrics = tag.and_then(|t| t.get_string(&ItemKey::Lyrics).map(|s| s.to_string()));
 
-    let artwork_paths = tag.and_then(|t| t.pictures().iter().next()).and_then(|p| {
-        persist_artwork(
-            artwork_dir,
-            p.data(),
-            p.mime_type().map(|mime| mime.as_str()),
-        )
-        .ok()
-    });
-
     let sample_rate = properties.sample_rate();
     let bitrate = properties.audio_bitrate();
     let bit_depth = properties.bit_depth();
@@ -213,7 +217,7 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
         .and_then(|t| t.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
         .map(|d| d.as_secs() as i64);
 
-    Ok(LocalSong {
+    let mut song = LocalSong {
         id: None,
         path: path.to_string_lossy().to_string(),
         title,
@@ -225,9 +229,9 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
         disc_number,
         genre,
         duration,
-        artwork: artwork_paths.as_ref().map(|paths| paths.full.clone()),
-        artwork_thumb: artwork_paths.as_ref().map(|paths| paths.thumb.clone()),
-        artwork_preview: artwork_paths.as_ref().map(|paths| paths.preview.clone()),
+        artwork: None,
+        artwork_thumb: None,
+        artwork_preview: None,
         lyrics,
         sample_rate,
         bitrate,
@@ -235,7 +239,25 @@ pub fn scan_music_file(path: &Path, artwork_dir: &Path) -> Result<LocalSong, Str
         format,
         modified_at,
         file_size,
-    })
+    };
+
+    // Let the library index the lightweight metadata before image decoding and resizing.
+    on_metadata(&song);
+
+    if let Some(paths) = tag.and_then(|t| t.pictures().iter().next()).and_then(|picture| {
+        persist_artwork(
+            artwork_dir,
+            picture.data(),
+            picture.mime_type().map(|mime| mime.as_str()),
+        )
+        .ok()
+    }) {
+        song.artwork = Some(paths.full);
+        song.artwork_thumb = Some(paths.thumb);
+        song.artwork_preview = Some(paths.preview);
+    }
+
+    Ok(song)
 }
 
 #[derive(Deserialize)]

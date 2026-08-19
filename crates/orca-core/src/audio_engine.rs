@@ -603,6 +603,8 @@ where
                         playing = false;
                         if let Ok(mut s) = thread_state.lock() {
                             s.current_path = None;
+                            s.position_ms = 0;
+                            s.duration_ms = 0;
                             s.is_playing = false;
                         }
                     }

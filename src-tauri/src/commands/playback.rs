@@ -75,6 +75,10 @@ pub(crate) fn resume_playback(
     state: State<'_, SharedOrcaState>,
 ) -> Result<PlaybackState, String> {
     let state = state.0.lock().map_err(|error| error.to_string())?;
+    if playback_snapshot_from(&state).current_path.is_none() {
+        return Ok(playback_snapshot_from(&state));
+    }
+
     state
         .audio_tx
         .send(AudioCommand::Resume)

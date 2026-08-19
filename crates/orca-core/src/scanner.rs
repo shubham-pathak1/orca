@@ -4,16 +4,18 @@ use std::path::Path;
 
 use walkdir::WalkDir;
 
-use crate::library::{scan_music_file, LocalSong};
+use crate::library::{scan_music_file_with_metadata, LocalSong};
 
-pub fn scan_music_folder<F>(
+pub fn scan_music_folder<F, G>(
     folder_path: &Path,
     artwork_dir: &Path,
     existing_map: &HashMap<String, (i64, u64, LocalSong)>,
     on_progress: F,
+    on_song_indexed: G,
 ) -> Result<Vec<LocalSong>, String>
 where
     F: Fn() + Send + Sync,
+    G: Fn(LocalSong) + Send + Sync,
 {
     let mut songs = Vec::new();
 
@@ -45,7 +47,12 @@ where
             }
         }
 
-        if let Ok(song) = scan_music_file(path, artwork_dir) {
+        if let Ok(song) = scan_music_file_with_metadata(path, artwork_dir, |metadata| {
+            let mut indexed_song = metadata.clone();
+            // Embedded lyrics can be large and are not needed to populate library rows.
+            indexed_song.lyrics = None;
+            on_song_indexed(indexed_song);
+        }) {
             songs.push(song);
             on_progress();
         }

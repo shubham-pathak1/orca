@@ -28,12 +28,28 @@ fn library_scan_roots(state: State<'_, SharedOrcaState>) -> Result<Vec<String>, 
 }
 
 #[tauri::command]
+fn library_sources(
+    state: State<'_, SharedOrcaState>,
+) -> Result<Vec<commands::library::LibrarySource>, String> {
+    commands::library::library_sources(state)
+}
+
+#[tauri::command]
 async fn remove_library_scan_root(
     root: String,
     app: tauri::AppHandle,
     state: State<'_, SharedOrcaState>,
 ) -> Result<LibrarySnapshot, String> {
     commands::library::remove_library_scan_root(root, app, state).await
+}
+
+#[tauri::command]
+async fn rescan_library_source(
+    root: String,
+    app: tauri::AppHandle,
+    state: State<'_, SharedOrcaState>,
+) -> Result<LibrarySnapshot, String> {
+    commands::library::rescan_library_source(root, app, state).await
 }
 
 #[tauri::command]
@@ -476,7 +492,9 @@ pub fn run() {
             library_snapshot,
             library_folder_count,
             library_scan_roots,
+            library_sources,
             remove_library_scan_root,
+            rescan_library_source,
             playback_snapshot,
             list_playlists,
             create_playlist,
