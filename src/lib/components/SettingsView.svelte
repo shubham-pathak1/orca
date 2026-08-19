@@ -20,6 +20,8 @@
   export let onShowQualityInfoChange: (enabled: boolean) => void = () => {};
   export let gaplessPlayback = true;
   export let onGaplessPlaybackChange: (enabled: boolean) => void = () => {};
+  export let onEnterPhantomMode: () => Promise<void> | void = () => {};
+  export let phantomModeAvailable = false;
   export let autoFetchArtwork = false;
   export let onAutoFetchArtworkChange: (enabled: boolean) => void = () => {};
   export let theme: 'default' = 'default';
@@ -430,6 +432,22 @@
           on:click={() => onGaplessPlaybackChange(!gaplessPlayback)}
         >
           <span class={`toggle-knob absolute top-1 h-4 w-4 rounded-full transition ${gaplessPlayback ? 'left-6' : 'left-1'}`}></span>
+        </button>
+      </div>
+
+      <div class="flex items-center justify-between gap-5 border-t border-white/10 pt-5">
+        <div>
+          <h3 class="text-sm font-bold text-white">Phantom mode</h3>
+          <p class="text-sm text-white/48">Close the player UI and keep playback running from the Orca tray icon.</p>
+        </div>
+        <button
+          class="h-9 shrink-0 rounded-md border border-white/15 px-3.5 text-xs font-bold text-white transition hover:border-white/35 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+          type="button"
+          disabled={!phantomModeAvailable}
+          title={phantomModeAvailable ? 'Enter Phantom mode' : 'Start a song before entering Phantom mode'}
+          on:click={() => onEnterPhantomMode()}
+        >
+          Enter mode
         </button>
       </div>
     </section>

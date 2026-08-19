@@ -11,6 +11,8 @@
   import {
     artworkUrl,
     updateMediaControls,
+    enterPhantomMode,
+    updatePhantomSession,
     fetchAlbumArtworkManual,
     fetchAllMissingArtwork,
     pickLyricsFile
@@ -122,6 +124,8 @@
   let metadataEditorSong: LocalSong | null = null;
   let isSavingMetadata = false;
   let taskbarSupported = false;
+  let enteringPhantomMode = false;
+  let phantomSessionSyncInFlight = false;
   let previousControlSync = { path: null as string | null, playing: false };
   $: bottomRowSize = '96px';
   $: defaultAccentRgb = '245,245,245';
@@ -260,11 +264,19 @@
         if (restoredSong) {
           queueStore.restore(savedPlaybackSession.queue, snapshot.songs);
           queueStore.recordPlayed(restoredSong.path);
-          selectedPath = restoredSong.path;
-          try {
-            await playbackStore.restoreSession(restoredSong.path, savedPlaybackSession.positionMs);
-          } catch (error) {
-            console.warn('Could not restore the previous playback session', error);
+          const liveSong = snapshot.playback.current_path
+            ? snapshot.songs.find((song) => song.path === snapshot.playback.current_path)
+            : null;
+          selectedPath = liveSong?.path ?? restoredSong.path;
+
+          // A returning Phantom Mode window must adopt the backend's live sink,
+          // not reload the persisted session and pause active playback.
+          if (!liveSong) {
+            try {
+              await playbackStore.restoreSession(restoredSong.path, savedPlaybackSession.positionMs);
+            } catch (error) {
+              console.warn('Could not restore the previous playback session', error);
+            }
           }
         }
       }
@@ -273,6 +285,10 @@
     })();
 
     playbackStore.startPolling(playbackFlow.handlePlaybackSnapshot);
+    const phantomSessionInterval = window.setInterval(() => {
+      void syncPhantomSession();
+    }, 1_000);
+    void syncPhantomSession();
 
     window.addEventListener('keydown', handleKeydown);
     window.addEventListener('pagehide', flushPlaybackSession);
@@ -280,15 +296,19 @@
     let unlisteners: Array<() => void> = [];
     listen('media-play', () => playbackStore.resume()).then(u => unlisteners.push(u));
     listen('media-pause', () => playbackStore.pause()).then(u => unlisteners.push(u));
-    listen('media-toggle', () => togglePlayback()).then(u => unlisteners.push(u));
-    listen('media-next', () => playNextSong()).then(u => unlisteners.push(u));
-    listen('media-prev', () => playPreviousSong()).then(u => unlisteners.push(u));
+      listen('media-toggle', () => togglePlayback()).then(u => unlisteners.push(u));
+      listen('media-next', () => playNextSong()).then(u => unlisteners.push(u));
+      listen('media-prev', () => playPreviousSong()).then(u => unlisteners.push(u));
 
     async function safeRegister(key: string, handler: (e: any) => void) {
-      if (await isRegistered(key)) {
-        await unregister(key);
+      try {
+        if (await isRegistered(key)) {
+          await unregister(key);
+        }
+        await register(key, handler);
+      } catch (error) {
+        console.error(`Failed to register ${key}:`, error);
       }
-      await register(key, handler).catch(e => console.error(`Failed to register ${key}:`, e));
     }
 
     void safeRegister('MediaPlayPause', (event) => {
@@ -306,7 +326,6 @@
         void playPreviousSong();
       }
     });
-
     const unlisten = listen<number>('scan-progress', (event) => {
       if (isScanning) {
         status = `Scanning... ${event.payload} songs found`;
@@ -335,6 +354,7 @@
     return () => {
       flushPlaybackSession();
       playbackStore.stopPolling();
+      window.clearInterval(phantomSessionInterval);
       unsubscribeLibrary();
       unsubscribePreferences();
       unsubscribePlayback();
@@ -431,6 +451,65 @@
     preferencesStore.setGaplessPlayback(enabled);
     if (!enabled) {
       playbackFlow.clearQueuedNext();
+    }
+  }
+
+  async function activatePhantomMode() {
+    if (enteringPhantomMode) {
+      return;
+    }
+
+    const session = buildPhantomSession();
+    if (!session) {
+      status = 'Start a song before entering Phantom mode';
+      return;
+    }
+
+    enteringPhantomMode = true;
+    try {
+      await updatePhantomSession(session);
+      await enterPhantomMode(session);
+    } catch (error) {
+      status = error instanceof Error ? error.message : 'Could not enter Phantom mode';
+    } finally {
+      enteringPhantomMode = false;
+    }
+  }
+
+  function buildPhantomSession() {
+    const currentPath = playback.current_path ?? selectedPath;
+    if (!currentPath) {
+      return null;
+    }
+
+    return {
+      currentPath,
+      orderPaths: [...queueState.orderPaths],
+      removedPaths: [...queueState.removedPaths],
+      manualPaths: [...queueState.manualPaths],
+      shufflePlayedPaths: [...queueState.shufflePlayedPaths],
+      shuffleEnabled,
+      repeatMode
+    };
+  }
+
+  async function syncPhantomSession() {
+    if (phantomSessionSyncInFlight || enteringPhantomMode) {
+      return;
+    }
+
+    const session = buildPhantomSession();
+    if (!session) {
+      return;
+    }
+
+    phantomSessionSyncInFlight = true;
+    try {
+      await updatePhantomSession(session);
+    } catch (error) {
+      console.warn('Could not refresh Phantom Mode playback state', error);
+    } finally {
+      phantomSessionSyncInFlight = false;
     }
   }
 
@@ -771,6 +850,8 @@
       onShowQualityInfoChange={setShowQualityInfo}
       {gaplessPlayback}
       onGaplessPlaybackChange={setGaplessPlayback}
+      phantomModeAvailable={Boolean(playback.current_path ?? selectedPath)}
+      onEnterPhantomMode={activatePhantomMode}
       {autoFetchArtwork}
       onAutoFetchArtworkChange={setAutoFetchArtwork}
       {theme}

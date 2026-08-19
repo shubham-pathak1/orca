@@ -9,6 +9,8 @@ use orca_core::{
     library::LocalSong,
 };
 
+use crate::phantom::{self, AudioEvent, PhantomController};
+
 pub(crate) struct OrcaState {
     pub(crate) db_conn: rusqlite::Connection,
     pub(crate) artwork_dir: PathBuf,
@@ -19,6 +21,7 @@ pub(crate) struct OrcaState {
     pub(crate) visualizer_data: VisualizerData,
     pub(crate) media_controls: Option<souvlaki::MediaControls>,
     pub(crate) library_watch_tx: mpsc::Sender<LibraryWatchMessage>,
+    pub(crate) phantom_controller: Arc<Mutex<PhantomController>>,
 }
 
 pub(crate) enum LibraryWatchMessage {
@@ -71,9 +74,15 @@ pub(crate) fn load_state() -> Result<OrcaState, String> {
     let conn = db::init_db(app_dir)?;
     db::migrate_inline_artwork_to_files(&conn, &artwork_dir)?;
     let songs = db::get_all_songs(&conn)?;
-    let (audio_tx, playback_state, visualizer_data) =
-        audio_engine::spawn_audio_thread::<fn(&str, u64)>(None);
+    let (audio_event_tx, audio_event_rx) = mpsc::channel();
+    let (audio_tx, playback_state, visualizer_data) = audio_engine::spawn_audio_thread(Some(move |event: &str, _| {
+        if event == "playback-ended" {
+            let _ = audio_event_tx.send(AudioEvent::PlaybackEnded);
+        }
+    }));
     let (library_watch_tx, _) = mpsc::channel();
+    let phantom_controller = Arc::new(Mutex::new(PhantomController::default()));
+    phantom::spawn_audio_event_handler(audio_event_rx, Arc::clone(&phantom_controller), audio_tx.clone());
 
     Ok(OrcaState {
         db_conn: conn,
@@ -84,5 +93,6 @@ pub(crate) fn load_state() -> Result<OrcaState, String> {
         visualizer_data,
         media_controls: None,
         library_watch_tx,
+        phantom_controller,
     })
 }

@@ -167,6 +167,24 @@ export async function queueNextPlayback(path: string): Promise<PlaybackState> {
   return invoke<PlaybackState>('queue_next_playback', { path });
 }
 
+export type PhantomSession = {
+  currentPath: string;
+  orderPaths: string[];
+  removedPaths: string[];
+  manualPaths: string[];
+  shufflePlayedPaths: string[];
+  shuffleEnabled: boolean;
+  repeatMode: 'off' | 'all' | 'one';
+};
+
+export async function enterPhantomMode(session: PhantomSession): Promise<void> {
+  return invoke<void>('enter_phantom_mode', { session });
+}
+
+export async function updatePhantomSession(session: PhantomSession): Promise<void> {
+  return invoke<void>('update_phantom_session', { session });
+}
+
 export async function pausePlayback(): Promise<PlaybackState> {
   return invoke<PlaybackState>('pause_playback');
 }

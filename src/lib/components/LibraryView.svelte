@@ -76,6 +76,8 @@
   export let onShowQualityInfoChange: (enabled: boolean) => void = () => {};
   export let gaplessPlayback = true;
   export let onGaplessPlaybackChange: (enabled: boolean) => void = () => {};
+  export let onEnterPhantomMode: () => Promise<void> | void = () => {};
+  export let phantomModeAvailable = false;
   export let theme: 'default' = 'default';
   export let onThemeChange: (theme: 'default') => void = () => {};
 
@@ -262,6 +264,7 @@
           {fontSizePercent} {onFontSizePercentChange}
           {showQualityInfo} {onShowQualityInfoChange}
           {gaplessPlayback} {onGaplessPlaybackChange}
+          {phantomModeAvailable} {onEnterPhantomMode}
           {autoFetchArtwork} {onAutoFetchArtworkChange}
           {theme} {onThemeChange}
         />
