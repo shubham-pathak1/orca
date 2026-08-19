@@ -2,11 +2,13 @@ import { writable } from 'svelte/store';
 
 import {
   getLibrarySnapshot,
-  libraryScanRoots,
+  librarySources,
   pickAndScanFolder,
   removeLibraryScanRoot,
+  rescanLibrarySource,
   rescanLibrary
 } from '../tauri';
+import type { LibrarySource } from '../tauri';
 import type { AlbumEntry, ArtistEntry, GenreEntry, LibrarySnapshot, LocalSong, Playlist } from '../types';
 
 type LibraryState = {
@@ -16,7 +18,7 @@ type LibraryState = {
   albums: AlbumEntry[];
   genres: GenreEntry[];
   folderCount: number;
-  scanRoots: string[];
+  scanRoots: LibrarySource[];
   isScanning: boolean;
 };
 
@@ -34,6 +36,7 @@ const initialState: LibraryState = {
 export function createLibraryStore() {
   const { subscribe, set } = writable(initialState);
   let state = initialState;
+  let songsByPath = new Map<string, LocalSong>();
 
   function setState(nextState: LibraryState) {
     state = nextState;
@@ -41,10 +44,11 @@ export function createLibraryStore() {
   }
 
   async function refreshScanRoots() {
-    setState({ ...state, scanRoots: await libraryScanRoots() });
+    setState({ ...state, scanRoots: await librarySources() });
   }
 
   function applySnapshot(snapshot: LibrarySnapshot) {
+    songsByPath = new Map(snapshot.songs.map((song) => [song.path, song]));
     setState({
       ...state,
       songs: snapshot.songs,
@@ -54,6 +58,31 @@ export function createLibraryStore() {
       genres: snapshot.genres ?? [],
       folderCount: snapshot.folder_count ?? state.folderCount
     });
+  }
+
+  function appendIndexedSongs(batch: LocalSong[]) {
+    if (!batch.length) {
+      return;
+    }
+
+    for (const incoming of batch) {
+      const existing = songsByPath.get(incoming.path);
+      songsByPath.set(
+        incoming.path,
+        existing && !incoming.artwork
+          ? {
+              ...incoming,
+              artwork: existing.artwork,
+              artwork_thumb: existing.artwork_thumb,
+              artwork_preview: existing.artwork_preview,
+              lyrics: existing.lyrics ?? incoming.lyrics
+            }
+          : incoming
+      );
+    }
+
+    // Catalog views remain on their last complete snapshot until scanning finishes.
+    setState({ ...state, songs: Array.from(songsByPath.values()) });
   }
 
 
@@ -72,6 +101,7 @@ export function createLibraryStore() {
   return {
     subscribe,
     applySnapshot,
+    appendIndexedSongs,
     refreshScanRoots,
 
     async load() {
@@ -91,6 +121,10 @@ export function createLibraryStore() {
 
     removeScanRoot(root: string) {
       return scan(() => removeLibraryScanRoot(root));
+    },
+
+    rescanSource(root: string) {
+      return scan(() => rescanLibrarySource(root));
     },
 
     setPlaylists(playlists: Playlist[]) {

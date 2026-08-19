@@ -17,6 +17,7 @@
     fetchAllMissingArtwork,
     pickLyricsFile
   } from './lib/tauri';
+  import type { LibrarySource } from './lib/tauri';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
@@ -47,7 +48,7 @@
   let albums: AlbumEntry[] = [];
   let genres: GenreEntry[] = [];
   let folderCount = 0;
-  let scanRoots: string[] = [];
+  let scanRoots: LibrarySource[] = [];
   let isScanning = false;
   const unsubscribeLibrary = libraryStore.subscribe((state) => {
     songs = state.songs;
@@ -331,6 +332,12 @@
         status = `Scanning... ${event.payload} songs found`;
       }
     });
+
+    const unlistenScanBatch = listen<LocalSong[]>('scan-song-batch', (event) => {
+      if (isScanning) {
+        libraryStore.appendIndexedSongs(event.payload);
+      }
+    });
     
     const unlistenLibrary = listen('library-refreshed', async () => {
       try {
@@ -368,6 +375,7 @@
       void unregister('MediaTrackPrevious');
       unlisteners.forEach(u => u());
       void unlisten.then((fn) => fn());
+      void unlistenScanBatch.then((fn) => fn());
       void unlistenLibrary.then((fn) => fn());
       void unlistenLibraryWatcher.then((fn) => fn());
     };
@@ -565,6 +573,10 @@
     playbackStore.set(snapshot.playback);
     queueStore.syncSongs(snapshot.songs);
 
+    if (selectedPath && !snapshot.songs.some((song) => song.path === selectedPath)) {
+      selectedPath = null;
+    }
+
     if (metadataEditorSong) {
       metadataEditorSong = songs.find((song) => song.path === metadataEditorSong?.path) ?? metadataEditorSong;
     }
@@ -575,6 +587,7 @@
     refreshLibrary,
     addPlaylist,
     removeScanRoot,
+    rescanSource,
     renameExistingPlaylist,
     deleteExistingPlaylist,
     handleChoosePlaylistCover,
@@ -837,7 +850,9 @@
       onSeekbarStyleChange={setSeekbarStyle}
       {scanRoots}
       {isScanning}
+      onAddFolder={addFolder}
       onRemoveScanRoot={removeScanRoot}
+      onRescanSource={rescanSource}
       {dynamicCoverAccent}
       onDynamicCoverAccentChange={setDynamicCoverAccent}
       blurredBackground={blurredNowPlayingBackground}

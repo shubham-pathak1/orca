@@ -5,9 +5,11 @@
   export let onSidebarModeChange: (mode: 'expanded' | 'collapsed') => void = () => {};
   export let seekbarStyle: 'standard' | 'waveform' = 'standard';
   export let onSeekbarStyleChange: (style: 'standard' | 'waveform') => void = () => {};
-  export let scanRoots: string[] = [];
+  export let scanRoots: import('../tauri').LibrarySource[] = [];
   export let isScanning = false;
+  export let onAddFolder: () => Promise<void> | void = () => {};
   export let onRemoveScanRoot: (root: string) => Promise<void> | void = () => {};
+  export let onRescanSource: (root: string) => Promise<void> | void = () => {};
   export let dynamicCoverAccent = true;
   export let onDynamicCoverAccentChange: (enabled: boolean) => void = () => {};
   export let blurredBackground = true;
@@ -100,6 +102,10 @@
   function folderName(path: string) {
     return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
   }
+
+  function sourceSongLabel(count: number) {
+    return `${count} ${count === 1 ? 'song' : 'songs'}`;
+  }
   let showRemoveFolderConfirm = false;
   let folderToRemove: string | null = null;
 
@@ -138,6 +144,16 @@
     {/each}
   </div>
 
+  <ConfirmDialog
+    open={showRemoveFolderConfirm}
+    title="Remove folder"
+    message={folderToRemove ? `Remove "${folderName(folderToRemove)}" from Orca? Songs from this folder will be removed from the library.` : ''}
+    confirmLabel="Remove"
+    cancelLabel="Cancel"
+    onConfirm={confirmRemoveFolder}
+    onCancel={cancelRemoveFolder}
+  />
+
   {#if activeTab === 'Appearance'}
     <section class="max-w-[820px]">
       <div class="mb-7">
@@ -153,15 +169,6 @@
             </button>
           {/each}
         </div>
-        <ConfirmDialog
-          open={showRemoveFolderConfirm}
-          title="Remove folder"
-          message={folderToRemove ? `Remove "${folderName(folderToRemove)}" from Orca? Songs from this folder will be removed from the library.` : ''}
-          confirmLabel="Remove"
-          cancelLabel="Cancel"
-          onConfirm={confirmRemoveFolder}
-          onCancel={cancelRemoveFolder}
-        />
       </div>
 
       <div class="mb-7 border-t border-white/10 pt-5">
@@ -346,38 +353,84 @@
     </section>
   {:else if activeTab === 'Library'}
     <section class="max-w-[900px]">
-      <div>
-        <h3 class="text-sm font-bold text-white">Music folders</h3>
-        <p class="text-sm text-white/48">Remove folders Orca should no longer scan</p>
+      <div class="flex items-start justify-between gap-5">
+        <div>
+          <h3 class="text-sm font-bold text-white">Music folders</h3>
+          <p class="text-sm text-white/48">Folders Orca watches for additions and changes</p>
+        </div>
+        <button
+          class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-white/12 text-white/72 transition hover:border-white/35 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+          type="button"
+          title="Add music folder"
+          aria-label="Add music folder"
+          disabled={isScanning}
+          on:click={() => onAddFolder()}
+        >
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+            <path d="M12 11v5" />
+            <path d="M9.5 13.5h5" />
+          </svg>
+        </button>
       </div>
 
       <div class="mt-4 overflow-hidden rounded-md border border-white/10 bg-black/18">
         {#if scanRoots.length}
-          {#each scanRoots as root}
-            <div class="grid min-h-14 grid-cols-[minmax(0,1fr)_92px] items-center gap-4 border-b border-white/[0.06] px-4 last:border-b-0">
+          {#each scanRoots as source}
+            <div class="grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-white/[0.06] px-4 last:border-b-0">
               <div class="min-w-0">
-                <p class="truncate text-sm font-bold text-white">{folderName(root)}</p>
-                <p class="truncate text-xs text-white/38">{root}</p>
+                <div class="flex items-center gap-2">
+                  <p class="truncate text-sm font-bold text-white">{folderName(source.path)}</p>
+                  <span class={`shrink-0 text-[10px] font-bold ${source.available ? 'text-emerald-200/70' : 'text-amber-100/72'}`}>
+                    {source.available ? `Watching · ${sourceSongLabel(source.songCount)}` : `Unavailable · ${sourceSongLabel(source.songCount)}`}
+                  </span>
+                </div>
+                <p class="truncate text-xs text-white/38">{source.path}</p>
               </div>
-              <button
-                class="h-8 rounded-md border border-red-200/18 px-3 text-xs font-bold text-red-100/74 transition hover:border-red-200/34 hover:bg-red-500/12 hover:text-red-50 disabled:cursor-not-allowed disabled:opacity-40"
-                type="button"
-                disabled={isScanning}
-                on:click={() => removeFolder(root)}
-              >
-                Remove
-              </button>
+              <div class="flex items-center gap-2">
+                <button
+                  class="grid h-8 w-8 place-items-center rounded-md border border-white/12 text-white/62 transition hover:border-white/35 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  type="button"
+                  title={source.available ? `Rescan ${folderName(source.path)}` : 'Folder is unavailable'}
+                  aria-label={`Rescan ${folderName(source.path)}`}
+                  disabled={isScanning || !source.available}
+                  on:click={() => onRescanSource(source.path)}
+                >
+                  <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 12a9 9 0 0 1 15.1-6.6L21 8" />
+                    <path d="M21 3v5h-5" />
+                    <path d="M21 12a9 9 0 0 1-15.1 6.6L3 16" />
+                    <path d="M3 21v-5h5" />
+                  </svg>
+                </button>
+                <button
+                  class="grid h-8 w-8 place-items-center rounded-md border border-red-200/18 text-red-100/74 transition hover:border-red-200/34 hover:bg-red-500/12 hover:text-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  type="button"
+                  title={`Remove ${folderName(source.path)}`}
+                  aria-label={`Remove ${folderName(source.path)}`}
+                  disabled={isScanning}
+                  on:click={() => removeFolder(source.path)}
+                >
+                  <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 6h18" />
+                    <path d="M8 6V4h8v2" />
+                    <path d="m19 6-1 14H6L5 6" />
+                    <path d="M10 11v5" />
+                    <path d="M14 11v5" />
+                  </svg>
+                </button>
+              </div>
             </div>
           {/each}
         {:else}
           <div class="px-4 py-8 text-sm text-white/44">
-            No folders added yet.
+            Add a music folder to start building your library.
           </div>
         {/if}
       </div>
 
       <p class="mt-3 text-xs text-white/34">
-        Removing a folder keeps the files on disk. It only removes that folder from Orca and drops its songs from the library.
+        Unavailable folders stay in the library until they are available again. Removing a folder keeps its files on disk and removes its songs from Orca.
       </p>
 
       <div class="mt-10 border-t border-white/10 pt-6">

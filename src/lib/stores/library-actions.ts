@@ -26,6 +26,7 @@ type LibraryStore = {
   addFolder: () => Promise<LibrarySnapshot>;
   rescan: () => Promise<LibrarySnapshot>;
   removeScanRoot: (root: string) => Promise<LibrarySnapshot>;
+  rescanSource: (root: string) => Promise<LibrarySnapshot>;
   setPlaylists: (playlists: Playlist[]) => void;
 };
 
@@ -96,6 +97,17 @@ export function createLibraryActions({
       setStatus(`${snapshot.songs.length} tracks loaded`);
     } catch (error) {
       setStatus(messageFrom(error, 'Could not remove folder'));
+    }
+  }
+
+  async function rescanSource(root: string) {
+    setStatus('Rescanning folder...');
+    try {
+      const snapshot = await libraryStore.rescanSource(root);
+      applySnapshot(snapshot);
+      setStatus(`${snapshot.songs.length} tracks loaded`);
+    } catch (error) {
+      setStatus(messageFrom(error, 'Could not rescan folder'));
     }
   }
 
@@ -262,6 +274,7 @@ export function createLibraryActions({
     refreshLibrary,
     addPlaylist,
     removeScanRoot,
+    rescanSource,
     renameExistingPlaylist,
     deleteExistingPlaylist,
     handleChoosePlaylistCover,

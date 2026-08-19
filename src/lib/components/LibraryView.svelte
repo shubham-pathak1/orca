@@ -59,9 +59,11 @@
   export let onSidebarModeChange: (mode: 'expanded' | 'collapsed') => void = () => {};
   export let seekbarStyle: 'standard' | 'waveform' = 'standard';
   export let onSeekbarStyleChange: (style: 'standard' | 'waveform') => void = () => {};
-  export let scanRoots: string[] = [];
+  export let scanRoots: import('../tauri').LibrarySource[] = [];
   export let isScanning = false;
+  export let onAddFolder: () => Promise<void> | void = () => {};
   export let onRemoveScanRoot: (root: string) => Promise<void> | void = () => {};
+  export let onRescanSource: (root: string) => Promise<void> | void = () => {};
   export let dynamicCoverAccent = true;
   export let onDynamicCoverAccentChange: (enabled: boolean) => void = () => {};
   export let blurredBackground = true;
@@ -257,7 +259,7 @@
           {playerPlacement} {onPlayerPlacementChange}
           {sidebarMode} {onSidebarModeChange}
           {seekbarStyle} {onSeekbarStyleChange}
-          {scanRoots} {isScanning} {onRemoveScanRoot}
+          {scanRoots} {isScanning} {onAddFolder} {onRemoveScanRoot} {onRescanSource}
           {dynamicCoverAccent} {onDynamicCoverAccentChange}
           blurredBackground={blurredBackground} {onBlurredBackgroundChange}
           {fontFamily} {onFontFamilyChange}

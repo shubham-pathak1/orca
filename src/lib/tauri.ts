@@ -20,6 +20,12 @@ const fallbackPlayback: PlaybackState = {
   volume: 1
 };
 
+export type LibrarySource = {
+  path: string;
+  available: boolean;
+  songCount: number;
+};
+
 function cachedFileSrc(path: string | null): string | null {
   if (!path) {
     return null;
@@ -51,8 +57,16 @@ export async function libraryScanRoots(): Promise<string[]> {
   return invoke<string[]>('library_scan_roots').catch(() => []);
 }
 
+export async function librarySources(): Promise<LibrarySource[]> {
+  return invoke<LibrarySource[]>('library_sources').catch(() => []);
+}
+
 export async function removeLibraryScanRoot(root: string): Promise<LibrarySnapshot> {
   return invoke<LibrarySnapshot>('remove_library_scan_root', { root });
+}
+
+export async function rescanLibrarySource(root: string): Promise<LibrarySnapshot> {
+  return invoke<LibrarySnapshot>('rescan_library_source', { root });
 }
 
 export async function pickAndScanFolder(): Promise<LibrarySnapshot> {
