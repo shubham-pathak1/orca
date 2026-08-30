@@ -20,6 +20,17 @@ Orca is a local music player for Windows built using Svelte 5, Tauri 2, and Rust
 
 ---
 
+## Keyboard Shortcuts
+
+- `Space`: Play or pause
+- `Alt + N` / `Alt + P`: Next or previous song
+- `M`: Toggle mute
+- `L`: Show or hide full-player lyrics
+- `F11`: Toggle full screen
+- `Ctrl + Shift + B`: Enter or restore Phantom Mode while Orca is running
+
+---
+
 ## Screenshots
 
 **Library**: ![Library View](docs/screenshots/library.png)

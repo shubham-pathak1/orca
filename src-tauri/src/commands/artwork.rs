@@ -65,7 +65,11 @@ pub(crate) async fn fetch_artist_artwork_manual(
         .or_else(|| orca_core::online_artwork::fetch_deezer_artist_image(&artist_name))
         .ok_or_else(|| "Artist image not found online".to_string())?;
     let prefix = format!("artist_{}", safe_name(&artist_name));
-    let paths = orca_core::online_artwork::download_and_cache(&url, &artwork_dir().join("online"), &prefix)?;
+    let paths = orca_core::online_artwork::download_and_cache(
+        &url,
+        &artwork_dir().join("online"),
+        &prefix,
+    )?;
 
     let mut state = state.0.lock().map_err(|error| error.to_string())?;
     db::update_artist_artwork(
@@ -87,7 +91,11 @@ pub(crate) async fn fetch_album_artwork_manual(
     let url = orca_core::online_artwork::fetch_itunes_album_art(&artist, &album)
         .ok_or_else(|| "Album art not found online".to_string())?;
     let prefix = format!("album_{}", safe_name(&album_key));
-    let paths = orca_core::online_artwork::download_and_cache(&url, &artwork_dir().join("online"), &prefix)?;
+    let paths = orca_core::online_artwork::download_and_cache(
+        &url,
+        &artwork_dir().join("online"),
+        &prefix,
+    )?;
 
     let mut state = state.0.lock().map_err(|error| error.to_string())?;
     db::update_album_artwork(
@@ -188,7 +196,9 @@ fn fetch_missing_artist_artwork(conn: &rusqlite::Connection, cache_base: &std::p
                 .or_else(|| orca_core::online_artwork::fetch_deezer_artist_image(&artist_name))
             {
                 let prefix = format!("artist_{}", safe_name(&artist_name));
-                if let Ok(paths) = orca_core::online_artwork::download_and_cache(&url, cache_base, &prefix) {
+                if let Ok(paths) =
+                    orca_core::online_artwork::download_and_cache(&url, cache_base, &prefix)
+                {
                     let _ = db::update_artist_artwork(
                         conn,
                         &artist_name,
@@ -205,9 +215,13 @@ fn fetch_missing_artist_artwork(conn: &rusqlite::Connection, cache_base: &std::p
 fn fetch_missing_album_artwork(conn: &rusqlite::Connection, cache_base: &std::path::Path) {
     if let Ok(albums) = db::get_albums_needing_artwork(conn) {
         for (album_key, album_title, album_artist) in albums {
-            if let Some(url) = orca_core::online_artwork::fetch_itunes_album_art(&album_artist, &album_title) {
+            if let Some(url) =
+                orca_core::online_artwork::fetch_itunes_album_art(&album_artist, &album_title)
+            {
                 let prefix = format!("album_{}", safe_name(&album_key));
-                if let Ok(paths) = orca_core::online_artwork::download_and_cache(&url, cache_base, &prefix) {
+                if let Ok(paths) =
+                    orca_core::online_artwork::download_and_cache(&url, cache_base, &prefix)
+                {
                     let _ = db::update_album_artwork(
                         conn,
                         &album_key,

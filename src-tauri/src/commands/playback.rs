@@ -38,7 +38,10 @@ pub(crate) fn restore_playback_session(
     let state = state.0.lock().map_err(|error| error.to_string())?;
     state
         .audio_tx
-        .send(AudioCommand::LoadPaused(path, Duration::from_millis(position_ms)))
+        .send(AudioCommand::LoadPaused(
+            path,
+            Duration::from_millis(position_ms),
+        ))
         .map_err(|error| error.to_string())?;
     std::thread::sleep(Duration::from_millis(40));
     Ok(playback_snapshot_from(&state))
@@ -57,9 +60,7 @@ pub(crate) fn queue_next_playback(
     Ok(playback_snapshot_from(&state))
 }
 
-pub(crate) fn pause_playback(
-    state: State<'_, SharedOrcaState>,
-) -> Result<PlaybackState, String> {
+pub(crate) fn pause_playback(state: State<'_, SharedOrcaState>) -> Result<PlaybackState, String> {
     let state = state.0.lock().map_err(|error| error.to_string())?;
     state
         .audio_tx
@@ -71,9 +72,7 @@ pub(crate) fn pause_playback(
     Ok(playback_snapshot_from(&state))
 }
 
-pub(crate) fn resume_playback(
-    state: State<'_, SharedOrcaState>,
-) -> Result<PlaybackState, String> {
+pub(crate) fn resume_playback(state: State<'_, SharedOrcaState>) -> Result<PlaybackState, String> {
     let state = state.0.lock().map_err(|error| error.to_string())?;
     if playback_snapshot_from(&state).current_path.is_none() {
         return Ok(playback_snapshot_from(&state));

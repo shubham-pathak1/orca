@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use rusqlite::{params, Connection};
 
-#[derive(serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 pub struct Playlist {
     pub id: i64,
     pub name: String,

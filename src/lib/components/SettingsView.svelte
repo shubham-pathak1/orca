@@ -61,7 +61,8 @@
     { keys: ['Alt', 'P'], action: 'Previous song' },
     { keys: ['M'], action: 'Toggle mute' },
     { keys: ['L'], action: 'Show or hide lyrics in the full player' },
-    { keys: ['F11'], action: 'Toggle full screen' }
+    { keys: ['F11'], action: 'Toggle full screen' },
+    { keys: ['Ctrl', 'Shift', 'B'], action: 'Toggle Phantom mode' }
   ];
 
   import { openUrl } from '@tauri-apps/plugin-opener';

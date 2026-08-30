@@ -324,7 +324,10 @@ async fn waveform_peaks(
 }
 
 #[tauri::command]
-fn update_media_controls(update: MediaControlsUpdate, state: State<'_, SharedOrcaState>) -> Result<(), String> {
+fn update_media_controls(
+    update: MediaControlsUpdate,
+    state: State<'_, SharedOrcaState>,
+) -> Result<(), String> {
     commands::media_controls::update_media_controls(update, state)
 }
 
@@ -358,10 +361,7 @@ fn pick_font_file() -> Result<String, String> {
 }
 
 pub fn run() {
-    let phantom_shortcut = Shortcut::new(
-        Some(Modifiers::CONTROL | Modifiers::SHIFT),
-        Code::KeyB,
-    );
+    let phantom_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyB);
     // Register the App User Model ID so Windows taskbar thumbnail buttons
     // work in both the installed version and the portable .exe.
     #[cfg(target_os = "windows")]
@@ -377,36 +377,46 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
             let state = load_state().map_err(|error| Box::<dyn std::error::Error>::from(error))?;
-            
+
             let mut state = state;
 
             // Initialize souvlaki MediaControls
             #[cfg(target_os = "windows")]
             {
-                use souvlaki::{PlatformConfig, MediaControls, MediaControlEvent};
+                use souvlaki::{MediaControlEvent, MediaControls, PlatformConfig};
                 use tauri::Manager;
-                
+
                 let hwnd = app.get_webview_window("main").unwrap().hwnd().unwrap().0 as *mut _;
                 let config = PlatformConfig {
                     dbus_name: "orca",
                     display_name: "Orca",
                     hwnd: Some(hwnd),
                 };
-                
+
                 match MediaControls::new(config) {
                     Ok(mut controls) => {
                         let app_handle = app.handle().clone();
-                        controls.attach(move |event| {
-                            match event {
-                                MediaControlEvent::Play => phantom::emit_or_handle_playback_action(&app_handle, "play"),
-                                MediaControlEvent::Pause => phantom::emit_or_handle_playback_action(&app_handle, "pause"),
-                                MediaControlEvent::Toggle => phantom::emit_or_handle_playback_action(&app_handle, "toggle"),
-                                MediaControlEvent::Next => phantom::emit_or_handle_playback_action(&app_handle, "next"),
-                                MediaControlEvent::Previous => phantom::emit_or_handle_playback_action(&app_handle, "prev"),
+                        controls
+                            .attach(move |event| match event {
+                                MediaControlEvent::Play => {
+                                    phantom::emit_or_handle_playback_action(&app_handle, "play")
+                                }
+                                MediaControlEvent::Pause => {
+                                    phantom::emit_or_handle_playback_action(&app_handle, "pause")
+                                }
+                                MediaControlEvent::Toggle => {
+                                    phantom::emit_or_handle_playback_action(&app_handle, "toggle")
+                                }
+                                MediaControlEvent::Next => {
+                                    phantom::emit_or_handle_playback_action(&app_handle, "next")
+                                }
+                                MediaControlEvent::Previous => {
+                                    phantom::emit_or_handle_playback_action(&app_handle, "prev")
+                                }
                                 _ => {}
-                            }
-                        }).ok();
-                        
+                            })
+                            .ok();
+
                         state.media_controls = Some(controls);
                         println!("Successfully initialized souvlaki MediaControls");
                     }
@@ -430,46 +440,97 @@ pub fn run() {
             let _ = watch_tx.send(LibraryWatchMessage::UpdateRoots(watched_roots));
             app.manage(SharedOrcaState(shared_state));
 
-            match app.global_shortcut().on_shortcut(phantom_shortcut, |app, _, event| {
-                if event.state != ShortcutState::Pressed {
-                    return;
-                }
-
-                println!("Phantom Mode shortcut invoked");
-                let state = app.state::<SharedOrcaState>();
-                let is_phantom = state
-                    .0
-                    .lock()
-                    .ok()
-                    .and_then(|state| state.phantom_controller.lock().ok().map(|controller| controller.is_active()))
-                    .unwrap_or(false);
-
-                if is_phantom {
-                    if let Err(error) = phantom::show_main_window(app, &state) {
-                        eprintln!("Could not restore Orca from Phantom Mode: {error}");
+            match app
+                .global_shortcut()
+                .on_shortcut(phantom_shortcut, |app, _, event| {
+                    if event.state != ShortcutState::Pressed {
+                        return;
                     }
-                } else if let Err(error) = phantom::enter_prepared_phantom_mode(app, &state) {
-                    eprintln!("Could not enter Phantom Mode: {error}");
-                }
-            }) {
+
+                    println!("Phantom Mode shortcut invoked");
+                    let state = app.state::<SharedOrcaState>();
+                    let is_phantom = state
+                        .0
+                        .lock()
+                        .ok()
+                        .and_then(|state| {
+                            state
+                                .phantom_controller
+                                .lock()
+                                .ok()
+                                .map(|controller| controller.is_active())
+                        })
+                        .unwrap_or(false);
+
+                    if is_phantom {
+                        if let Err(error) = phantom::show_main_window(app, &state) {
+                            eprintln!("Could not restore Orca from Phantom Mode: {error}");
+                        }
+                    } else if let Err(error) = phantom::enter_prepared_phantom_mode(app, &state) {
+                        eprintln!("Could not enter Phantom Mode: {error}");
+                    }
+                }) {
                 Ok(()) => println!("Registered Ctrl+Shift+B for Phantom Mode"),
-                Err(error) => eprintln!("Could not register Ctrl+Shift+B for Phantom Mode: {error}"),
+                Err(error) => {
+                    eprintln!("Could not register Ctrl+Shift+B for Phantom Mode: {error}")
+                }
             }
 
             let tray_icon = app
                 .default_window_icon()
                 .cloned()
                 .ok_or_else(|| "Orca tray icon is not configured.".to_string())?;
-            let play_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/taskbar/play.ico"))?;
-            let previous_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/taskbar/prev.ico"))?;
-            let next_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/taskbar/next.ico"))?;
-            let show = tauri::menu::IconMenuItem::with_id(app, "show", "Show Orca", true, Some(tray_icon.clone()), None::<&str>)?;
-            let toggle = tauri::menu::IconMenuItem::with_id(app, "toggle", "Play/Pause", true, Some(play_icon), None::<&str>)?;
-            let previous = tauri::menu::IconMenuItem::with_id(app, "previous", "Previous", true, Some(previous_icon), None::<&str>)?;
-            let next = tauri::menu::IconMenuItem::with_id(app, "next", "Next", true, Some(next_icon), None::<&str>)?;
+            let play_icon =
+                tauri::image::Image::from_bytes(include_bytes!("../icons/taskbar/play.ico"))?;
+            let previous_icon =
+                tauri::image::Image::from_bytes(include_bytes!("../icons/taskbar/prev.ico"))?;
+            let next_icon =
+                tauri::image::Image::from_bytes(include_bytes!("../icons/taskbar/next.ico"))?;
+            let show = tauri::menu::IconMenuItem::with_id(
+                app,
+                "show",
+                "Show Orca",
+                true,
+                Some(tray_icon.clone()),
+                None::<&str>,
+            )?;
+            let toggle = tauri::menu::IconMenuItem::with_id(
+                app,
+                "toggle",
+                "Play/Pause",
+                true,
+                Some(play_icon),
+                None::<&str>,
+            )?;
+            let previous = tauri::menu::IconMenuItem::with_id(
+                app,
+                "previous",
+                "Previous",
+                true,
+                Some(previous_icon),
+                None::<&str>,
+            )?;
+            let next = tauri::menu::IconMenuItem::with_id(
+                app,
+                "next",
+                "Next",
+                true,
+                Some(next_icon),
+                None::<&str>,
+            )?;
             let separator = tauri::menu::PredefinedMenuItem::separator(app)?;
-            let quit = tauri::menu::IconMenuItem::with_id(app, "quit", "Quit Orca", true, None::<tauri::image::Image<'static>>, None::<&str>)?;
-            let menu = tauri::menu::Menu::with_items(app, &[&show, &toggle, &previous, &next, &separator, &quit])?;
+            let quit = tauri::menu::IconMenuItem::with_id(
+                app,
+                "quit",
+                "Quit Orca",
+                true,
+                None::<tauri::image::Image<'static>>,
+                None::<&str>,
+            )?;
+            let menu = tauri::menu::Menu::with_items(
+                app,
+                &[&show, &toggle, &previous, &next, &separator, &quit],
+            )?;
             tauri::tray::TrayIconBuilder::with_id("orca-tray")
                 .icon(tray_icon)
                 .tooltip("Orca")
@@ -551,7 +612,13 @@ pub fn run() {
                     .0
                     .lock()
                     .ok()
-                    .and_then(|state| state.phantom_controller.lock().ok().map(|controller| controller.is_active()))
+                    .and_then(|state| {
+                        state
+                            .phantom_controller
+                            .lock()
+                            .ok()
+                            .map(|controller| controller.is_active())
+                    })
                     .unwrap_or(false);
                 if phantom_active {
                     println!("Keeping Orca alive in Phantom Mode");

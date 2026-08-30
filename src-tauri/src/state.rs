@@ -75,14 +75,19 @@ pub(crate) fn load_state() -> Result<OrcaState, String> {
     db::migrate_inline_artwork_to_files(&conn, &artwork_dir)?;
     let songs = db::get_all_songs(&conn)?;
     let (audio_event_tx, audio_event_rx) = mpsc::channel();
-    let (audio_tx, playback_state, visualizer_data) = audio_engine::spawn_audio_thread(Some(move |event: &str, _| {
-        if event == "playback-ended" {
-            let _ = audio_event_tx.send(AudioEvent::PlaybackEnded);
-        }
-    }));
+    let (audio_tx, playback_state, visualizer_data) =
+        audio_engine::spawn_audio_thread(Some(move |event: &str, _| {
+            if event == "playback-ended" {
+                let _ = audio_event_tx.send(AudioEvent::PlaybackEnded);
+            }
+        }));
     let (library_watch_tx, _) = mpsc::channel();
     let phantom_controller = Arc::new(Mutex::new(PhantomController::default()));
-    phantom::spawn_audio_event_handler(audio_event_rx, Arc::clone(&phantom_controller), audio_tx.clone());
+    phantom::spawn_audio_event_handler(
+        audio_event_rx,
+        Arc::clone(&phantom_controller),
+        audio_tx.clone(),
+    );
 
     Ok(OrcaState {
         db_conn: conn,

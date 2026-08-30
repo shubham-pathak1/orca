@@ -34,15 +34,21 @@ pub(crate) fn update_media_controls(
                 ..Default::default()
             };
 
-            controls.set_metadata(metadata).map_err(|error| error.to_string())?;
+            controls
+                .set_metadata(metadata)
+                .map_err(|error| error.to_string())?;
 
-            let progress = update.progress.map(|value| MediaPosition(Duration::from_secs_f64(value)));
+            let progress = update
+                .progress
+                .map(|value| MediaPosition(Duration::from_secs_f64(value)));
             let playback = if update.playing {
                 MediaPlayback::Playing { progress }
             } else {
                 MediaPlayback::Paused { progress }
             };
-            controls.set_playback(playback).map_err(|error| error.to_string())?;
+            controls
+                .set_playback(playback)
+                .map_err(|error| error.to_string())?;
         }
     }
 

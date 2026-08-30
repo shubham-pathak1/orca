@@ -61,9 +61,15 @@ impl PhantomController {
 
         let current_path = session.current_path.clone();
         let removed: HashSet<_> = session.removed_paths.into_iter().collect();
-        let playable = |path: &String| path == &current_path || (!removed.contains(path) && available.contains(path));
+        let playable = |path: &String| {
+            path == &current_path || (!removed.contains(path) && available.contains(path))
+        };
         let ordered = if session.order_paths.is_empty() {
-            available_paths.iter().filter(|path| playable(path)).cloned().collect()
+            available_paths
+                .iter()
+                .filter(|path| playable(path))
+                .cloned()
+                .collect()
         } else {
             unique_existing(session.order_paths, &available, &playable)
         };
@@ -131,7 +137,10 @@ impl PhantomController {
             return Some(next);
         }
 
-        let current_index = self.playable_paths.iter().position(|path| path == &current)?;
+        let current_index = self
+            .playable_paths
+            .iter()
+            .position(|path| path == &current)?;
         let next_index = current_index + 1;
         let next = if next_index < self.playable_paths.len() {
             self.playable_paths[next_index].clone()
@@ -147,8 +156,14 @@ impl PhantomController {
 
     fn previous_path(&mut self) -> Option<String> {
         let current = self.current_path.clone()?;
-        let current_index = self.playable_paths.iter().position(|path| path == &current)?;
-        let previous = current_index.checked_sub(1).and_then(|index| self.playable_paths.get(index)).cloned()?;
+        let current_index = self
+            .playable_paths
+            .iter()
+            .position(|path| path == &current)?;
+        let previous = current_index
+            .checked_sub(1)
+            .and_then(|index| self.playable_paths.get(index))
+            .cloned()?;
         self.current_path = Some(previous.clone());
         self.shuffle_played_paths.insert(previous.clone());
         Some(previous)
@@ -182,10 +197,12 @@ pub(crate) fn spawn_audio_event_handler(
                 continue;
             }
 
-            let next = controller
-                .lock()
-                .ok()
-                .and_then(|mut controller| controller.is_active().then(|| controller.next_path()).flatten());
+            let next = controller.lock().ok().and_then(|mut controller| {
+                controller
+                    .is_active()
+                    .then(|| controller.next_path())
+                    .flatten()
+            });
             if let Some(path) = next {
                 let _ = audio_tx.send(AudioCommand::Play(path));
             }
@@ -199,7 +216,11 @@ fn enter_session(
     shared_state: &SharedOrcaState,
 ) -> Result<(), String> {
     let state = shared_state.0.lock().map_err(|error| error.to_string())?;
-    let available_paths = state.songs.iter().map(|song| song.path.clone()).collect::<Vec<_>>();
+    let available_paths = state
+        .songs
+        .iter()
+        .map(|song| song.path.clone())
+        .collect::<Vec<_>>();
     state
         .phantom_controller
         .lock()
@@ -254,7 +275,9 @@ pub(crate) fn enter_prepared_phantom_mode(
             .lock()
             .map_err(|error| error.to_string())?
             .prepared_session()
-            .ok_or_else(|| "Phantom Mode is still preparing playback state. Try again in a moment.".to_string())?;
+            .ok_or_else(|| {
+                "Phantom Mode is still preparing playback state. Try again in a moment.".to_string()
+            })?;
         session
     };
     println!("Entering Phantom Mode from cached playback state");
@@ -298,8 +321,15 @@ pub(crate) fn leave_phantom_mode(state: &SharedOrcaState) {
 pub(crate) fn toggle_playback(state: &SharedOrcaState) -> Result<PlaybackState, String> {
     let state = state.0.lock().map_err(|error| error.to_string())?;
     let playback = playback_snapshot_from(&state);
-    let command = if playback.is_playing { AudioCommand::Pause } else { AudioCommand::Resume };
-    state.audio_tx.send(command).map_err(|error| error.to_string())?;
+    let command = if playback.is_playing {
+        AudioCommand::Pause
+    } else {
+        AudioCommand::Resume
+    };
+    state
+        .audio_tx
+        .send(command)
+        .map_err(|error| error.to_string())?;
     Ok(playback_snapshot_from(&state))
 }
 
@@ -310,13 +340,20 @@ pub(crate) fn skip(state: &SharedOrcaState, previous: bool) -> Result<bool, Stri
         .lock()
         .map_err(|error| error.to_string())?;
     let path = if controller.is_active() {
-        if previous { controller.previous_path() } else { controller.next_path() }
+        if previous {
+            controller.previous_path()
+        } else {
+            controller.next_path()
+        }
     } else {
         None
     };
     drop(controller);
     if let Some(path) = path {
-        state.audio_tx.send(AudioCommand::Play(path)).map_err(|error| error.to_string())?;
+        state
+            .audio_tx
+            .send(AudioCommand::Play(path))
+            .map_err(|error| error.to_string())?;
         return Ok(true);
     }
     Ok(false)
@@ -328,7 +365,13 @@ pub(crate) fn emit_or_handle_playback_action(app: &AppHandle, action: &str) {
         .0
         .lock()
         .ok()
-        .and_then(|state| state.phantom_controller.lock().ok().map(|controller| controller.is_active()))
+        .and_then(|state| {
+            state
+                .phantom_controller
+                .lock()
+                .ok()
+                .map(|controller| controller.is_active())
+        })
         .unwrap_or(false);
     if !active {
         let _ = app.emit(&format!("media-{action}"), ());
