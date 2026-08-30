@@ -12,7 +12,7 @@ Orca is a local music player for Windows built using Svelte 5, Tauri 2, and Rust
 - **Local library**: Scan local folders and keep them updated as files change. Supports `MP3`, `FLAC`, `M4A`, `WAV`, `OGG`, `OPUS`, and `AIFF` / `AIF`.
 - **Playback**: Rodio-based audio playback with gapless playback, queue controls, shuffle, repeat, and waveform or standard seeking.
 - **Waveforms**: Decode and cache waveform seekbars from the track audio.
-- **Lyrics**: Read embedded lyrics first, then fetch and cache timed or plain lyrics from LRCLIB. Click a lyric line to seek, or import a local `.lrc` file through the metadata editor.
+- **Lyrics**: Prefer matching local `.lrc` files, then read embedded lyrics or fetch and cache timed or plain lyrics from LRCLIB. Click a lyric line to seek, or import a local `.lrc` file through the metadata editor.
 - **Metadata**: Edit track tags and cover art directly in the app.
 - **Playlists**: Create playlists, set custom covers, and import or export standard M3U playlists.
 - **Windows integration**: Taskbar controls, global media shortcuts, and Windows media controls.
@@ -47,6 +47,7 @@ src/                 Svelte frontend codebase
 src/lib/components/  UI components (Player, Waveform, Metadata, Queue)
 src-tauri/           Tauri application backend and command handlers
 crates/orca-core/    Core database structure, scanning engine, and audio thread logic
+crates/orca-gpui/    Experimental native GPUI prototype
 ```
 
 ---
@@ -76,6 +77,20 @@ To run the desktop app with Rust release optimizations:
 ```bash
 bun run tauri:dev -- --release
 ```
+
+---
+
+## Native GPUI Prototype
+
+The main app remains the Svelte/Tauri version on the default branch. A separate, experimental native UI prototype lives on the [gpui-prototype branch](../../tree/gpui-prototype). It is not release-ready and may change quickly, but it is a place to explore a lower-overhead native renderer for Orca.
+
+To try it on Windows:
+
+```bash
+cargo run --release --manifest-path crates/orca-gpui/Cargo.toml
+```
+
+Contributors interested in GPUI, native Windows rendering, input/accessibility, profiling, or cross-platform packaging are especially welcome. Please open an issue before taking on a larger change so the work can be coordinated.
 
 ---
 
