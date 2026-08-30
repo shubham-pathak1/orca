@@ -411,7 +411,7 @@ pub fn run() {
                 }
             }
 
-            let watched_roots = commands::library::watcher_roots(&state);
+            let watched_roots = commands::library::watcher_roots(&mut state);
             let (watch_tx, watch_rx) = std::sync::mpsc::channel();
             state.library_watch_tx = watch_tx.clone();
 

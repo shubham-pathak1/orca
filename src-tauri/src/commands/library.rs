@@ -3,8 +3,7 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicUsize, Ordering},
-        mpsc,
-        Arc,
+        mpsc, Arc,
     },
     time::Duration,
 };
@@ -72,8 +71,22 @@ fn notify_library_watcher(state: &OrcaState, roots: Vec<PathBuf>) {
         .send(LibraryWatchMessage::UpdateRoots(roots));
 }
 
-pub(crate) fn watcher_roots(state: &OrcaState) -> Vec<PathBuf> {
-    load_scan_roots(state)
+pub(crate) fn watcher_roots(state: &mut OrcaState) -> Vec<PathBuf> {
+    let roots = load_scan_roots(state);
+    if !roots.is_empty() {
+        return roots;
+    }
+
+    // Libraries created before scan roots were persisted otherwise have songs in the
+    // database but nothing for the file watcher to observe.
+    let inferred = infer_scan_roots(&state.songs);
+    if inferred.is_empty() {
+        return Vec::new();
+    }
+    if let Err(error) = persist_scan_roots(state, &inferred) {
+        eprintln!("Unable to persist inferred library folders: {error}");
+    }
+    available_scan_roots(&inferred)
 }
 
 fn add_scan_root(state: &OrcaState, folder: PathBuf) -> Result<Vec<PathBuf>, String> {
@@ -299,12 +312,8 @@ pub(crate) async fn remove_library_scan_root(
     };
 
     let scanned = scan_with_progress(app, active_roots.clone(), artwork_dir, existing_map).await?;
-    let scanned = merge_scanned_with_unavailable_sources(
-        scanned,
-        &existing_songs,
-        &roots,
-        &active_roots,
-    );
+    let scanned =
+        merge_scanned_with_unavailable_sources(scanned, &existing_songs, &roots, &active_roots);
     let mut state = state.0.lock().map_err(|error| error.to_string())?;
     persist_scan_roots(&state, &roots)?;
     db::replace_songs_in_db(&state.db_conn, &scanned)?;
@@ -337,12 +346,8 @@ pub(crate) async fn pick_and_scan_folder(
     };
 
     let scanned = scan_with_progress(app, active_roots.clone(), artwork_dir, existing_map).await?;
-    let scanned = merge_scanned_with_unavailable_sources(
-        scanned,
-        &existing_songs,
-        &roots,
-        &active_roots,
-    );
+    let scanned =
+        merge_scanned_with_unavailable_sources(scanned, &existing_songs, &roots, &active_roots);
     let mut state = state.0.lock().map_err(|error| error.to_string())?;
     db::replace_songs_in_db(&state.db_conn, &scanned)?;
     state.songs = db::get_all_songs(&state.db_conn)?;
@@ -380,12 +385,8 @@ pub(crate) async fn rescan_library(
     };
 
     let scanned = scan_with_progress(app, active_roots.clone(), artwork_dir, existing_map).await?;
-    let scanned = merge_scanned_with_unavailable_sources(
-        scanned,
-        &existing_songs,
-        &roots,
-        &active_roots,
-    );
+    let scanned =
+        merge_scanned_with_unavailable_sources(scanned, &existing_songs, &roots, &active_roots);
     let mut state = state.0.lock().map_err(|error| error.to_string())?;
     db::replace_songs_in_db(&state.db_conn, &scanned)?;
     state.songs = db::get_all_songs(&state.db_conn)?;
@@ -449,7 +450,9 @@ async fn scan_with_progress(
         let mut batch = Vec::with_capacity(SCAN_SONG_BATCH_SIZE);
         let flush = |batch: &mut Vec<LocalSong>| {
             if !batch.is_empty() {
-                batch_app.emit("scan-song-batch", std::mem::take(batch)).ok();
+                batch_app
+                    .emit("scan-song-batch", std::mem::take(batch))
+                    .ok();
             }
         };
 
@@ -474,7 +477,13 @@ async fn scan_with_progress(
         let on_song_indexed = move |song| {
             let _ = indexed_song_tx.send(song);
         };
-        scan_roots(roots, artwork_dir, existing_map, on_progress, on_song_indexed)
+        scan_roots(
+            roots,
+            artwork_dir,
+            existing_map,
+            on_progress,
+            on_song_indexed,
+        )
     })
     .await
     .map_err(|error| error.to_string())?;
@@ -517,7 +526,7 @@ pub(crate) fn refresh_watched_library(
     app: &tauri::AppHandle,
     shared_state: &std::sync::Arc<std::sync::Mutex<OrcaState>>,
     changed_paths: Vec<PathBuf>,
-) -> Result<(), String> {
+) -> Result<Vec<PathBuf>, String> {
     let (artwork_dir, roots, existing_songs) = {
         let state = shared_state.lock().map_err(|error| error.to_string())?;
         (
@@ -527,7 +536,7 @@ pub(crate) fn refresh_watched_library(
         )
     };
     if roots.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
 
     let existing_map = existing_songs
@@ -545,6 +554,7 @@ pub(crate) fn refresh_watched_library(
         .collect::<HashMap<_, _>>();
     let mut updated_by_path = HashMap::new();
     let mut removed_paths = HashSet::new();
+    let mut retry_paths = Vec::new();
 
     for path in changed_paths {
         if !roots.iter().any(|root| path.starts_with(root)) {
@@ -553,8 +563,17 @@ pub(crate) fn refresh_watched_library(
 
         if path.is_file() {
             if orca_core::scanner::is_supported_audio_file(&path) {
-                if let Ok(song) = orca_core::library::scan_music_file(&path, &artwork_dir) {
-                    updated_by_path.insert(song.path.clone(), song);
+                match orca_core::library::scan_music_file(&path, &artwork_dir) {
+                    Ok(song) => {
+                        updated_by_path.insert(song.path.clone(), song);
+                    }
+                    Err(error) => {
+                        eprintln!(
+                            "Will retry newly changed library file {}: {error}",
+                            path.display()
+                        );
+                        retry_paths.push(path);
+                    }
                 }
             } else if existing_map.contains_key(&path.to_string_lossy().to_string()) {
                 removed_paths.insert(path.to_string_lossy().to_string());
@@ -563,10 +582,25 @@ pub(crate) fn refresh_watched_library(
         }
 
         if path.is_dir() {
-            for song in
-                orca_core::scanner::scan_music_folder(&path, &artwork_dir, &existing_map, || {}, |_| {})?
-            {
-                updated_by_path.insert(song.path.clone(), song);
+            match orca_core::scanner::scan_music_folder(
+                &path,
+                &artwork_dir,
+                &existing_map,
+                || {},
+                |_| {},
+            ) {
+                Ok(songs) => {
+                    for song in songs {
+                        updated_by_path.insert(song.path.clone(), song);
+                    }
+                }
+                Err(error) => {
+                    eprintln!(
+                        "Will retry newly changed library folder {}: {error}",
+                        path.display()
+                    );
+                    retry_paths.push(path);
+                }
             }
             continue;
         }
@@ -580,7 +614,7 @@ pub(crate) fn refresh_watched_library(
 
     removed_paths.retain(|path| !updated_by_path.contains_key(path));
     if updated_by_path.is_empty() && removed_paths.is_empty() {
-        return Ok(());
+        return Ok(retry_paths);
     }
 
     let mut state = shared_state.lock().map_err(|error| error.to_string())?;
@@ -592,5 +626,5 @@ pub(crate) fn refresh_watched_library(
     state.songs = db::get_all_songs(&state.db_conn)?;
     stop_playback_if_track_was_removed(&state);
     app.emit("library-watcher-refreshed", ()).ok();
-    Ok(())
+    Ok(retry_paths)
 }

@@ -1,12 +1,12 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     path::PathBuf,
     sync::{mpsc, Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
 
-use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{event::ModifyKind, Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::AppHandle;
 
 use crate::{
@@ -15,6 +15,8 @@ use crate::{
 };
 
 const DEBOUNCE_DELAY: Duration = Duration::from_secs(2);
+const RETRY_DELAY: Duration = Duration::from_secs(3);
+const MAX_FILE_RETRIES: u8 = 5;
 const IDLE_WAIT: Duration = Duration::from_secs(60);
 
 pub(crate) fn start_library_watcher(
@@ -29,7 +31,7 @@ pub(crate) fn start_library_watcher(
             move |event: notify::Result<notify::Event>| match event {
                 Ok(event) => match event.kind {
                     EventKind::Access(_) => {}
-                    EventKind::Any | EventKind::Other => {
+                    EventKind::Any | EventKind::Other | EventKind::Modify(ModifyKind::Name(_)) => {
                         let _ = callback_sender.send(LibraryWatchMessage::FullRescan);
                     }
                     _ => {
@@ -54,6 +56,7 @@ pub(crate) fn start_library_watcher(
         let mut watched_roots = Vec::new();
         let mut refresh_deadline: Option<Instant> = None;
         let mut changed_paths = HashSet::new();
+        let mut retry_attempts = HashMap::<PathBuf, u8>::new();
         let mut needs_full_rescan = false;
 
         loop {
@@ -66,10 +69,14 @@ pub(crate) fn start_library_watcher(
                     replace_watches(&mut watcher, &mut watched_roots, roots);
                     refresh_deadline = None;
                     changed_paths.clear();
+                    retry_attempts.clear();
                     needs_full_rescan = false;
                 }
                 Ok(LibraryWatchMessage::FilesystemChanged(paths)) => {
-                    changed_paths.extend(paths);
+                    for path in paths {
+                        retry_attempts.remove(&path);
+                        changed_paths.insert(path);
+                    }
                     refresh_deadline = Some(Instant::now() + DEBOUNCE_DELAY);
                 }
                 Ok(LibraryWatchMessage::FullRescan) => {
@@ -78,16 +85,48 @@ pub(crate) fn start_library_watcher(
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     if refresh_deadline.is_some() {
-                        let result = if needs_full_rescan {
-                            rescan_watched_library(&app, &state)
+                        let now = Instant::now();
+                        if needs_full_rescan {
+                            if let Err(error) = rescan_watched_library(&app, &state) {
+                                eprintln!("Automatic library refresh failed: {error}");
+                            }
+                            retry_attempts.clear();
+                            refresh_deadline = None;
+                            needs_full_rescan = false;
                         } else {
-                            refresh_watched_library(&app, &state, changed_paths.drain().collect())
-                        };
-                        if let Err(error) = result {
-                            eprintln!("Automatic library refresh failed: {error}");
+                            match refresh_watched_library(
+                                &app,
+                                &state,
+                                changed_paths.drain().collect(),
+                            ) {
+                                Ok(retry_paths) => {
+                                    for path in retry_paths {
+                                        let should_retry = {
+                                            let attempts =
+                                                retry_attempts.entry(path.clone()).or_default();
+                                            *attempts += 1;
+                                            *attempts <= MAX_FILE_RETRIES
+                                        };
+                                        if should_retry {
+                                            changed_paths.insert(path);
+                                        } else {
+                                            retry_attempts.remove(&path);
+                                            eprintln!(
+                                                "Stopped retrying unreadable library file after {MAX_FILE_RETRIES} attempts: {}",
+                                                path.display()
+                                            );
+                                        }
+                                    }
+                                    refresh_deadline =
+                                        (!changed_paths.is_empty()).then_some(now + RETRY_DELAY);
+                                }
+                                Err(error) => {
+                                    eprintln!("Automatic library refresh failed: {error}");
+                                    needs_full_rescan = true;
+                                    refresh_deadline = Some(now + RETRY_DELAY);
+                                }
+                            }
                         }
-                        refresh_deadline = None;
-                        needs_full_rescan = false;
                     }
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => return,
