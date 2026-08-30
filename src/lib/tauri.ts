@@ -125,6 +125,10 @@ export async function cacheLyrics(path: string, lyrics: string): Promise<void> {
   return invoke<void>('cache_lyrics', { path, lyrics });
 }
 
+export async function localLyrics(path: string): Promise<string | null> {
+  return invoke<string | null>('local_lyrics', { path }).catch(() => null);
+}
+
 export async function pickLyricsFile(): Promise<string | null> {
   return invoke<string | null>('pick_lyrics_file');
 }

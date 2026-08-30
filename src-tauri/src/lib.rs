@@ -157,6 +157,11 @@ fn cache_lyrics(
 }
 
 #[tauri::command]
+fn local_lyrics(path: String) -> Result<Option<String>, String> {
+    commands::lyrics::local_lyrics(path)
+}
+
+#[tauri::command]
 fn pick_lyrics_file() -> Result<Option<String>, String> {
     commands::lyrics::pick_lyrics_file()
 }
@@ -509,6 +514,7 @@ pub fn run() {
             export_playlist,
             cached_lyrics,
             cache_lyrics,
+            local_lyrics,
             pick_lyrics_file,
             choose_artist_cover,
             remove_artist_cover,

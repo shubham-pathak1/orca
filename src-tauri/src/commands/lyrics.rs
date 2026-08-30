@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::Path};
 
 use orca_core::db;
 use tauri::State;
@@ -20,6 +20,19 @@ pub(crate) fn cache_lyrics(
 ) -> Result<(), String> {
     let state = state.0.lock().map_err(|error| error.to_string())?;
     db::set_lyrics(&state.db_conn, &path, &lyrics)
+}
+
+pub(crate) fn local_lyrics(path: String) -> Result<Option<String>, String> {
+    let audio_path = Path::new(&path);
+    let lyrics_path = audio_path.with_extension("lrc");
+    if !lyrics_path.is_file() {
+        return Ok(None);
+    }
+
+    let lyrics = fs::read_to_string(&lyrics_path)
+        .map_err(|error| format!("Could not read {}: {error}", lyrics_path.display()))?;
+    let lyrics = lyrics.trim_start_matches('\u{feff}').trim().to_string();
+    Ok((!lyrics.is_empty()).then_some(lyrics))
 }
 
 pub(crate) fn pick_lyrics_file() -> Result<Option<String>, String> {
