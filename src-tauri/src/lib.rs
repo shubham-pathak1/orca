@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use orca_core::{audio_engine::PlaybackState, db, library::SongMetadataUpdate};
-use tauri::{Manager, State};
+use tauri::{webview::PageLoadEvent, Manager, State};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 mod commands;
@@ -375,6 +375,13 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_taskbar::init())
         .plugin(tauri_plugin_opener::init())
+        .on_page_load(|webview, payload| {
+            if webview.label() == "main" && matches!(payload.event(), PageLoadEvent::Finished) {
+                if let Err(error) = webview.window().show() {
+                    eprintln!("Could not show Orca's main window: {error}");
+                }
+            }
+        })
         .setup(move |app| {
             let state = load_state().map_err(|error| Box::<dyn std::error::Error>::from(error))?;
 

@@ -6,6 +6,33 @@
     <meta name="theme-color" content="#0b0c0f" />
     <link rel="icon" href="/orca_logo.png" />
     <title>Orca</title>
+    <style>
+      html, body, #app {
+        min-height: 100%;
+        margin: 0;
+        background: #0b0c0f;
+      }
+
+      #app:empty {
+        display: grid;
+        min-height: 100vh;
+        place-items: center;
+      }
+
+      #app:empty::before {
+        width: 18px;
+        height: 18px;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        border-top-color: #f4f0e8;
+        border-radius: 50%;
+        content: "";
+        animation: orca-launch-spin 760ms linear infinite;
+      }
+
+      @keyframes orca-launch-spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>
