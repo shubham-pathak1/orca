@@ -12,6 +12,7 @@ target/
 target-check/
 src-tauri/target/
 src-tauri/gen/
+release/
 
 # Local environment
 .env

@@ -5,6 +5,10 @@ Orca is a local music player for Windows built using Svelte 5, Tauri 2, and Rust
 > [!IMPORTANT]
 > **Alpha release:** Orca is in active development. Performance and stability on libraries larger than **5,000 tracks** have not been broadly tested yet. Please report bugs or regressions through GitHub Issues.
 
+## Download
+
+Get the Windows x64 installer or portable executable from [GitHub Releases](https://github.com/shubham-pathak1/orca/releases). The portable executable runs without an installer but still uses the normal user data locations.
+
 ---
 
 ## Key Features
@@ -76,6 +80,8 @@ You will need the following tools installed on your Windows machine:
 
 Clone the repository and install the dependencies:
 ```bash
+git clone https://github.com/shubham-pathak1/orca.git
+cd orca
 bun install
 ```
 
@@ -98,6 +104,7 @@ The main app remains the Svelte/Tauri version on the default branch. A separate,
 To try it on Windows:
 
 ```bash
+git switch gpui-prototype
 cargo run --release --manifest-path crates/orca-gpui/Cargo.toml
 ```
 
@@ -109,11 +116,13 @@ Contributors interested in GPUI, native Windows rendering, input/accessibility, 
 
 Orca uses **NSIS** to bundle a Windows executable installer. MSI installers are disabled to keep packaging simple.
 
-To build the NSIS installer:
+To build and collect the Windows x64 installer and portable executable:
 ```bash
-bun run tauri:build
+bun run release:windows
 ```
-The output `.exe` installer will be located in `src-tauri/target/release/bundle/nsis/`.
+The two release assets are placed in `release/v<version>/`. The script checks that
+the package, Tauri, and Rust crate versions match before building. The portable
+executable runs without an installer, but still uses the normal user data locations.
 
 ---
 

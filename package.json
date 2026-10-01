@@ -16,7 +16,8 @@
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "release:windows": "bun scripts/release-windows.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.6.0",
