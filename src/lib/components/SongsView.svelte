@@ -27,6 +27,7 @@
   const GRID_MIN_COLUMN_WIDTH = 132;
   const GRID_GAP = 16;
   const GRID_TEXT_HEIGHT = 50;
+  const GRID_EDGE_INSET = 3;
   const OVERSCAN_ROWS = 4;
 
   const sortOptions: { key: 'title' | 'artist' | 'album'; label: string }[] = [
@@ -62,9 +63,10 @@
     Math.ceil((songScrollTop + songViewportHeight) / LIST_ROW_HEIGHT) + OVERSCAN_ROWS
   );
   $: visibleListSongs = sortedSongs.slice(listVisibleStart, listVisibleEnd);
-  $: gridColumnCount = Math.max(1, Math.floor((songViewportWidth + GRID_GAP) / (GRID_MIN_COLUMN_WIDTH + GRID_GAP)));
+  $: gridContentWidth = Math.max(0, songViewportWidth - GRID_EDGE_INSET * 2);
+  $: gridColumnCount = Math.max(1, Math.floor((gridContentWidth + GRID_GAP) / (GRID_MIN_COLUMN_WIDTH + GRID_GAP)));
   $: gridItemWidth = gridColumnCount > 0
-    ? Math.max(GRID_MIN_COLUMN_WIDTH, (songViewportWidth - GRID_GAP * (gridColumnCount - 1)) / gridColumnCount)
+    ? Math.max(GRID_MIN_COLUMN_WIDTH, (gridContentWidth - GRID_GAP * (gridColumnCount - 1)) / gridColumnCount)
     : GRID_MIN_COLUMN_WIDTH;
   $: gridRowHeight = gridItemWidth + GRID_TEXT_HEIGHT + GRID_GAP;
   $: gridRowCount = Math.ceil(sortedSongs.length / gridColumnCount);
@@ -287,7 +289,7 @@
           <button
             data-letter={initialFromText(song.title)}
             class={`absolute min-w-0 text-left transition ${song.path === currentPath ? 'opacity-100' : selectedPath === song.path ? 'opacity-90' : 'opacity-76 hover:opacity-100'}`}
-            style={`width: ${gridItemWidth}px; transform: translate(${column * (gridItemWidth + GRID_GAP)}px, ${row * gridRowHeight}px);`}
+            style={`width: ${gridItemWidth}px; transform: translate(${GRID_EDGE_INSET + column * (gridItemWidth + GRID_GAP)}px, ${row * gridRowHeight}px);`}
             on:click={() => onChooseSong(song, sortedSongs)}
             on:contextmenu={(event) => onOpenSongMenu(event, song)}
           >

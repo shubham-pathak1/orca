@@ -22,9 +22,10 @@
   let genreViewportHeight = 0;
   let genreViewportWidth = 0;
 
-  const GRID_MIN_COLUMN_WIDTH = 140;
+  const GRID_MIN_COLUMN_WIDTH = 220;
   const GRID_GAP = 16;
   const OVERSCAN_ROWS = 3;
+  const GENRE_TILE_RATIO = 0.75;
 
   $: isInDetail = Boolean(selectedGenreName);
 
@@ -45,7 +46,8 @@
     GRID_MIN_COLUMN_WIDTH,
     (genreViewportWidth - GRID_GAP * (genreColumnCount - 1)) / genreColumnCount
   );
-  $: genreRowHeight = genreItemWidth + GRID_GAP;
+  $: genreItemHeight = genreItemWidth * GENRE_TILE_RATIO;
+  $: genreRowHeight = genreItemHeight + GRID_GAP;
   $: genreRowCount = Math.ceil(genreEntries.length / genreColumnCount);
   $: genreVisibleRowStart = Math.max(0, Math.floor(genreScrollTop / genreRowHeight) - OVERSCAN_ROWS);
   $: genreVisibleRowEnd = Math.min(
@@ -71,6 +73,20 @@
 
   function rowArtwork(song: LocalSong): string | null {
     return song.artwork_thumb ?? song.artwork_preview ?? null;
+  }
+
+  function genreArtworkTiles(genre: GenreEntry): string[] {
+    const paths = [
+      ...new Set(
+        songs
+          .filter((song) => song.genre === genre.name)
+          .map((song) => song.artwork_preview ?? song.artwork_thumb ?? song.artwork)
+          .filter((path): path is string => Boolean(path))
+      ),
+    ];
+
+    if (!paths.length && genre.song_artwork) paths.push(genre.song_artwork);
+    return paths.slice(0, 4);
   }
 
   function openGenre(name: string) {
@@ -186,20 +202,18 @@
     {#if genreEntries.length}
       <div class="relative" style={`height: ${genreRowCount * genreRowHeight}px;`}>
       {#each visibleGenres as genre, index (genre.name)}
-        <button class="group absolute text-left transition"
-          style={`width: ${genreItemWidth}px; transform: translate(${((genreVisibleStart + index) % genreColumnCount) * (genreItemWidth + GRID_GAP)}px, ${Math.floor((genreVisibleStart + index) / genreColumnCount) * genreRowHeight}px);`}
+        <button class="group absolute overflow-hidden rounded-md bg-white/[0.06] text-left shadow-[0_4px_20px_rgba(0,0,0,0.24)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(0,0,0,0.4)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+          style={`width: ${genreItemWidth}px; height: ${genreItemHeight}px; transform: translate(${((genreVisibleStart + index) % genreColumnCount) * (genreItemWidth + GRID_GAP)}px, ${Math.floor((genreVisibleStart + index) / genreColumnCount) * genreRowHeight}px);`}
           on:click={() => openGenre(genre.name)}>
-          <div class="relative flex aspect-square flex-col items-center justify-center overflow-hidden rounded-lg bg-black/80 shadow-[0_4px_20px_rgba(0,0,0,0.3)] transition group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-            {#if artworkUrl(genre.song_artwork)}
-              <LazyArtwork rootClass="absolute inset-0" imageClass="h-full w-full object-cover opacity-40 transition duration-300 group-hover:opacity-20" path={genre.song_artwork} alt="" />
-            {:else}
-              <img src="/cover.png" class="absolute inset-0 h-full w-full object-cover opacity-40 transition duration-300 group-hover:opacity-20" alt="" />
-            {/if}
-            <!-- Centered genre text overlay -->
-            <div class="relative z-10 flex flex-col items-center justify-center p-3 text-center">
-              <span class="block w-full break-words text-lg font-black leading-tight text-white drop-shadow-lg">{genre.name}</span>
-              <span class="mt-1.5 block text-[10px] font-bold uppercase tracking-widest text-white/60 drop-shadow-md">{genre.song_count} {genre.song_count === 1 ? 'song' : 'songs'}</span>
-            </div>
+          <div class={`genre-collage genre-collage-${Math.min(genreArtworkTiles(genre).length, 4)} h-full w-full bg-black/30 transition duration-300 group-hover:scale-[1.025]`}>
+            {#each genreArtworkTiles(genre) as artworkPath}
+              <LazyArtwork rootClass="min-h-0 overflow-hidden bg-white/[0.05]" imageClass="h-full w-full object-cover" path={artworkPath} alt="" />
+            {/each}
+          </div>
+          <div class="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-black/90 via-black/45 to-transparent"></div>
+          <div class="pointer-events-none absolute inset-x-0 bottom-0 p-3">
+            <span class="block truncate text-base font-bold leading-5 text-white drop-shadow">{genre.name}</span>
+            <span class="mt-1 block text-xs text-white/65">{genre.song_count} {genre.song_count === 1 ? 'song' : 'songs'}</span>
           </div>
         </button>
       {/each}
@@ -213,3 +227,32 @@
     {/if}
   </div>
 {/if}
+
+<style>
+  .genre-collage {
+    display: grid;
+    gap: 1px;
+  }
+
+  .genre-collage-1 {
+    grid-template-columns: 1fr;
+  }
+
+  .genre-collage-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .genre-collage-3,
+  .genre-collage-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  .genre-collage-3 > :first-child {
+    grid-row: span 2;
+  }
+
+  .genre-collage-0 {
+    background: linear-gradient(135deg, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.025));
+  }
+</style>
