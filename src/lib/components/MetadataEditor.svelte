@@ -23,6 +23,8 @@
   let genre = '';
   let lyrics = '';
   let isImportingLyrics = false;
+  let isFetchingLyrics = false;
+  let lyricsFetchStatus: 'idle' | 'not-found' | 'offline' | 'error' = 'idle';
 
   $: if (open && song && song.path !== loadedPath) {
     loadedPath = song.path;
@@ -35,6 +37,7 @@
     discNumber = song.disc_number?.toString() ?? '';
     genre = song.genre ?? '';
     lyrics = song.lyrics ?? '';
+    lyricsFetchStatus = 'idle';
   }
 
   $: if (!open) {
@@ -82,6 +85,55 @@
       isImportingLyrics = false;
     }
   }
+
+  async function fetchLyrics() {
+    if (!song || isFetchingLyrics) return;
+
+    if (!navigator.onLine) {
+      lyricsFetchStatus = 'offline';
+      return;
+    }
+
+    isFetchingLyrics = true;
+    lyricsFetchStatus = 'idle';
+    const params = new URLSearchParams({
+      track_name: title.trim() || song.title,
+      artist_name: artist.trim() || song.artist,
+      album_name: album.trim() || song.album
+    });
+    if (song.duration > 0) {
+      params.set('duration', String(Math.round(song.duration / 1000)));
+    }
+
+    try {
+      const response = await fetch(`https://lrclib.net/api/get?${params.toString()}`, {
+        headers: { Accept: 'application/json' }
+      });
+      if (!response.ok) {
+        lyricsFetchStatus = response.status === 404 ? 'not-found' : 'error';
+        return;
+      }
+
+      const data = await response.json();
+      const fetchedLyrics = data.syncedLyrics || data.plainLyrics || '';
+      if (!fetchedLyrics) {
+        lyricsFetchStatus = 'not-found';
+        return;
+      }
+
+      lyrics = fetchedLyrics;
+    } catch {
+      lyricsFetchStatus = navigator.onLine ? 'error' : 'offline';
+    } finally {
+      isFetchingLyrics = false;
+    }
+  }
+
+  function displayPath(path: string): string {
+    return path
+      .replace(/^\\\\\?\\UNC\\/i, '\\\\')
+      .replace(/^\\\\\?\\/, '');
+  }
 </script>
 
 {#if open && song}
@@ -124,7 +176,7 @@
           </button>
           {/if}
         </div>
-        <p class="mt-4 break-all text-[11px] leading-5 text-white/32">{song.path}</p>
+        <p class="mt-4 break-all text-[11px] leading-5 text-white/32" title={song.path}>{displayPath(song.path)}</p>
       </aside>
 
       <div class="min-h-0 overflow-auto p-5">
@@ -177,10 +229,17 @@
 
         <div class="mt-5 flex items-center justify-between gap-3 text-xs font-bold uppercase text-white/38">
           <span>Lyrics</span>
-          <button class="h-8 rounded-md border border-white/10 px-2.5 text-[11px] font-bold normal-case text-white/64 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-45"
-            type="button" disabled={isImportingLyrics} on:click={importLyrics}>
-            {isImportingLyrics ? 'Importing...' : 'Import .lrc'}
-          </button>
+          <div class="flex items-center gap-2">
+            <button class="h-8 rounded-md border border-[var(--accent-mid)] px-2.5 text-[11px] font-bold normal-case text-[var(--accent)] transition hover:bg-[var(--accent-soft)] hover:text-white disabled:opacity-45"
+              type="button" disabled={isFetchingLyrics} on:click={fetchLyrics}
+              title={lyricsFetchStatus === 'not-found' ? 'No lyrics found on LRCLIB' : lyricsFetchStatus === 'offline' ? 'Connect to the internet to fetch lyrics' : lyricsFetchStatus === 'error' ? 'Could not fetch lyrics from LRCLIB' : 'Fetch lyrics from LRCLIB'}>
+              {isFetchingLyrics ? 'Fetching...' : lyricsFetchStatus === 'not-found' ? 'No match' : lyricsFetchStatus === 'offline' ? 'Offline' : lyricsFetchStatus === 'error' ? 'Try again' : 'Fetch lyrics'}
+            </button>
+            <button class="h-8 rounded-md border border-white/10 px-2.5 text-[11px] font-bold normal-case text-white/64 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-45"
+              type="button" disabled={isImportingLyrics} on:click={importLyrics}>
+              {isImportingLyrics ? 'Importing...' : 'Import .lrc'}
+            </button>
+          </div>
         </div>
         <label class="mt-1 grid gap-1 text-xs font-bold uppercase text-white/38">
           <span class="sr-only">Lyrics</span>

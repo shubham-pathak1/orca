@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { cacheLyrics, cachedLyrics, localLyrics } from '../tauri';
-  import { estimateActiveLyricIndex, findActiveLyricIndex, lyricSeekPosition, parseLyrics, type LyricLine } from '../lyrics';
+  import { findActiveLyricIndex, lyricSeekPosition, parseLyrics, type LyricLine } from '../lyrics';
   import type { LocalSong, PlaybackState } from '../types';
 
   export let open = false;
@@ -23,17 +23,15 @@
     : song?.lyrics || '';
   $: lyricLines = parseLyrics(rawLyrics);
   $: hasSyncedLyrics = lyricLines.some((line) => line.timeMs !== null);
-  $: activeLyricIndex = lyricLines.length
-    ? hasSyncedLyrics
-      ? findActiveLyricIndex(lyricLines, playback.position_ms)
-      : estimateActiveLyricIndex(lyricLines, playback.position_ms, playback.duration_ms)
+  $: activeLyricIndex = hasSyncedLyrics
+    ? findActiveLyricIndex(lyricLines, playback.position_ms)
     : -1;
   $: if (open && song?.path !== lastOpenSongPath) {
     lastOpenSongPath = song?.path ?? null;
     centeredLyricIndex = -1;
     centeredSongPath = null;
   }
-  $: if (open && lyricsViewport && activeLyricIndex >= 0 && (activeLyricIndex !== centeredLyricIndex || song?.path !== centeredSongPath)) {
+  $: if (open && hasSyncedLyrics && lyricsViewport && activeLyricIndex >= 0 && (activeLyricIndex !== centeredLyricIndex || song?.path !== centeredSongPath)) {
     centeredLyricIndex = activeLyricIndex;
     centeredSongPath = song?.path ?? null;
     void centerActiveLyric();
@@ -153,24 +151,32 @@
 
 <div class="lyrics-viewport-shell min-h-0">
   {#if lyricLines.length}
-    <div bind:this={lyricsViewport} class="lyrics-stack lyrics-open">
-      {#each lyricLines as line}
-        <div
-          data-active={line.index === activeLyricIndex ? 'true' : undefined}
-          class:lyric-active={line.index === activeLyricIndex}
-          class:lyric-adjacent={activeLyricIndex >= 0 && Math.abs(line.index - activeLyricIndex) === 1}
-          class:lyric-muted={line.index !== activeLyricIndex && Math.abs(line.index - activeLyricIndex) !== 1}
-          class="lyric-line"
-          role="button"
-          tabindex="0"
-          title="Seek to lyric"
-          on:click={() => seekToLyric(line)}
-          on:keydown={(event) => handleLyricKeydown(event, line)}
-        >
-          {line.text}
-        </div>
-      {/each}
-    </div>
+    {#if hasSyncedLyrics}
+      <div bind:this={lyricsViewport} class="lyrics-stack lyrics-open">
+        {#each lyricLines as line}
+          <div
+            data-active={line.index === activeLyricIndex ? 'true' : undefined}
+            class:lyric-active={line.index === activeLyricIndex}
+            class:lyric-adjacent={activeLyricIndex >= 0 && Math.abs(line.index - activeLyricIndex) === 1}
+            class:lyric-muted={line.index !== activeLyricIndex && Math.abs(line.index - activeLyricIndex) !== 1}
+            class="lyric-line"
+            role="button"
+            tabindex="0"
+            title="Seek to lyric"
+            on:click={() => seekToLyric(line)}
+            on:keydown={(event) => handleLyricKeydown(event, line)}
+          >
+            {line.text}
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <div class="static-lyrics" aria-label="Lyrics">
+        {#each lyricLines as line}
+          <p>{line.text}</p>
+        {/each}
+      </div>
+    {/if}
   {:else}
     <div class="no-lyrics-state">
       {#if lyricsStatus === 'loading'}
@@ -212,6 +218,31 @@
 
   .lyrics-stack::-webkit-scrollbar {
     display: none;
+  }
+
+  .static-lyrics {
+    box-sizing: border-box;
+    width: min(760px, 100%);
+    height: 100%;
+    margin-inline: auto;
+    overflow-y: auto;
+    padding: clamp(2rem, 7vh, 4rem) 1rem clamp(4rem, 10vh, 7rem);
+    color: rgba(255, 255, 255, 0.76);
+    font-size: clamp(1.05rem, 1.45vw, 1.3rem);
+    line-height: 1.75;
+    text-align: left;
+    user-select: text;
+    pointer-events: auto;
+    scrollbar-width: none;
+  }
+
+  .static-lyrics::-webkit-scrollbar {
+    display: none;
+  }
+
+  .static-lyrics p {
+    margin: 0;
+    white-space: pre-wrap;
   }
 
   .lyrics-open {
