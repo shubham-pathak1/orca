@@ -1,6 +1,6 @@
 [package]
 name = "orca-tauri"
-version = "0.1.5-alpha"
+version = "0.1.6-alpha"
 description = "Orca music player"
 edition = "2021"
 

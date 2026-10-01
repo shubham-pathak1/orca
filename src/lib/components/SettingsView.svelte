@@ -93,7 +93,7 @@
     }
   }
 
-  const releaseLabel = 'v0.1.5-alpha';
+  const releaseLabel = 'v0.1.6-alpha';
 
   function updateFontSize(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
