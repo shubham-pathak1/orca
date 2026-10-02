@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import { cacheLyrics, cachedLyrics, localLyrics } from '../tauri';
-  import { findActiveLyricIndex, lyricSeekPosition, parseLyrics, type LyricLine } from '../lyrics';
+  import { findActiveLyricIndex, lyricSeekPosition, lyricWordProgress, parseLyrics, type LyricLine } from '../lyrics';
   import type { LocalSong, PlaybackState } from '../types';
 
   export let open = false;
@@ -17,14 +17,25 @@
   let centeredSongPath: string | null = null;
   let lastOpenSongPath: string | null = null;
   let lyricsRequestId = 0;
+  let displayPositionMs = playback.position_ms;
+  let clockPositionMs = playback.position_ms;
+  let clockUpdatedAt = 0;
+  let animationFrame: number | null = null;
 
   $: rawLyrics = song?.path === fetchedLyricsSongPath && fetchedLyrics
     ? fetchedLyrics
     : song?.lyrics || '';
   $: lyricLines = parseLyrics(rawLyrics);
   $: hasSyncedLyrics = lyricLines.some((line) => line.timeMs !== null);
+  $: hasEnhancedLyrics = lyricLines.some((line) => line.words?.length);
+  $: syncLyricsClock(playback.position_ms, playback.is_playing, playback.current_path);
+  $: if (open && hasEnhancedLyrics && playback.is_playing) {
+    startLyricsAnimation();
+  } else {
+    stopLyricsAnimation();
+  }
   $: activeLyricIndex = hasSyncedLyrics
-    ? findActiveLyricIndex(lyricLines, playback.position_ms)
+    ? findActiveLyricIndex(lyricLines, displayPositionMs)
     : -1;
   $: if (open && song?.path !== lastOpenSongPath) {
     lastOpenSongPath = song?.path ?? null;
@@ -46,6 +57,33 @@
       void onSeekTo(positionMs);
     }
   }
+
+  function syncLyricsClock(positionMs: number, _playing: boolean, _path: string | null) {
+    clockPositionMs = positionMs;
+    clockUpdatedAt = performance.now();
+    displayPositionMs = positionMs;
+  }
+
+  function startLyricsAnimation() {
+    if (animationFrame !== null) return;
+    animationFrame = requestAnimationFrame(animateLyrics);
+  }
+
+  function animateLyrics(now: number) {
+    // Interpolate between backend updates, bounded to avoid drifting during a stall.
+    displayPositionMs = Math.min(
+      playback.duration_ms || Infinity,
+      clockPositionMs + Math.min(Math.max(0, now - clockUpdatedAt), 500)
+    );
+    animationFrame = requestAnimationFrame(animateLyrics);
+  }
+
+  function stopLyricsAnimation() {
+    if (animationFrame !== null) cancelAnimationFrame(animationFrame);
+    animationFrame = null;
+  }
+
+  onDestroy(stopLyricsAnimation);
 
   function handleLyricKeydown(event: KeyboardEvent, line: LyricLine) {
     if (event.key !== 'Enter' && event.key !== ' ') {
@@ -166,14 +204,24 @@
             on:click={() => seekToLyric(line)}
             on:keydown={(event) => handleLyricKeydown(event, line)}
           >
-            {line.text}
+            {#if line.words?.length}
+              {#each line.words as word}
+                <span
+                  class="lyric-word"
+                  class:word-sweeping={line.index === activeLyricIndex}
+                  style:--word-progress={`${lyricWordProgress(word, displayPositionMs) * 100}%`}
+                >{word.text}</span>
+              {/each}
+            {:else}
+              {line.text}
+            {/if}
           </div>
         {/each}
       </div>
     {:else}
-      <div class="static-lyrics" aria-label="Lyrics">
+      <div class="lyrics-stack lyrics-open static-lyrics" aria-label="Lyrics">
         {#each lyricLines as line}
-          <p>{line.text}</p>
+          <p class="lyric-line lyric-static">{line.text}</p>
         {/each}
       </div>
     {/if}
@@ -221,28 +269,8 @@
   }
 
   .static-lyrics {
-    box-sizing: border-box;
-    width: min(760px, 100%);
-    height: 100%;
-    margin-inline: auto;
-    overflow-y: auto;
-    padding: clamp(2rem, 7vh, 4rem) 1rem clamp(4rem, 10vh, 7rem);
-    color: rgba(255, 255, 255, 0.76);
-    font-size: clamp(1.05rem, 1.45vw, 1.3rem);
-    line-height: 1.75;
-    text-align: left;
     user-select: text;
     pointer-events: auto;
-    scrollbar-width: none;
-  }
-
-  .static-lyrics::-webkit-scrollbar {
-    display: none;
-  }
-
-  .static-lyrics p {
-    margin: 0;
-    white-space: pre-wrap;
   }
 
   .lyrics-open {
@@ -252,6 +280,7 @@
   }
 
   .lyric-line {
+    margin-top: 0;
     margin-bottom: 0.86rem;
     max-width: 100%;
     cursor: pointer;
@@ -274,7 +303,33 @@
       transform 220ms ease;
   }
 
-  .lyric-line:hover {
+  .lyric-static {
+    color: rgb(255, 255, 255);
+    cursor: default;
+    white-space: pre-wrap;
+  }
+
+
+  .lyric-word {
+    white-space: pre-wrap;
+  }
+
+  .word-sweeping {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    background-image: linear-gradient(
+      to right,
+      white 0%,
+      white var(--word-progress),
+      rgba(255, 255, 255, 0.34) var(--word-progress),
+      rgba(255, 255, 255, 0.34) 100%
+    );
+    background-clip: text;
+    -webkit-background-clip: text;
+    text-shadow: none;
+  }
+
+  .lyric-line:not(.lyric-static):hover {
     color: rgba(255, 255, 255, 0.52);
     transform: scale(1.01);
   }
