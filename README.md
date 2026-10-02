@@ -16,7 +16,7 @@ Get the Windows x64 installer or portable executable from [GitHub Releases](http
 - **Local library**: Scan local folders and keep them updated as files change. Supports `MP3`, `FLAC`, `M4A`, `WAV`, `OGG`, `OPUS`, and `AIFF` / `AIF`.
 - **Playback**: Rodio-based audio playback with gapless playback, queue controls, shuffle, repeat, and waveform or standard seeking.
 - **Waveforms**: Decode and cache waveform seekbars from the track audio.
-- **Lyrics**: Prefer matching local `.lrc` files, then read embedded lyrics or fetch and cache timed or plain lyrics from LRCLIB. Click a lyric line to seek, or import a local `.lrc` file through the metadata editor.
+- **Lyrics**: Prefer matching local `.lrc` files, then read embedded lyrics or fetch and cache timed or plain lyrics from LRCLIB. Enhanced LRC files with inline word timestamps display a white word-by-word sweep. Click a lyric line to seek, or import a local `.lrc` file through the metadata editor.
 - **Metadata**: Edit track tags and cover art directly in the app.
 - **Playlists**: Create playlists, set custom covers, and import or export standard M3U playlists.
 - **Windows integration**: Taskbar controls, global media shortcuts, and Windows media controls.
