@@ -62,7 +62,6 @@ src/                 Svelte frontend codebase
 src/lib/components/  UI components (Player, Waveform, Metadata, Queue)
 src-tauri/           Tauri application backend and command handlers
 crates/orca-core/    Core database structure, scanning engine, and audio thread logic
-crates/orca-gpui/    Experimental native GPUI prototype
 ```
 
 ---
@@ -94,21 +93,6 @@ To run the desktop app with Rust release optimizations:
 ```bash
 bun run tauri:dev -- --release
 ```
-
----
-
-## Native GPUI Prototype
-
-The main app remains the Svelte/Tauri version on the default branch. A separate, experimental native UI prototype lives on the [gpui-prototype branch](../../tree/gpui-prototype). It is not release-ready and may change quickly, but it is a place to explore a lower-overhead native renderer for Orca.
-
-To try it on Windows:
-
-```bash
-git switch gpui-prototype
-cargo run --release --manifest-path crates/orca-gpui/Cargo.toml
-```
-
-Contributors interested in GPUI, native Windows rendering, input/accessibility, profiling, or cross-platform packaging are especially welcome. Please open an issue before taking on a larger change so the work can be coordinated.
 
 ---
 
