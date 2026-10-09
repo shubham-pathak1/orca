@@ -1,0 +1,250 @@
+import { ListView } from "std-widgets.slint";
+import { AppState, Song, CatalogGroup } from "state.slint";
+import { LineEdit } from "std-widgets.slint";
+import { IconButton, TextButton, SearchField, CoverImage, ScrollMotion, ActionFocus } from "controls.slint";
+import { Icons } from "icons.slint";
+
+component AlphabetRail inherits Rectangle {
+        border-radius:6px;border-width:1px;border-color:AppState.ink.with-alpha(0.1020);
+        VerticalLayout {
+            padding:6px;spacing:0;
+            for letter in ["#","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"]: Rectangle {
+                min-height:0px;
+                Text {min-height:0px;text:letter;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.4000) : 0.4000);font-size:9px;horizontal-alignment:center;vertical-alignment:center;}
+                TouchArea {clicked => {AppState.command("letter-"+letter,0);}}
+            }
+        }
+    }
+
+component SongTile inherits Rectangle {
+    in property <Song> song;
+    private property<bool> selected:root.song.path!="" && root.song.path==AppState.now.path;
+    forward-focus:focus;
+    accessible-role:button;accessible-label:root.song.title+", "+root.song.artist;
+    focus:=ActionFocus {enabled:root.song.path!="" && AppState.focus-layer=="browse";activated=>{AppState.play(root.song.path);}context-menu=>{AppState.menu(root.song.path,(self.absolute-position.x)/1px,(self.absolute-position.y)/1px);}}
+    border-width:focus.has-focus ? 2px : 0px;border-color:AppState.ink;
+
+    callback wheel-scroll(length);
+    height:AppState.browse-artwork ? root.width+66px : 66px;
+    if AppState.browse-artwork && root.song.path!="": Rectangle {
+        x:0px;y:0px;height:root.width; border-radius:3px; clip:true; background:root.song.path=="" ? transparent : AppState.panel;
+        CoverImage {x:0px;y:0px;width:parent.width;height:parent.height;artwork:root.song.cover;missing:root.song.cover-missing; image-fit:cover;}
+        if root.selected: Rectangle {border-radius:3px;border-width:2px;border-color:AppState.accent;}
+    }
+    Text {x:0px;y:(AppState.browse-artwork ? root.width : 0px)+8px;width:parent.width;height:20px;text:root.song.title;color:AppState.ink;font-weight:700;font-size:14px*AppState.scale;overflow:elide;}
+    Text {x:0px;y:(AppState.browse-artwork ? root.width : 0px)+28px;width:parent.width;height:18px;text:root.song.artist;color:root.selected ? AppState.ink : AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.4000) : 0.4000);font-weight:root.selected ? 600 : 400;font-size:12px*AppState.scale;overflow:elide;}
+    area := TouchArea {
+        enabled:root.song.path!="";
+        scroll-event(event)=>{root.wheel-scroll(event.delta-y);return accept;}
+        clicked => {AppState.unfocus();AppState.play(root.song.path);}
+        pointer-event(event) => {if event.button==PointerEventButton.right && event.kind==PointerEventKind.down {AppState.keyboard-navigation=false;AppState.menu(root.song.path,(self.absolute-position.x+self.mouse-x)/1px,(self.absolute-position.y+self.mouse-y)/1px);}}
+    }
+}
+
+component CatalogTile inherits Rectangle {
+    in property <CatalogGroup> group;
+    forward-focus:focus;
+    accessible-role:button;accessible-label:root.group.title+", "+root.group.subtitle;
+    focus:=ActionFocus {enabled:root.group.key!="" && AppState.focus-layer=="browse";activated=>{AppState.open-group(root.group.key,root.group.secondary,root.group.title);}context-menu=>{AppState.collection-menu(root.group,(self.absolute-position.x)/1px,(self.absolute-position.y)/1px);}}
+    border-width:focus.has-focus ? 2px : 0px;border-color:AppState.ink;
+
+    callback wheel-scroll(length);
+    private property<bool> compact:!AppState.browse-artwork || AppState.view=="artists" || AppState.view=="playlists" || (AppState.view=="folders" && (!AppState.folder-grid || AppState.detail-key!=""));
+    height:root.compact ? (AppState.view=="artists" ? 68px : 76px) : AppState.view=="genres" ? root.width*0.75+16px : root.width+58px;
+    background:root.compact && area.has-hover && root.group.key!="" ? AppState.ink.with-alpha(0.0353) : transparent;
+    if root.compact && root.group.key!="": Rectangle {y:root.height - 5px;height:1px;background:AppState.ink.with-alpha(0.0392);}
+    if AppState.browse-artwork && root.group.key!="": Rectangle {
+        x:root.compact ? 8px : 0px;y:root.compact ? 12px : 0px;
+        width:root.compact ? 44px : root.width;
+        height:root.compact ? 44px : AppState.view=="genres" ? root.width*0.75 : root.width;
+        border-radius:AppState.view=="artists" ? 22px : 3px; clip:true; background:AppState.panel;
+        CoverImage {x:0px;y:0px;width:parent.width;height:parent.height;artwork:root.group.cover;missing:root.group.cover-missing;image-fit:cover;}
+        if AppState.view=="genres": Rectangle {border-radius:3px;background:AppState.light-theme ? @linear-gradient(180deg,transparent 45%,AppState.base.with-alpha(0.78)) : @linear-gradient(180deg,transparent,AppState.base.with-alpha(0.94));}
+    }
+    Text {y:root.compact ? 14px : AppState.view=="genres" ? root.height - 64px : root.width+8px;
+        x:root.compact ? (AppState.browse-artwork ? 64px : 8px) : AppState.view=="genres" ? 12px : 0px;width:parent.width - self.x;height:24px;
+        text:root.group.title;color:AppState.ink;font-weight:700;font-size:AppState.view=="genres" ? 18px*AppState.scale : 14px*AppState.scale;overflow:elide;}
+    Text {y:root.compact ? 38px : AppState.view=="genres" ? root.height - 41px : root.width+28px;
+        x:root.compact ? (AppState.browse-artwork ? 64px : 8px) : AppState.view=="genres" ? 12px : 0px;width:parent.width - self.x;height:18px;
+        text:root.group.subtitle;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.5020) : 0.5020);font-size:12px*AppState.scale;overflow:elide;}
+    area:=TouchArea { scroll-event(event)=>{root.wheel-scroll(event.delta-y);return accept;} enabled:root.group.key!="";clicked => {AppState.unfocus();AppState.open-group(root.group.key,root.group.secondary,root.group.title);}
+        pointer-event(event)=>{if event.button==PointerEventButton.right && event.kind==PointerEventKind.down {AppState.keyboard-navigation=false;AppState.unfocus();AppState.collection-menu(root.group,(self.absolute-position.x+self.mouse-x)/1px,(self.absolute-position.y+self.mouse-y)/1px);}}
+    }
+}
+
+component RelatedAlbums inherits Rectangle {
+    callback wheel-scroll(length);
+    out property<length> content-height:36px+AppState.related-albums.length*((AppState.browse-artwork ? (root.width - 12px)/2 : 0px)+60px);
+    Text {x:0px;y:0px;width:root.width;height:28px;text:AppState.view=="albums" ? "More by "+AppState.detail-secondary : "Albums";color:AppState.ink;font-size:18px;font-weight:700;overflow:elide;}
+    VerticalLayout {x:0px;y:36px;width:root.width;height:root.content-height - 36px;spacing:0px;
+        for row in AppState.related-albums: HorizontalLayout {spacing:12px;
+            for album in row: Rectangle {
+                height:(AppState.browse-artwork ? self.width : 0px)+60px;
+                accessible-role:button;accessible-label:album.title;
+                album-focus:=ActionFocus {enabled:album.key!="" && AppState.focus-layer=="browse";activated=>{AppState.view="albums";AppState.open-group(album.key,album.secondary,album.title);}}
+                border-width:album-focus.has-focus ? 2px : 0px;border-color:AppState.ink;
+                Rectangle {height:parent.height - 8px;border-radius:6px;background:album.key!="" ? AppState.ink.with-alpha(0.0353) : transparent;}
+                if AppState.browse-artwork && album.key!="": Rectangle {x:8px;y:8px;width:parent.width - 16px;height:self.width;border-radius:3px;clip:true;CoverImage {x:0px;y:0px;width:parent.width;height:parent.height;artwork:album.cover;missing:album.cover-missing;image-fit:cover;}}
+                Text {x:8px;y:AppState.browse-artwork ? parent.width : 8px;height:20px;width:parent.width - 16px;text:album.title;color:AppState.ink;font-size:12px;font-weight:700;overflow:elide;}
+                Text {x:8px;y:(AppState.browse-artwork ? parent.width : 8px)+20px;height:16px;width:parent.width - 16px;text:album.key!="" ? album.count+(album.count==1 ? " song" : " songs") : "";color:AppState.ink.with-alpha(AppState.light-theme ? 0.65 : 0.4);font-size:11px;}
+                TouchArea {scroll-event(event)=>{root.wheel-scroll(event.delta-y);return accept;}clicked=>{if album.key!="" {AppState.view="albums";AppState.open-group(album.key,album.secondary,album.title);}}}
+            }
+        }
+    }
+}
+
+export component CatalogView inherits Rectangle {
+    motion:=ScrollMotion {offset<=>list.content-y;minimum:-max(0px,list.content-height - list.height);page:list.height;}
+    list:=ListView {x:0px;y:0px;width:AppState.view=="folders" ? parent.width : parent.width - 44px;height:parent.height;
+    horizontal-scrollbar-policy:always-off;vertical-scrollbar-policy:always-off;
+    private property<int> jump-revision:AppState.jump-revision;
+    changed jump-revision=>{motion.snap(-clamp(floor(AppState.jump-index/max(1,AppState.group-columns))*self.content-height/max(1,AppState.group-grid.length),0px,max(0px,self.content-height - self.height)));}
+    for row in AppState.group-grid: HorizontalLayout {
+        spacing:AppState.view=="playlists" ? 24px : AppState.view=="genres" ? 16px : 12px;
+        for group in row: CatalogTile {group:group;wheel-scroll(delta)=>{motion.nudge(delta);}}
+    }
+    }
+    if AppState.view!="folders": AlphabetRail {x:parent.width - 28px;width:24px;height:min(parent.height,672px);}
+}
+
+export component SongsView inherits Rectangle {
+    in property<bool> show-related;
+    if AppState.grid && AppState.detail-key=="": Rectangle {
+        motion:=ScrollMotion {offset<=>grid.content-y;minimum:-max(0px,grid.content-height - grid.height);page:grid.height;}
+        grid:=ListView {
+            horizontal-scrollbar-policy:always-off;vertical-scrollbar-policy:always-off;
+            function wheel-scroll(delta:length) {
+                motion.nudge(delta);
+            }
+            private property<int> jump-revision:AppState.jump-revision;
+            changed jump-revision=> {motion.snap(-max(0,floor(AppState.jump-index/max(1,AppState.columns))*(AppState.browse-artwork ? (self.width - 44px - 16px*(AppState.columns - 1))/max(1,AppState.columns)+66px : 66px)));}
+            for row in AppState.song-grid: Rectangle {
+                height:AppState.browse-artwork ? (grid.width - 44px - 16px*(AppState.columns - 1))/max(1,AppState.columns)+66px : 66px;
+                TouchArea {scroll-event(event)=>{grid.wheel-scroll(event.delta-y);return accept;}}
+                HorizontalLayout {spacing:16px;padding-right:44px;
+                    for song in row: SongTile {song:song;wheel-scroll(delta)=>{grid.wheel-scroll(delta);}}
+                }
+            }
+        }
+    }
+    if !AppState.grid || AppState.detail-key!="": Rectangle {
+        height:parent.height;
+        table:=Rectangle {
+        x:0px;
+        width:parent.width - (AppState.detail-key=="" ? 52px : 0px);
+        private property<bool> detail:AppState.detail-key!="";
+        private property<length> index-width:self.detail ? 48px : 8px;
+        private property<length> artist-width:!self.detail && self.width>=700px ? self.width*0.22 : 0px;
+        private property<length> album-width:self.width>=600px && (!self.detail || AppState.view!="albums") ? self.width*0.28 : 0px;
+        private property<length> duration-x:self.width - 80px;
+        private property<length> title-width:self.duration-x - self.index-width - self.artist-width - self.album-width;
+        Rectangle {x:0px;y:0px;height:32px;
+            if table.detail: Text {x:8px;width:40px;text:"#";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.3765) : 0.3765);font-size:11px;font-weight:700;vertical-alignment:center;}
+            Text {x:table.index-width;width:table.title-width - 16px;text:"TITLE";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.3765) : 0.3765);font-size:11px;font-weight:700;vertical-alignment:center;}
+            if table.artist-width>0px: Text {x:table.index-width+table.title-width;width:table.artist-width;text:"ARTIST";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.3765) : 0.3765);font-size:11px;font-weight:700;vertical-alignment:center;}
+            if table.album-width>0px: Text {x:table.duration-x - table.album-width;width:table.album-width;text:"ALBUM";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.3765) : 0.3765);font-size:11px;font-weight:700;vertical-alignment:center;}
+            Text {x:table.duration-x;width:72px;text:"DURATION";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.3765) : 0.3765);font-size:11px;font-weight:700;horizontal-alignment:right;vertical-alignment:center;}
+            Rectangle {y:31px;height:1px;background:AppState.ink.with-alpha(0.1490);}
+        }
+        song-list:=ListView {
+            y:32px;height:parent.height - 32px;horizontal-scrollbar-policy:always-off;vertical-scrollbar-policy:always-off;
+            private property<int> first-row:max(0,floor(-self.content-y/44px)-1);
+            private property<int> last-row:ceil((-self.content-y+self.height)/44px)+1;
+            init=>{AppState.song-first=self.first-row;AppState.song-end=self.last-row;}
+            changed first-row=>{AppState.song-first=self.first-row;}
+            changed last-row=>{AppState.song-end=self.last-row;}
+            private property<int> jump-revision:AppState.jump-revision;
+            changed jump-revision=> {self.content-y=-max(0,AppState.jump-index*44px);}
+            for index in AppState.songs.length+(root.show-related ? 1 : 0): Rectangle {
+                height:index<AppState.songs.length ? 44px : 60px+AppState.related-albums.length*((AppState.browse-artwork ? (min(600px,table.width) - 12px)/2 : 0px)+60px);
+                if index==AppState.songs.length && root.show-related: album-footer:=RelatedAlbums {y:24px;width:min(600px,parent.width);height:self.content-height;wheel-scroll(delta)=>{song-list.content-y=clamp(song-list.content-y+delta,-max(0px,song-list.content-height - song-list.height),0px);}}
+                if index<AppState.songs.length: Rectangle {
+                private property<Song> song:AppState.songs[index];
+                accessible-role:button;accessible-label:song.title+", "+song.artist;
+                row-focus:=ActionFocus {enabled:song.path!="" && AppState.focus-layer=="browse";activated=>{AppState.play(song.path);}context-menu=>{AppState.menu(song.path,self.absolute-position.x/1px,self.absolute-position.y/1px);}}
+                border-width:row-focus.has-focus ? 2px : 0px;border-color:AppState.ink;
+                background:song.path!="" && song.path==AppState.now.path ? AppState.accent.with-alpha(0.1) : area.has-hover ? AppState.ink.with-alpha(0.0510) : transparent;
+                Rectangle {x:0px;y:parent.height - 1px;height:1px;background:AppState.ink.with-alpha(0.0392);}
+                if table.detail: Text {x:8px;width:40px;text:index+1;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.6902) : 0.6902);font-size:14px*AppState.scale;vertical-alignment:center;}
+                if AppState.browse-artwork: Rectangle {x:table.index-width;y:8px;width:28px;height:28px;border-radius:3px;clip:true;CoverImage {x:0px;y:0px;width:parent.width;height:parent.height;artwork:song.cover;missing:song.cover-missing;image-fit:cover;}}
+                private property<bool> show-quality:table.detail && AppState.quality-info && song.quality!="";
+                Text {x:table.index-width+(AppState.browse-artwork ? 40px : 0px);y:parent.show-quality ? 3px : 0px;height:parent.show-quality ? 22px : parent.height;width:table.title-width - (AppState.browse-artwork ? 60px : 20px);text:song.title;color:AppState.ink;font-weight:600;font-size:14px*AppState.scale;overflow:elide;vertical-alignment:center;}
+                if table.detail && AppState.quality-info && song.quality!="": Text {x:table.index-width+(AppState.browse-artwork ? 40px : 0px);y:25px;height:16px;width:table.title-width - (AppState.browse-artwork ? 60px : 20px);text:song.quality;color:AppState.ink.with-alpha(AppState.light-theme ? 0.65 : 0.5);font-size:9.5px*AppState.scale;overflow:elide;vertical-alignment:center;}
+                if table.artist-width>0px: Text {x:table.index-width+table.title-width;width:table.artist-width - 12px;text:song.artist;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.4000) : 0.4000);font-size:12px*AppState.scale;overflow:elide;vertical-alignment:center;}
+                if table.album-width>0px: Text {x:table.duration-x - table.album-width;width:table.album-width - 12px;text:song.album;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.4000) : 0.4000);font-size:12px*AppState.scale;overflow:elide;vertical-alignment:center;}
+                Text {x:table.duration-x;width:72px;text:song.duration;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.4000) : 0.4000);font-size:12px*AppState.scale;horizontal-alignment:right;vertical-alignment:center;}
+                area := TouchArea {
+                    clicked => {AppState.unfocus();AppState.play(song.path);}
+                    pointer-event(event) => {if event.button==PointerEventButton.right && event.kind==PointerEventKind.down {AppState.keyboard-navigation=false;AppState.menu(song.path,(self.absolute-position.x+self.mouse-x)/1px,(self.absolute-position.y+self.mouse-y)/1px);}}
+                }
+                }
+            }
+        }
+    }
+    }
+    if AppState.detail-key=="" && AppState.sort!="recent": AlphabetRail {
+        x:parent.width - 28px;y:0;width:24px;height:min(parent.height,672px);
+    }
+}
+
+export component CatalogDetails inherits Rectangle {
+    private property<bool> folders-selected:false;
+    header:=Rectangle {
+        x:0px;y:0px;height:root.width<600px ? 240px : AppState.view=="albums" ? 280px : 256px;border-radius:6px;clip:true;background:AppState.ink.with-alpha(0.0235);
+        Image {x:0px;y:0px;width:parent.width;height:parent.height;source:AppState.detail-backdrop;image-fit:cover;opacity:0.2;}
+        IconButton {label:"Back";x:20px;y:20px;icon:Icons.back;round:true;outlined:true;clicked=>{AppState.go-back();}}
+        SearchField {x:max(84px,parent.width - 596px);y:20px;width:min(576px,parent.width - 104px);height:40px;text<=>AppState.search;placeholder-text:"Search songs in "+AppState.detail-title+"…";edited=>{AppState.browse();}}
+        if AppState.browse-artwork: detail-cover-frame:=Rectangle {x:20px;y:parent.height - self.height - 24px;width:root.width<600px ? 96px : 148px;height:self.width;border-radius:AppState.view=="artists" ? self.width/2 : 6px;clip:true;
+            CoverImage {x:0px;y:0px;width:parent.width;height:parent.height;artwork:AppState.detail-cover;missing:AppState.detail-cover-missing;image-fit:cover;}
+            cover-hover:=TouchArea {}
+            private property<bool> editing:cover-hover.has-hover || cover-edit.has-hover || cover-remove.has-hover;
+            Rectangle {visible:parent.editing;background:#00000066;border-radius:parent.border-radius;}
+            HorizontalLayout {x:parent.width*0.88 - 72px;y:parent.height - 48px;width:72px;height:32px;spacing:8px;
+                cover-edit:=IconButton {label:"Edit details";visible:detail-cover-frame.editing;width:32px;height:32px;icon-size:16px;round:true;icon:Icons.edit;primary:true;clicked=>{AppState.collection-action("cover");}}
+                cover-remove:=IconButton {label:"Remove";visible:detail-cover-frame.editing;width:32px;height:32px;icon-size:16px;round:true;background:AppState.inverse-ink;icon:Icons.trash;clicked=>{AppState.collection-action("remove-cover");}}
+            }
+        }
+        Rectangle {x:!AppState.browse-artwork ? 20px : root.width<600px ? 136px : 188px;y:84px;width:parent.width - self.x - 20px;height:parent.height - 108px;
+            VerticalLayout {spacing:8px;alignment:end;
+                Text {text:AppState.detail-title;color:AppState.ink;font-size:(root.width<600px ? 32px : parent.width>650px ? 48px : 38px)*AppState.scale;font-weight:900;overflow:elide;}
+                if AppState.view=="albums": Text {text:"By "+AppState.detail-secondary;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.6275) : 0.6275);font-size:14px;}
+                Text {text:AppState.detail-summary;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.6275) : 0.6275);font-size:14px;overflow:elide;}
+                HorizontalLayout {alignment:start;spacing:8px;
+                    IconButton {label:"Play";icon:Icons.play;primary:true;round:true;width:44px;height:44px;clicked=>{AppState.command("play-context",0);}}
+                    IconButton {label:"Add to queue";icon:Icons.addQueue;outlined:true;round:true;width:44px;height:44px;clicked=>{AppState.queue-open=true;AppState.command("queue-context",0);}}
+                    IconButton {label:"Edit details";icon:Icons.edit;outlined:true;round:true;clicked=>{AppState.collection-action("name");}}
+                    if !AppState.browse-artwork: IconButton {label:"Change cover";icon:Icons.folderPlus;outlined:true;round:true;clicked=>{AppState.collection-action("cover");}}
+                    if AppState.view=="playlists": IconButton {label:"Export playlist";icon:Icons.export;outlined:true;round:true;clicked=>{AppState.playlist-action("export",AppState.detail-key);}}
+                    if AppState.view=="playlists": IconButton {label:"Remove";icon:Icons.trash;outlined:true;round:true;clicked=>{AppState.playlist-action("delete",AppState.detail-key);}}
+                }
+            }
+        }
+    }
+    private property<bool> has-folders:AppState.view=="folders" && AppState.group-grid.length>0;
+    private property<bool> folder-sidebar:root.has-folders && root.width>=900px;
+    private property<bool> folder-tabs:root.has-folders && !root.folder-sidebar;
+    if root.folder-tabs: HorizontalLayout {
+        x:0px;y:header.height+20px;height:40px;spacing:12px;
+        TextButton {text:"Songs ("+AppState.songs.length+")";clicked=>{root.folders-selected=false;}
+            Rectangle {y:parent.height - 2px;height:2px;background:!root.folders-selected ? AppState.accent : transparent;}
+        }
+        TextButton {text:"Folders ("+AppState.group-grid.length+")";clicked=>{root.folders-selected=true;}
+            Rectangle {y:parent.height - 2px;height:2px;background:root.folders-selected ? AppState.accent : transparent;}
+        }
+        Rectangle {horizontal-stretch:1;}
+    }
+    if !root.folder-tabs || !root.folders-selected: SongsView {show-related:!root.has-folders && root.width<1230px && AppState.related-albums.length>0;x:0px;y:header.height+(root.folder-tabs ? 76px : 32px);width:root.folder-sidebar || (root.width>=1230px && AppState.related-albums.length>0) ? root.width - 364px : root.width;height:root.height - self.y;}
+    if root.folder-tabs && root.folders-selected: CatalogView {x:0px;y:header.height+76px;width:root.width;height:root.height - self.y;}
+    if root.folder-sidebar: Rectangle {
+        x:root.width - 336px;y:header.height+32px;width:336px;height:root.height - self.y;
+        Text {x:0px;y:0px;width:parent.width;height:28px;text:"Subfolders";color:AppState.ink;font-size:18px;font-weight:700;}
+        CatalogView {y:36px;height:parent.height - 36px;}
+    }
+    if !root.has-folders && root.width>=1230px && AppState.related-albums.length>0: Rectangle {
+        x:root.width - 336px;y:header.height+32px;width:336px;height:root.height - self.y;
+        related-motion:=ScrollMotion {offset<=>related-list.content-y;minimum:-max(0px,related-list.content-height - related-list.height);page:related-list.height;}
+        related-list:=Flickable {content-width:self.width;content-height:albums.content-height;mouse-drag-pan-enabled:false;
+            albums:=RelatedAlbums {width:related-list.width;height:self.content-height;wheel-scroll(delta)=>{related-motion.nudge(delta);}}
+        }
+    }
+}

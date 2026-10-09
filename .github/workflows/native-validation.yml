@@ -1,0 +1,41 @@
+name: Native validation
+on:
+  push:
+    paths: ['crates/**', 'app/**', 'scripts/**', '.github/workflows/native-validation.yml']
+  pull_request:
+    paths: ['crates/**', 'app/**', 'scripts/**', '.github/workflows/native-validation.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-validation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app -> ../target/slint
+            crates/orca-core -> ../../target/slint
+            crates/orca-services -> ../../target/slint
+      - name: Validate Rust projects
+        shell: pwsh
+        run: |
+          foreach ($project in @('crates/orca-core', 'crates/orca-services', 'app')) {
+            $manifest = "$project/Cargo.toml"
+            cargo fmt --manifest-path $manifest --check
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            cargo clippy --manifest-path $manifest --target-dir target/slint --jobs 2 --locked --all-targets --no-deps -- -D warnings
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            cargo test --manifest-path $manifest --target-dir target/slint --jobs 2 --locked -- --test-threads=1
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - name: Check release configuration and optional GPU backend
+        run: cargo clippy --release --manifest-path app/Cargo.toml --features gpu --target-dir target/slint --jobs 2 --locked --all-targets --no-deps -- -D warnings

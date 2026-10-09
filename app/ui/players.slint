@@ -1,0 +1,205 @@
+import { ListView } from "std-widgets.slint";
+import { AppState, LyricRender } from "state.slint";
+import { Icons } from "icons.slint";
+import { IconButton, PlaybackControls, SeekBar, VolumeControl, TextButton, AmbientBackground, CoverImage, ScrollMotion, ActionFocus } from "controls.slint";
+
+export component PlayerBar inherits Rectangle {
+    background:transparent;
+    Rectangle {x:0px;y:0px;height:1px;background:AppState.ink.with-alpha(0.1020);}
+    if root.width>=760px: HorizontalLayout {
+        padding-left:20px;padding-right:20px;padding-top:8px;padding-bottom:8px;spacing:16px;
+        Rectangle {
+            width:280px;
+            HorizontalLayout {
+                y:(parent.height - self.height)/2;height:(AppState.quality-info ? 52px : 39px)*AppState.scale;spacing:12px;
+                if AppState.compact-artwork: Rectangle {width:parent.height;height:parent.height;border-radius:2px;clip:true;
+                    CoverImage {x:0px;y:0px;width:parent.width;height:parent.height;artwork:AppState.now.cover;missing:AppState.now.cover-missing;image-fit:cover;}
+                    TouchArea {clicked => {AppState.full-player=true;}}
+                }
+                Rectangle {horizontal-stretch:1;clip:true;
+                    Text {x:0px;y:0px;width:parent.width;height:21px*AppState.scale;text:AppState.now.title=="" ? "No track playing" : AppState.now.title;color:AppState.ink;font-size:14px*AppState.scale;font-weight:700;overflow:elide;
+                        TouchArea {clicked=>{AppState.unfocus();AppState.full-player=true;}}}
+                    HorizontalLayout {x:0px;y:21px*AppState.scale;height:18px*AppState.scale;width:parent.width;spacing:4px;alignment:start;
+                        Rectangle {width:min(artist-label.preferred-width,parent.width*0.55);clip:true;
+                            artist-label:=Text {width:parent.width;height:18px*AppState.scale;text:AppState.now.artist;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.7216) : 0.7216);font-size:12px*AppState.scale;overflow:elide;
+                                TouchArea {clicked=>{AppState.unfocus();AppState.view="artists";AppState.open-group(AppState.now.artist,"",AppState.now.artist);}}}}
+                        if AppState.now.album!="": Text {text:"•";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.7216) : 0.7216);font-size:12px*AppState.scale;}
+                        if AppState.now.album!="": Rectangle {horizontal-stretch:1;clip:true;
+                            Text {width:parent.width;height:18px*AppState.scale;text:AppState.now.album;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.7216) : 0.7216);font-size:12px*AppState.scale;overflow:elide;
+                                TouchArea {clicked=>{AppState.unfocus();AppState.view="albums";AppState.open-group(AppState.now.album,AppState.now.album-artist,AppState.now.album);}}}}
+                    }
+                    if AppState.quality-info: Text {x:0px;y:39px*AppState.scale;width:parent.width;height:13px*AppState.scale;text:AppState.now.quality;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.7216) : 0.7216);font-size:10px*AppState.scale;overflow:elide;}
+                }
+            }
+        }
+        Rectangle {horizontal-stretch:1;
+            SeekBar {x:(parent.width - self.width)/2;y:(parent.height - 76px)/2;width:min(840px,parent.width);height:28px;}
+            PlaybackControls {x:(parent.width - self.width)/2;y:(parent.height - 76px)/2+32px;width:252px;height:44px;}
+        }
+        Rectangle {width:116px;
+        HorizontalLayout {y:(parent.height - 40px)/2;height:40px;spacing:8px;alignment:end;
+            IconButton {label:"Queue";icon:Icons.queue;outlined:true;active:AppState.queue-open;clicked => {AppState.queue-open=!AppState.queue-open;AppState.command("queue-preview",0);}}
+            VolumeControl {y:4px;}
+        }}
+    }
+    if root.width<760px: VerticalLayout {
+        padding:12px;spacing:4px;
+        HorizontalLayout {height:AppState.quality-info ? 40px : 28px;spacing:10px;
+            if AppState.compact-artwork: Rectangle {width:parent.height;height:parent.height;border-radius:3px;clip:true;CoverImage {x:0px;y:0px;width:parent.width;height:parent.height;artwork:AppState.now.cover;missing:AppState.now.cover-missing;image-fit:cover;}TouchArea {clicked=>{AppState.full-player=true;}}}
+            VerticalLayout {spacing:2px;alignment:center;
+                Text {text:AppState.now.title=="" ? "No track playing" : AppState.now.title;color:AppState.ink;font-size:14px*AppState.scale;font-weight:700;overflow:elide;TouchArea {clicked=>{AppState.unfocus();AppState.full-player=true;}}}
+                if AppState.quality-info: Text {text:AppState.now.quality;color:AppState.ink.with-alpha(AppState.light-theme ? 0.65 : 0.72);font-size:10px*AppState.scale;overflow:elide;}
+            }
+            IconButton {label:"Queue";width:28px;height:28px;icon:Icons.queue;active:AppState.queue-open;clicked=>{AppState.queue-open=!AppState.queue-open;AppState.command("queue-preview",0);}}
+            VolumeControl {width:28px;height:28px;}
+        }
+        SeekBar {height:24px;}
+        PlaybackControls {height:44px;}
+    }
+}
+
+export component FullPlayer inherits Rectangle {
+    private property<color> ink:AppState.full-player-dark ? white : AppState.ink;
+    background:AppState.full-player-dark ? #090a0c : AppState.base;
+    if AppState.blurred-background: AmbientBackground {source:AppState.full-backdrop;strength:1;subtle:false;animate:false;}
+    // Consume all empty-space input; the library is separately disabled.
+    TouchArea {scroll-event(event) => {return accept;}}
+    IconButton {layer:"full";label:"Back";dark:AppState.full-player-dark;x:56px;y:52px;icon:Icons.back;round:true;outlined:true;clicked => {AppState.full-player=false;}}
+    IconButton {layer:"full";label:"Lyrics";dark:AppState.full-player-dark;x:parent.width - 136px;y:52px;icon:Icons.lyrics;round:true;outlined:true;active:AppState.lyrics-open;clicked => {AppState.lyrics-open=!AppState.lyrics-open;}}
+    IconButton {layer:"full";label:"Queue";dark:AppState.full-player-dark;x:parent.width - 88px;y:52px;icon:Icons.queue;round:true;outlined:true;clicked => {AppState.queue-open=!AppState.queue-open;AppState.command("queue-preview",0);}}
+    content := Rectangle {
+        x:AppState.lyrics-open ? clamp(root.width*0.09,64px,176px) : (root.width - self.width)/2;
+        y:104px;width:AppState.lyrics-open ? min(390px,root.width*0.36) : min(560px,root.width - 112px);height:root.height - 176px;
+        VerticalLayout {
+            spacing:0;alignment:center;
+            if AppState.full-artwork: Rectangle {
+                height:min(content.width,AppState.lyrics-open ? 340px : 396px,max(96px,content.height - (root.height<720px ? 240px : 320px)));
+                changed height=>{AppState.player-cover-size=self.height/1px;}
+                init=>{AppState.player-cover-size=self.height/1px;}
+                Rectangle {x:(parent.width - self.width)/2;y:0px;width:parent.height;height:parent.height;
+                    CoverImage {x:0px;y:0px;width:parent.width;height:parent.height;artwork:AppState.original-cover;missing:AppState.original-cover-missing;image-fit:cover;}
+                }
+            }
+            Rectangle {height:root.height<720px ? 12px : 20px;}
+            Text {text:AppState.now.title;color:root.ink;font-size:(root.height<720px ? 28px : AppState.lyrics-open ? 30px : 36px)*AppState.scale;font-weight:900;horizontal-alignment:center;overflow:elide;}
+            Rectangle {height:root.height<720px ? 4px : 8px;}
+            Text {overflow:elide;text:AppState.now.artist;color:root.ink.with-alpha(0.8157);font-size:(root.height<720px ? 14px : AppState.lyrics-open ? 16px : 18px)*AppState.scale;horizontal-alignment:center;
+                TouchArea {enabled:AppState.now.artist!="";clicked=>{AppState.unfocus();AppState.full-player=false;AppState.view="artists";AppState.open-group(AppState.now.artist,"",AppState.now.artist);}}}
+            if AppState.now.album!="": Text {text:AppState.now.album;color:root.ink.with-alpha(0.7529);font-size:12px*AppState.scale;horizontal-alignment:center;overflow:elide;
+                TouchArea {clicked=>{AppState.unfocus();AppState.full-player=false;AppState.view="albums";AppState.open-group(AppState.now.album,AppState.now.album-artist,AppState.now.album);}}}
+            Rectangle {height:root.height<720px ? 8px : 16px;}
+            if AppState.quality-info: Text {text:AppState.now.quality;color:root.ink.with-alpha(0.7216);font-size:10px*AppState.scale;horizontal-alignment:center;}
+            Rectangle {height:root.height<720px ? 16px : 32px;}
+            SeekBar {dark:AppState.full-player-dark;stacked:true;height:root.height<720px ? 60px : 72px;}
+            Rectangle {height:root.height<720px ? 8px : 20px;}
+            PlaybackControls {layer:"full";dark:AppState.full-player-dark;large:!AppState.lyrics-open && root.height>=720px;height:root.height<720px ? 44px : 56px;}
+        }
+    }
+    if AppState.lyrics-open: Rectangle {
+        clip:true;
+        x:content.x+content.width+32px;y:104px;width:root.width - self.x - 56px;height:root.height - 176px;
+        private property<length> font-size:clamp(root.width*0.0265,30.4px,50.4px)*AppState.scale;
+        init=>{AppState.lyrics-width=self.width/1px;AppState.lyric-font-size=self.font-size/1px;}
+        changed width=>{AppState.lyrics-width=self.width/1px;}
+        changed font-size=>{AppState.lyric-font-size=self.font-size/1px;}
+        if AppState.lyrics.length==0: Text {text:AppState.lyrics-status;color:root.ink.with-alpha(0.5020);horizontal-alignment:center;vertical-alignment:center;}
+        resume-follow:=Timer {interval:5000ms;triggered=>{lyrics.follow=true;lyrics.follow-current();}}
+        motion:=ScrollMotion {offset<=>lyrics.content-y;minimum:-max(0px,lyrics.content-height - lyrics.height);page:lyrics.height;}
+        lyrics := Flickable {
+            mouse-drag-pan-enabled:false;
+            content-width:self.width;
+            content-height:AppState.lyric-offset(AppState.lyrics.length,AppState.lyric-layout-revision)*1px;
+            private property <bool> follow:true;
+            function follow-current() {
+                let offset=AppState.lyric-offset(max(0,AppState.active-line),AppState.lyric-layout-revision)*1px;
+                let next=AppState.lyric-offset(max(0,AppState.active-line)+1,AppState.lyric-layout-revision)*1px;
+                motion.snap(-clamp(offset - self.height*0.42+min(next - offset,self.height*0.8)/2,0px,max(0px,self.content-height - self.height)));
+            }
+            function wheel-scroll(delta:length) {
+                self.follow=false;resume-follow.restart();
+                motion.nudge(delta);
+            }
+            init=> {self.follow-current();}
+            changed content-height=> {if self.follow {self.follow-current();}}
+            private property <int> active-line: AppState.active-line;
+            changed active-line => {if self.follow {self.follow-current();}}
+            private property<int> layout-revision:AppState.lyric-layout-revision;
+            changed layout-revision=>{if self.follow {self.follow-current();}}
+            for line[index] in AppState.lyrics: Rectangle {
+                y:AppState.lyric-offset(index,AppState.lyric-layout-revision)*1px;
+                width:lyrics.width;
+                height:max(84px,(AppState.lyric-offset(index+1,AppState.lyric-layout-revision) - AppState.lyric-offset(index,AppState.lyric-layout-revision))*1px);
+                private property<bool> in-view:self.y+self.height>=-lyrics.content-y - 84px && self.y<=-lyrics.content-y+lyrics.height+84px;
+                private property<LyricRender> rendered:self.in-view ? AppState.lyric-render(index,AppState.lyric-render-revision) : AppState.lyric-render(-1,AppState.lyric-render-revision);
+                if in-view && rendered.bitmap.width==0: Text {x:0px;y:0px;width:parent.width;height:parent.height;text:line.text;color:root.ink;font-size:AppState.lyric-font-size*1px;font-weight:900;
+                    wrap:word-wrap;horizontal-alignment:center;vertical-alignment:center;
+                    opacity:AppState.active-line==index ? 1 : abs(AppState.active-line - index)==1 ? 0.34 : 0.18;
+                    }
+                if in-view && rendered.bitmap.width>0: karaoke := Rectangle {
+                    Image {x:0px;y:0px;width:parent.width;height:parent.height;source:rendered.bitmap;colorize:AppState.full-player-dark ? transparent : root.ink;image-fit:fill;opacity:AppState.active-line==index ? (line.words.length==0 ? 1 : 0.24) : abs(AppState.active-line - index)==1 ? 0.34 : 0.18;}
+                    for span in (AppState.active-line==index ? rendered.spans : []): Rectangle {
+                        private property<float> progress:AppState.active-line==index ? clamp((AppState.lyric-position - span.time)/max(1,span.end-time - span.time),0,1) : 0;
+                        x:(span.x+(span.rtl ? span.width*(1 - self.progress) : 0))*1px;y:span.y*1px;
+                        width:span.width*self.progress*1px;height:span.height*1px;clip:true;visible:AppState.active-line==index && self.progress>0;
+                        Image {x:-parent.x;y:-parent.y;width:karaoke.width;height:karaoke.height;source:rendered.bitmap;colorize:AppState.full-player-dark ? transparent : root.ink;image-fit:fill;}
+                    }
+                }
+                TouchArea {clicked => {if line.time>=0 {AppState.seek(line.time);lyrics.follow=true;resume-follow.stop();}}
+                    scroll-event(event)=>{lyrics.wheel-scroll(event.delta-y);return accept;}}
+            }
+        }
+    }
+    VolumeControl {layer:"full";dark:AppState.full-player-dark;x:parent.width - 72px;y:parent.height - 72px;}
+}
+
+export component QueuePanel inherits Rectangle {
+    private property<color> ink:AppState.full-player && AppState.full-player-dark ? white : AppState.ink;
+    in property <length> available-width:1280px;
+    in property <length> available-height:820px;
+    width:min(384px,root.available-width - 32px);height:min(672px,root.available-height - 32px,80px+max(1,AppState.queue.length)*(AppState.browse-artwork ? 67.2px : 56px));
+    border-radius:21.6px;clip:true;background:AppState.full-player && AppState.full-player-dark ? #000 : AppState.queue-background;border-width:1px;border-color:root.ink.with-alpha(0.1020);
+    private property<string> dragged-path;
+    private property<float> drag-origin;
+    private property<bool> drag-moved;
+
+    Text {x:20px;y:18px;text:"Queue";color:root.ink;font-size:19.52px;font-weight:900;}
+    Text {x:20px;y:44px;text:AppState.shuffle ? "Shuffle is on" : max(0,AppState.queue.length - 1)+" up next";color:root.ink.with-alpha(AppState.light-theme && !(AppState.full-player && AppState.full-player-dark) ? max(0.65,0.4510) : 0.4510);font-size:12px;}
+    TextButton {layer:"queue";dark:AppState.full-player && AppState.full-player-dark;x:parent.width - 128px;y:20px;width:64px;height:36px;text:"Clear";clicked => {AppState.queue-action("clear","","");}}
+    IconButton {layer:"queue";label:"Close";dark:AppState.full-player && AppState.full-player-dark;x:parent.width - 56px;y:20px;width:36px;height:36px;icon:Icons.close;round:true;outlined:true;clicked => {AppState.queue-open=false;}}
+    queue-list:=ListView {x:12.8px;y:80px;width:parent.width - 25.6px;height:parent.height - 92.8px;horizontal-scrollbar-policy:always-off;
+        for song[index] in AppState.queue: Rectangle {
+            accessible-role:button;accessible-label:song.title+", "+song.artist;
+            row-focus:=ActionFocus {layer:"queue";activated=>{AppState.queue-action("play",song.path,"");}
+                key-pressed(event)=>{
+                    if event.text==Key.Delete {AppState.queue-action("remove",song.path,"");return accept;}
+                    if event.modifiers.alt && event.text==Key.UpArrow && index>0 {AppState.queue-action("move",song.path,AppState.queue[index - 1].path);return accept;}
+                    if event.modifiers.alt && event.text==Key.DownArrow && index+1<AppState.queue.length {AppState.queue-action("move",song.path,AppState.queue[index+1].path);return accept;}
+                    if event.text=="\n" || event.text==" " {if !event.repeat {AppState.queue-action("play",song.path,"");}return accept;}
+                    return reject;
+                }
+            }
+            border-width:row-focus.has-focus ? 2px : 0px;border-color:root.ink;
+
+            height:AppState.browse-artwork ? 67.2px : 56px;border-radius:10px;background:song.path==AppState.now.path || pointer.has-hover ? root.ink.with-alpha(0.0549) : transparent;
+            HorizontalLayout {padding:9.6px;spacing:12px;
+                if AppState.browse-artwork: Rectangle {width:48px;height:48px;border-radius:7.68px;clip:true;CoverImage {x:0px;y:0px;width:parent.width;height:parent.height;artwork:song.cover;missing:song.cover-missing;image-fit:cover;}}
+                VerticalLayout {horizontal-stretch:1;spacing:1px;alignment:center;
+                    Text {text:song.title;color:root.ink;font-size:14.72px;font-weight:700;overflow:elide;}
+                    Text {text:song.artist;color:root.ink.with-alpha(AppState.light-theme && !(AppState.full-player && AppState.full-player-dark) ? max(0.65,0.4784) : 0.4784);font-size:12.48px;overflow:elide;}}
+                Text {width:48px;horizontal-alignment:right;text:song.duration;color:root.ink.with-alpha(AppState.light-theme && !(AppState.full-player && AppState.full-player-dark) ? max(0.65,0.4784) : 0.4784);font-size:13.44px;vertical-alignment:center;}
+            }
+            pointer := TouchArea {
+                moved=> {if self.pressed && abs(self.mouse-y/1px - root.drag-origin)>5 {root.drag-moved=true;}}
+                pointer-event(event) => {
+                    if event.button==PointerEventButton.right && event.kind==PointerEventKind.down {AppState.queue-action("remove",song.path,"");}
+                    if event.button==PointerEventButton.left && event.kind==PointerEventKind.down {root.dragged-path=song.path;root.drag-origin=self.mouse-y/1px;root.drag-moved=false;}
+                    if event.button==PointerEventButton.left && event.kind==PointerEventKind.up {
+                        if root.drag-moved {let target=clamp(index+round((self.mouse-y/1px - root.drag-origin)/(AppState.browse-artwork ? 67.2 : 56)),0,AppState.queue.length - 1);AppState.queue-action("move",root.dragged-path,AppState.queue[target].path);}
+                        else {AppState.queue-action("play",song.path,"");}
+                        root.dragged-path="";root.drag-moved=false;
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,16 @@
+import { AppState } from "state.slint";
+import { TextButton } from "controls.slint";
+import { CatalogView, CatalogDetails } from "library.slint";
+export component FoldersView inherits Rectangle {
+    if AppState.detail-key!="": CatalogDetails {}
+    if AppState.detail-key=="" && AppState.group-grid.length>0: CatalogView {}
+    if AppState.detail-key=="" && AppState.group-grid.length==0: Rectangle {
+        x:max(0px,(root.width - 320px)/2);y:max(0px,(root.height - 112px)/2);width:min(320px,root.width);height:112px;
+        VerticalLayout {spacing:16px;alignment:center;
+            Text {text:AppState.search!="" ? "No folders match your search." : "Add a music folder to start browsing.";color:AppState.ink.with-alpha(0.65);horizontal-alignment:center;wrap:word-wrap;}
+            HorizontalLayout {alignment:center;
+                TextButton {text:AppState.search!="" ? "Clear search" : "Add music folder";clicked=>{if AppState.search!="" {AppState.search="";AppState.browse();} else {AppState.add-folder();}}}
+            }
+        }
+    }
+}

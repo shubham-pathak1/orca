@@ -1,0 +1,151 @@
+import { ScrollView, CheckBox, ComboBox, Slider, LineEdit } from "std-widgets.slint";
+import { AppState } from "state.slint";
+import { Icons } from "icons.slint";
+import { TextButton, ToggleSwitch, AccentSlider, ActionFocus } from "controls.slint";
+
+component SettingRow inherits Rectangle {
+    in property <string> title;
+    in property <string> description;
+    in property <string> hint;
+    if root.hint!="": Tooltip {text:@markdown("\{root.hint}");}
+    private property<bool> compact:root.width<620px;
+    height:root.compact ? 128px : 78px;
+    Text {x:0px;y:4px;height:24px;width:root.compact ? parent.width : parent.width - 260px;text:root.title;color:AppState.ink;font-weight:600;font-size:14px*AppState.scale;}
+    Text {x:0px;y:28px;height:40px;width:root.compact ? parent.width : parent.width - 260px;text:root.description;color:AppState.ink;font-size:14px*AppState.scale;wrap:word-wrap;}
+    Rectangle {x:root.compact ? 0px : parent.width - 220px;y:root.compact ? 76px : 0px;width:220px;height:40px;@children}
+    Rectangle {y:parent.height - 1px;height:1px;background:AppState.ink.with-alpha(0.1020);}
+}
+
+component KeyCap inherits Rectangle {
+    in property<string> text;
+    width:max(24px,key.preferred-width+16px);height:26px;border-radius:4px;
+    border-width:1px;border-color:AppState.ink.with-alpha(0.6000);background:AppState.ink.with-alpha(0.0353);
+    key:=Text {text:root.text;color:AppState.ink;font-size:11px;font-weight:600;horizontal-alignment:center;vertical-alignment:center;}
+}
+component ShortcutRow inherits Rectangle {
+    in property<string> title;
+    in property<[string]> keys;
+    height:42px;
+    Text {x:16px;width:parent.width - 180px;text:root.title;color:AppState.ink;font-size:14px*AppState.scale;vertical-alignment:center;}
+    HorizontalLayout {x:parent.width - 174px;width:158px;y:8px;height:26px;alignment:end;spacing:6px;
+        for key[index] in root.keys: HorizontalLayout {spacing:6px;
+            if index>0: Text {text:"+";color:AppState.ink;vertical-alignment:center;}
+            KeyCap {text:key;}
+        }
+    }
+    Rectangle {y:parent.height - 1px;height:1px;background:AppState.ink.with-alpha(0.0392);}
+}
+export component SettingsView inherits Rectangle {
+    private property <int> tab;
+    ScrollView {y:0px;height:48px;vertical-scrollbar-policy:always-off;
+    HorizontalLayout {
+        height:36px;alignment:start;spacing:root.width<620px ? 14px : 28px;
+        for label[index] in ["Appearance","Interface","Library","Audio","About"]: Rectangle {
+            width:text.preferred-width+8px;height:36px;
+            accessible-role:button;accessible-label:label;
+            focus:=ActionFocus {activated=>{root.tab=index;}}
+            border-width:focus.has-focus ? 2px : 0px;border-color:AppState.ink;
+            text := Text {text:label;color:AppState.ink;font-size:14px*AppState.scale;font-weight:600;vertical-alignment:center;}
+            Rectangle {y:parent.height - 2px;height:2px;background:root.tab==index ? AppState.ink : transparent;}
+            TouchArea {clicked => {root.tab=index;}}
+        }
+    }
+    }
+    Rectangle {y:48px;height:1px;background:AppState.ink.with-alpha(0.1020);}
+    ScrollView {
+        y:60px;height:parent.height - 60px;horizontal-scrollbar-policy:always-off;
+        VerticalLayout {
+            x:0px;width:min(root.width - 12px,820px);spacing:24px;alignment:start;
+            if root.tab==0 || AppState.search!="": VerticalLayout {spacing:24px;alignment:start;
+                if AppState.setting-matches("Theme color scheme",AppState.search): Rectangle {height:140px;
+                    Text {x:0px;y:4px;width:parent.width;height:24px;text:"Theme";color:AppState.ink;font-weight:600;font-size:14px*AppState.scale;}
+                    Text {x:0px;y:28px;width:parent.width;height:24px;text:"Choose your preferred color scheme";color:AppState.ink;font-size:14px*AppState.scale;}
+                    HorizontalLayout {x:0px;y:64px;height:46px;alignment:start;spacing:8px;
+                        TextButton {width:128px;height:46px;text:"Dark";primary:!AppState.light-theme;clicked=>{AppState.light-theme=false;AppState.save-settings();}}
+                        TextButton {width:128px;height:46px;text:"Light";primary:AppState.light-theme;clicked=>{AppState.light-theme=true;AppState.save-settings();}}
+                    }
+                    Rectangle {y:parent.height - 1px;height:1px;background:AppState.ink.with-alpha(0.1020);}}
+                if AppState.setting-matches("Font preset custom browse file",AppState.search): Rectangle {height:140px;
+                    Text {x:0px;y:4px;width:parent.width;height:24px;text:"Font";color:AppState.ink;font-weight:600;font-size:14px*AppState.scale;}
+                    Text {x:0px;y:28px;width:parent.width;height:36px;text:"Pick a preset or browse for a custom font file";color:AppState.ink;font-size:14px*AppState.scale;wrap:word-wrap;}
+                    HorizontalLayout {x:0px;y:70px;height:36px;alignment:start;spacing:8px;
+                        TextButton {width:142px;text:"Plus Jakarta Sans";primary:AppState.font-family=="Plus Jakarta Sans";clicked => {AppState.font-action("preset");}}
+                        TextButton {width:82px;text:"System";primary:AppState.font-family=="";clicked => {AppState.font-action("system");}}
+                        TextButton {width:110px;text:"Browse file";clicked => {AppState.font-action("browse");}}
+                    }
+                    Rectangle {y:parent.height - 1px;height:1px;background:AppState.ink.with-alpha(0.1020);}}
+                if AppState.setting-matches("Font Size adjust base percentage",AppState.search): SettingRow {title:"Font Size";description:"Adjust the base font size";
+                    HorizontalLayout {spacing:10px;
+                        AccentSlider {label:"Font size";minimum:80;maximum:120;value:AppState.scale*100;changed(value) => {AppState.scale=value/100;AppState.save-settings();}}
+                        LineEdit {changed has-focus=>{AppState.text-input-focused=self.has-focus;}width:58px;height:36px;text:round(AppState.scale*100)+"";accepted(text)=>{AppState.font-scale(text);}}
+                        Text {text:"%";color:AppState.ink;vertical-alignment:center;}
+                    }}
+                if AppState.setting-matches("Visuals Minimal text only artwork presets",AppState.search): Rectangle {height:120px;
+                    Text {x:0px;y:0px;height:24px;text:"Visuals";color:AppState.ink;font-size:14px*AppState.scale;font-weight:600;}
+                    Text {x:0px;y:26px;height:28px;width:parent.width;text:"Choose a preset, then adjust individual options";color:AppState.ink;font-size:14px*AppState.scale;}
+                    HorizontalLayout {y:64px;height:40px;alignment:start;spacing:8px;
+                        TextButton {text:"Default";primary:AppState.browse-artwork && AppState.compact-artwork && AppState.full-artwork && AppState.blurred-background && AppState.dynamic-accent;
+                            clicked=>{AppState.browse-artwork=true;AppState.compact-artwork=true;AppState.full-artwork=true;AppState.blurred-background=true;AppState.dynamic-accent=true;AppState.save-settings();}}
+                        TextButton {text:"Minimal";primary:!AppState.browse-artwork && !AppState.compact-artwork && !AppState.full-artwork && !AppState.blurred-background && !AppState.dynamic-accent;
+                            clicked=>{AppState.browse-artwork=false;AppState.compact-artwork=false;AppState.full-artwork=false;AppState.blurred-background=false;AppState.dynamic-accent=false;AppState.grid=false;AppState.save-settings();}}
+                    }
+                }
+                if AppState.setting-matches("Visuals Browse artwork",AppState.search): SettingRow {title:"Browse artwork";description:"Show covers across the library, artists, albums, genres, playlists, and queue";
+                    ToggleSwitch {label:"Browse artwork";x:178px;y:12px;checked <=> AppState.browse-artwork;toggled=>{AppState.save-settings();}}}
+                if AppState.setting-matches("Visuals Compact player artwork",AppState.search): SettingRow {title:"Compact player artwork";description:"Show the cover beside the current track";
+                    ToggleSwitch {label:"Compact player artwork";x:178px;y:12px;checked <=> AppState.compact-artwork;toggled=>{AppState.save-settings();}}}
+                if AppState.setting-matches("Visuals Full player artwork",AppState.search): SettingRow {title:"Full player artwork";description:"Show the cover in the full player";
+                    ToggleSwitch {label:"Full player artwork";x:178px;y:12px;checked <=> AppState.full-artwork;toggled=>{AppState.save-settings();}}}
+                if AppState.setting-matches("Dynamic cover accent tint active controls current art",AppState.search): SettingRow {title:"Dynamic cover accent";description:"Tint active controls from the current cover art";
+                    ToggleSwitch {label:"Dynamic cover accent";x:178px;y:12px;checked <=> AppState.dynamic-accent;toggled => {AppState.save-settings();}}}
+                if AppState.setting-matches("Visuals Cover-based backgrounds cover art ambience library full player",AppState.search): SettingRow {title:"Cover-based backgrounds";description:"Show a subtle cover-colored gradient behind browsing pages and the full player";
+                    ToggleSwitch {label:"Cover-based backgrounds";x:178px;y:12px;checked <=> AppState.blurred-background;toggled => {AppState.save-settings();}}}
+            }
+            if root.tab==1 || AppState.search!="": VerticalLayout {spacing:24px;alignment:start;
+                if AppState.setting-matches("Sidebar mode text labels icons",AppState.search): SettingRow {title:"Sidebar mode";description:"Choose whether the sidebar should show text labels or just icons";
+                    ComboBox {enabled:AppState.focus-layer=="browse";model:["Icon-only","Labels"];current-index:AppState.icon-sidebar ? 0 : 1;selected(value) => {AppState.icon-sidebar=self.current-index==0;AppState.save-settings();}}}
+                if AppState.setting-matches("Seekbar style classic slider decoded waveform",AppState.search): SettingRow {title:"Seekbar style";description:"Choose between the classic slider and a decoded waveform";
+                    ComboBox {enabled:AppState.focus-layer=="browse";model:["Waveform","Classic"];current-index:AppState.seek-style=="waveform" ? 0 : 1;selected(value) => {AppState.seek-style=self.current-index==0 ? "waveform" : "classic";AppState.save-settings();}}}
+                if AppState.setting-matches("Keyboard shortcuts",AppState.search): Text {text:"Keyboard shortcuts";color:AppState.ink;font-size:14px;font-weight:600;}
+                if AppState.setting-matches("Keyboard shortcuts",AppState.search): Rectangle {
+                    height:420px;border-width:1px;border-color:AppState.ink.with-alpha(0.1020);border-radius:6px;
+                    VerticalLayout {spacing:0px;alignment:start;
+                        ShortcutRow {title:"Play or pause";keys:["Space"];}
+                        ShortcutRow {title:"Next song";keys:["Alt","N"];}
+                        ShortcutRow {title:"Previous song";keys:["Alt","P"];}
+                        ShortcutRow {title:"Toggle mute";keys:["M"];}
+                        ShortcutRow {title:"Open player lyrics or toggle lyrics";keys:["L"];}
+                        ShortcutRow {title:"Focus or leave search";keys:["Ctrl","K"];}
+                        ShortcutRow {title:"Show or hide queue";keys:["Q"];}
+                        ShortcutRow {title:"Toggle full screen";keys:["F11"];}
+                        ShortcutRow {title:"Close full player";keys:["Escape"];}
+                        ShortcutRow {title:"Toggle Phantom mode";keys:["Ctrl","Shift","B"];}
+                    }
+                }
+            }
+            if root.tab==2 || AppState.search!="": VerticalLayout {spacing:24px;alignment:start;
+                if AppState.setting-matches("Music folders additions changes",AppState.search): SettingRow {title:"Music folders";description:"Folders included in your library; rescan to find changes";TextButton {text:"Add folder";clicked => {AppState.add-folder();}}}
+                for folder in AppState.folders: Rectangle {visible:AppState.setting-matches("Music folders "+folder,AppState.search);height:self.visible ? 64px : 0px;border-radius:6px;border-width:1px;border-color:AppState.ink.with-alpha(0.1020);
+                    Text {x:16px;width:parent.width - 210px;text:AppState.display-path(folder);color:AppState.ink;vertical-alignment:center;overflow:elide;}
+                    TextButton {x:parent.width - 192px;y:12px;width:84px;text:"Rescan";clicked => {AppState.folder-action("rescan",folder);}}
+                    TextButton {x:parent.width - 100px;y:12px;width:84px;text:"Remove";clicked => {AppState.folder-action("remove",folder);}}}
+                if AppState.setting-matches("Automatically fetch missing artwork download album covers artist images library alpha experimental",AppState.search): SettingRow {title:"Automatically fetch artwork (Alpha)";description:"Download missing album covers and artist images when the library loads";hint:"Online artwork fetching is experimental. Images may be unavailable or matched incorrectly. You can change or remove covers manually.";
+                    ToggleSwitch {label:"Automatically fetch missing artwork";x:178px;y:12px;checked <=> AppState.auto-artwork;toggled => {AppState.save-settings();}}}
+            }
+            if root.tab==3 || AppState.search!="": VerticalLayout {spacing:24px;alignment:start;
+                if AppState.setting-matches("Song quality info format sample rate bitrate rows players",AppState.search): SettingRow {title:"Song quality info";description:"Show format, sample rate, and bitrate in collection lists and players";
+                    ToggleSwitch {label:"Song quality info";x:178px;y:12px;checked <=> AppState.quality-info;toggled => {AppState.save-settings();}}}
+                if AppState.setting-matches("Gapless playback preload next track smoother transitions",AppState.search): SettingRow {title:"Gapless playback";description:"Preload the next track near the end for smoother transitions";
+                    ToggleSwitch {label:"Gapless playback";x:178px;y:12px;checked <=> AppState.gapless;toggled => {AppState.save-settings();}}}
+
+            }
+            if (root.tab==4 || AppState.search!="") && AppState.setting-matches("About Orca version report feedback github",AppState.search): VerticalLayout {spacing:24px;alignment:start;
+                Text {text:"Orca  v0.1.7-alpha";color:AppState.ink;font-size:22px;font-weight:600;}
+                Text {text:"Local-first music player, built for listening to the library you already own.";color:AppState.ink;font-size:14px;wrap:word-wrap;}
+                Rectangle {height:1px;background:AppState.ink.with-alpha(0.1020);}
+                Text {text:"Found a bug or have an idea? Feedback helps shape Orca.";color:AppState.ink;font-size:14px;}
+                TextButton {icon:Icons.github;text:"Report on GitHub";clicked => {AppState.report-issue();}}
+            }
+        }
+    }
+}
