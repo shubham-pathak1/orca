@@ -86,8 +86,8 @@ pub fn add_to_playlist(conn: &Connection, playlist_id: i64, song_id: i64) -> Res
             params![playlist_id],
             |row| row.get(0),
         )
-        .unwrap_or(None);
-    let next_position = current_max.unwrap_or(0) + 1;
+        .map_err(|error| error.to_string())?;
+    let next_position = current_max.unwrap_or(-1) + 1;
 
     conn.execute(
         "INSERT INTO playlist_songs (playlist_id, song_id, position) VALUES (?1, ?2, ?3)",
@@ -127,7 +127,9 @@ pub fn get_song_path_index(conn: &Connection) -> Result<HashMap<String, i64>, St
         .prepare("SELECT id, path FROM songs")
         .map_err(|error| error.to_string())?;
     let rows = statement
-        .query_map([], |row| Ok((row.get::<_, String>(1)?, row.get::<_, i64>(0)?)))
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(1)?, row.get::<_, i64>(0)?))
+        })
         .map_err(|error| error.to_string())?;
 
     rows.map(|row| row.map_err(|error| error.to_string()))

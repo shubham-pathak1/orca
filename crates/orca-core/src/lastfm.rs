@@ -1,7 +1,4 @@
-/// Last.fm API integration for scrobbling and now-playing updates.
-///
-/// Uses the Last.fm "Scrobbling API" (v2.0) with HMAC-free MD5 signature scheme.
-/// Reference: https://www.last.fm/api/scrobbling
+//! Last.fm authentication, request signing and listening updates.
 use std::collections::BTreeMap;
 use url::form_urlencoded;
 
@@ -28,12 +25,17 @@ pub fn get_token(api_key: &str) -> Result<String, String> {
         LASTFM_API_URL, api_key
     );
     let resp = ureq::get(&url)
-        .set("User-Agent", "Orca/0.1.6-alpha (https://github.com/shubham-pathak1/orca)")
+        .set(
+            "User-Agent",
+            "Orca/0.1.6-alpha (https://github.com/shubham-pathak1/orca)",
+        )
         .call()
         .map_err(|e| e.to_string())?;
 
     #[derive(serde::Deserialize)]
-    struct TokenResponse { token: String }
+    struct TokenResponse {
+        token: String,
+    }
     let data: TokenResponse = resp.into_json().map_err(|e| e.to_string())?;
     Ok(data.token)
 }
@@ -65,14 +67,21 @@ pub fn get_session(api_key: &str, secret: &str, token: &str) -> Result<String, S
 
     let resp = ureq::post(LASTFM_API_URL)
         .set("Content-Type", "application/x-www-form-urlencoded")
-        .set("User-Agent", "Orca/0.1.6-alpha (https://github.com/shubham-pathak1/orca)")
+        .set(
+            "User-Agent",
+            "Orca/0.1.6-alpha (https://github.com/shubham-pathak1/orca)",
+        )
         .send_string(&body)
         .map_err(|e| e.to_string())?;
 
     #[derive(serde::Deserialize)]
-    struct Session { key: String }
+    struct Session {
+        key: String,
+    }
     #[derive(serde::Deserialize)]
-    struct SessionResponse { session: Session }
+    struct SessionResponse {
+        session: Session,
+    }
 
     let data: SessionResponse = resp.into_json().map_err(|e| e.to_string())?;
     Ok(data.session.key)
@@ -114,7 +123,10 @@ pub fn update_now_playing(
 
     ureq::post(LASTFM_API_URL)
         .set("Content-Type", "application/x-www-form-urlencoded")
-        .set("User-Agent", "Orca/0.1.6-alpha (https://github.com/shubham-pathak1/orca)")
+        .set(
+            "User-Agent",
+            "Orca/0.1.6-alpha (https://github.com/shubham-pathak1/orca)",
+        )
         .send_string(&body)
         .map_err(|e| e.to_string())?;
 
@@ -123,8 +135,7 @@ pub fn update_now_playing(
 
 /// Scrobble a track to Last.fm.
 /// `timestamp` is Unix epoch seconds (when playback started).
-/// Last.fm rules: scrobble after the track has been played for 50% of its duration
-/// or for at least 4 minutes, whichever comes first.
+/// The caller determines playback eligibility before submitting.
 pub fn scrobble(
     api_key: &str,
     secret: &str,
@@ -159,7 +170,10 @@ pub fn scrobble(
 
     ureq::post(LASTFM_API_URL)
         .set("Content-Type", "application/x-www-form-urlencoded")
-        .set("User-Agent", "Orca/0.1.6-alpha (https://github.com/shubham-pathak1/orca)")
+        .set(
+            "User-Agent",
+            "Orca/0.1.6-alpha (https://github.com/shubham-pathak1/orca)",
+        )
         .send_string(&body)
         .map_err(|e| e.to_string())?;
 

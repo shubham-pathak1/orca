@@ -1,0 +1,331 @@
+import { AppState } from "state.slint";
+import { Icons } from "icons.slint";
+import { FallbackCovers } from "fallback-covers.slint";
+
+// Common activation semantics for custom controls and virtualized rows.
+export component ActionFocus inherits FocusScope {
+    in property<string> layer:"browse";
+    callback activated();
+    callback context-menu();
+    enabled:AppState.focus-layer==root.layer;
+    key-pressed(event)=>{
+        if !event.modifiers.control && !event.modifiers.alt && (event.text=="\n" || event.text==" ") {
+            if !event.repeat {root.activated();}
+            return accept;
+        }
+        if event.modifiers.shift && event.text==Key.F10 {root.context-menu();return accept;}
+        return reject;
+    }
+}
+
+export component CoverImage inherits Image {
+    in property<image> artwork;
+    in property<bool> missing:true;
+    private property<float> physical-edge:max(root.width,root.height)/1px * AppState.display-dpr;
+    private property<image> fallback:physical-edge<=32 ? FallbackCovers.cover-32 : physical-edge<=64 ? FallbackCovers.cover-64 : physical-edge<=128 ? FallbackCovers.cover-128 : physical-edge<=256 ? FallbackCovers.cover-256 : physical-edge<=512 ? FallbackCovers.cover-512 : physical-edge<=1024 ? FallbackCovers.cover-1024 : Icons.cover;
+    source:root.artwork.width>0 || !root.missing ? root.artwork : root.fallback;
+    image-fit:cover;
+}
+export component SearchField inherits Rectangle {
+    in-out property<string> text;
+    in property<string> placeholder-text;
+    out property<bool> has-focus:input.has-focus;
+    forward-focus:input;
+    accessible-role:text-input;accessible-label:root.placeholder-text;accessible-value:root.text;
+    changed has-focus=>{AppState.text-input-focused=self.has-focus;AppState.search-input-focused=self.has-focus;}
+    init=>{if AppState.search-focus-pending && root.visible {input.focus();input.select-all();AppState.text-input-focused=true;AppState.search-input-focused=true;}}
+    private property<int> focus-request:AppState.search-focus-request;
+    changed focus-request=>{if root.visible {input.focus();input.select-all();AppState.text-input-focused=true;AppState.search-input-focused=true;}}
+    callback edited();
+    height:40px;border-radius:6px;border-width:1px;
+    border-color:input.has-focus ? AppState.accent.with-alpha(0.34) : AppState.ink.with-alpha(0.1020);
+    background:AppState.ink.with-alpha(0.0392);
+    Text {x:12px;width:parent.width - 24px;text:root.placeholder-text;visible:root.text=="";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.3804) : 0.3804);font-size:14px*AppState.scale;vertical-alignment:center;}
+    input:=TextInput {enabled:AppState.focus-layer=="browse";x:12px;y:0px;width:parent.width - (root.text=="" ? 24px : 44px);height:parent.height;
+        text<=>root.text;color:AppState.ink;font-size:14px*AppState.scale;vertical-alignment:center;single-line:true;
+        selection-background-color:AppState.accent.with-alpha(0.3);selection-foreground-color:AppState.ink;
+        edited=>{root.edited();}}
+    if root.text!="": Rectangle {x:parent.width - 32px;y:8px;width:24px;height:24px;
+        Image {x:4px;y:4px;width:16px;height:16px;source:Icons.close;colorize:AppState.ink;opacity:0.65;}
+        TouchArea {clicked=>{AppState.unfocus();root.text="";root.edited();}}}
+}
+
+export component IconButton inherits Rectangle {
+    in property<bool> enabled:true;
+    in property<bool> dialog-control:false;
+    in property<string> layer:"browse";
+    in property<string> label;
+    Tooltip {text:@markdown("\{root.label}");}
+    forward-focus:focus;
+    accessible-role:button;
+    accessible-label:root.label;
+    accessible-enabled:root.enabled;
+    accessible-action-default=>{if root.enabled {root.clicked();}}
+    focus:=ActionFocus {layer:root.dialog-control ? "dialog" : root.layer;enabled:root.enabled && AppState.focus-layer==(root.dialog-control ? "dialog" : root.layer);activated=>{root.clicked();}}
+
+    in property<bool> dark:false;
+    private property<color> ink:root.dark ? white : AppState.ink;
+    private property<color> inverse-ink:root.dark ? black : AppState.inverse-ink;
+    private property<color> accent:root.dark ? AppState.player-accent : AppState.accent;
+    in property <image> icon;
+    in property<length> icon-size:20px;
+    in property <bool> round: false;
+    in property <bool> outlined: false;
+    in property <bool> primary: false;
+    in property <bool> active: false;
+    out property<bool> has-hover:pointer.has-hover;
+    callback clicked();
+    width: 40px; height: 40px;
+    border-radius: root.round ? root.width / 2 : 6px;
+    background: root.primary ? root.ink : root.active ? root.accent.with-alpha(0.12) : pointer.has-hover ? root.ink.with-alpha(0.0784) : transparent;
+    border-width: focus.has-focus && AppState.keyboard-navigation ? 2px : root.outlined ? 1px : 0px;
+    border-color:focus.has-focus && AppState.keyboard-navigation ? root.ink : root.ink.with-alpha(0.1020);
+    Image { width:root.icon-size; height:root.icon-size; x:(parent.width - self.width)/2; y:(parent.height - self.height)/2;
+        source:root.icon; colorize:root.primary ? root.inverse-ink : root.active ? root.accent : root.ink;
+        opacity: root.primary || root.active || pointer.has-hover ? 1 : 0.64; }
+    pointer := TouchArea {enabled:root.enabled; clicked => {AppState.keyboard-navigation=false;focus.focus();root.clicked();} }
+}
+
+export component TextButton inherits Rectangle {
+    in property<bool> dialog-control:false;
+    in property<string> layer:"browse";
+    forward-focus:focus;
+    accessible-role:button;
+    accessible-label:root.text;
+    accessible-enabled:root.enabled;
+    accessible-action-default=>{if root.enabled {root.clicked();}}
+    focus:=ActionFocus {layer:root.dialog-control ? "dialog" : root.layer;enabled:root.enabled && AppState.focus-layer==(root.dialog-control ? "dialog" : root.layer);activated=>{root.clicked();}}
+
+    in property<bool> dark:false;
+    private property<color> ink:root.dark ? white : AppState.ink;
+    private property<color> inverse-ink:root.dark ? black : AppState.inverse-ink;
+    private property<color> accent:root.dark ? AppState.player-accent : AppState.accent;
+    in property<bool> enabled:true;
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> primary;
+    callback clicked();
+    height:40px; width:max(100px,label.preferred-width+(root.icon.width>0 ? 56px : 32px));
+    border-radius:6px; border-width:focus.has-focus && AppState.keyboard-navigation ? 2px : 1px; border-color:focus.has-focus && AppState.keyboard-navigation ? root.ink : root.ink.with-alpha(0.3765);
+    opacity:root.enabled ? 1 : 0.45;
+    background:root.primary ? root.ink : pointer.has-hover ? root.ink.with-alpha(0.0784) : transparent;
+    if root.icon.width>0: Image {x:12px;y:(parent.height - 16px)/2;width:16px;height:16px;source:root.icon;colorize:root.primary ? root.inverse-ink : root.ink;}
+    label := Text { x:root.icon.width>0 ? 28px : 0px;width:parent.width - self.x;text:root.text; color:root.primary ? root.inverse-ink : root.ink; font-size:14px*AppState.scale;
+        horizontal-alignment:center; vertical-alignment:center; font-weight:600; }
+    pointer := TouchArea {enabled:root.enabled; clicked => {AppState.keyboard-navigation=false;focus.focus();root.clicked();} }
+}
+
+export component ToggleSwitch inherits Rectangle {
+    in property<string> label;
+    forward-focus:focus;
+    accessible-role:checkbox;
+    accessible-label:root.label;
+    accessible-checked:root.checked;
+    accessible-action-default=>{root.checked=!root.checked;root.toggled();}
+    focus:=ActionFocus {activated=>{root.checked=!root.checked;root.toggled();}}
+    if focus.has-focus: Rectangle {x:-3px;y:-3px;width:root.width+6px;height:root.height+6px;border-width:2px;border-radius:15px;border-color:AppState.ink;}
+
+    in-out property<bool> checked;
+    callback toggled();
+    width:42px;height:24px;border-radius:12px;border-width:1px;
+    border-color:root.checked ? AppState.ink : AppState.ink.with-alpha(0.2510);background:root.checked ? AppState.ink : AppState.ink.with-alpha(0.0784);
+    Rectangle {x:root.checked ? 22px : 3px;y:3px;width:18px;height:18px;border-radius:9px;background:root.checked ? AppState.base : AppState.ink;animate x {duration:100ms;easing:ease-out;}}
+    TouchArea {clicked=> {focus.focus();root.checked=!root.checked;root.toggled();}}
+}
+
+export component AccentSlider inherits Rectangle {
+    in property<string> label;
+    forward-focus:focus;
+    accessible-role:AccessibleRole.slider;
+    accessible-label:root.label;
+    accessible-value:root.value;
+    accessible-action-set-value(v)=>{if v.is-float() {root.value=clamp(v.to-float(),root.minimum,root.maximum);root.changed(root.value);}}
+    focus:=FocusScope {
+        enabled:AppState.focus-layer=="browse";
+        key-pressed(event)=>{
+            if event.text==Key.LeftArrow || event.text==Key.DownArrow {root.value=max(root.minimum,root.value - (root.maximum - root.minimum)/100);root.changed(root.value);return accept;}
+            if event.text==Key.RightArrow || event.text==Key.UpArrow {root.value=min(root.maximum,root.value + (root.maximum - root.minimum)/100);root.changed(root.value);return accept;}
+            if event.text==Key.Home {root.value=root.minimum;root.changed(root.value);return accept;}
+            if event.text==Key.End {root.value=root.maximum;root.changed(root.value);return accept;}
+            return reject;
+        }
+    }
+    if focus.has-focus: Rectangle {border-width:2px;border-radius:6px;border-color:AppState.ink;}
+
+    in property<float> minimum;
+    in property<float> maximum:100;
+    in-out property<float> value;
+    callback changed(float);
+    height:36px;
+    private property<float> progress:maximum>minimum ? clamp((value - minimum)/(maximum - minimum),0,1) : 0;
+    Rectangle {x:7px;y:(root.height - 6px)/2;width:root.width - 14px;height:6px;border-radius:3px;background:AppState.ink.with-alpha(0.1490);border-width:1px;border-color:AppState.ink.with-alpha(0.2510);
+        Rectangle {x:0px;y:0px;width:parent.width*root.progress;border-radius:3px;background:AppState.accent;}}
+    Rectangle {x:7px+(root.width - 14px)*root.progress - 7px;y:(root.height - 14px)/2;width:14px;height:14px;border-radius:7px;background:AppState.accent;}
+    TouchArea {
+        function update-value() {root.value=root.minimum+clamp((self.mouse-x - 7px)/(self.width - 14px),0,1)*(root.maximum - root.minimum);root.changed(root.value);}
+        pointer-event(event)=>{if event.kind==PointerEventKind.down {focus.focus();self.update-value();}}
+        moved=>{if self.pressed {self.update-value();}}
+    }
+}
+
+export component PlaybackControls inherits HorizontalLayout {
+    in property<string> layer:"browse";
+    in property<bool> dark:false;
+    private property<color> ink:root.dark ? white : AppState.ink;
+    private property<color> inverse-ink:root.dark ? black : AppState.inverse-ink;
+    private property<color> accent:root.dark ? AppState.player-accent : AppState.accent;
+    in property <bool> large;
+    spacing:root.large ? 24px : 12px;
+    alignment:center;
+    IconButton {label:"Shuffle";layer:root.layer; dark:root.dark; icon:Icons.shuffle; round:true; active:AppState.shuffle;
+        clicked => {AppState.command("shuffle",0);} }
+    IconButton {label:"Previous track";layer:root.layer; dark:root.dark; icon:Icons.previous; round:true; clicked => {AppState.command("previous",0);} }
+    IconButton {layer:root.layer; dark:root.dark; label:AppState.playing ? "Pause" : "Play";icon:AppState.playing ? Icons.pause : Icons.play; round:true; primary:true;
+        width:root.large ? 56px : 44px; height:self.width;
+        clicked => {AppState.command("toggle",0);} }
+    IconButton {label:"Next track";layer:root.layer; dark:root.dark; icon:Icons.next; round:true; clicked => {AppState.command("next",0);} }
+    IconButton {label:"Repeat";layer:root.layer; dark:root.dark; icon:Icons.repeat; round:true; active:AppState.repeat>0;
+        clicked => {AppState.command("repeat",0);} }
+}
+
+export component SeekBar inherits Rectangle {
+    in property<bool> dark:false;
+    private property<color> ink:root.dark ? white : AppState.ink;
+    private property<color> inverse-ink:root.dark ? black : AppState.inverse-ink;
+    private property<color> accent:root.dark ? AppState.player-accent : AppState.accent;
+    in property <bool> stacked;
+    forward-focus:seek-focus;
+    seek-focus:=FocusScope {
+        enabled:AppState.focus-layer==(root.stacked ? "full" : "browse") && AppState.duration>0;
+        key-pressed(event)=>{
+            if event.text==Key.LeftArrow {AppState.seek(max(0,AppState.position - 5000));return accept;}
+            if event.text==Key.RightArrow {AppState.seek(min(AppState.duration,AppState.position+5000));return accept;}
+            return reject;
+        }
+    }
+    if seek-focus.has-focus: Rectangle {border-width:2px;border-color:root.ink;border-radius:4px;}
+    private property <float> drag-position;
+    private property <float> displayed: pointer.pressed ? root.drag-position : AppState.position;
+    private property <float> progress: AppState.duration>0 ? clamp(root.displayed/AppState.duration,0,1) : 0;
+    height:root.stacked ? 72px : 28px;
+    HorizontalLayout {
+        y:0; height:root.stacked ? root.height - 26px : root.height; spacing:12px;
+        if !root.stacked: Text { width:42px; text:AppState.elapsed; color:root.ink.with-alpha(AppState.light-theme && !root.dark ? max(0.65,0.5020) : 0.5020); font-size:12px; vertical-alignment:center; horizontal-alignment:right; }
+        track := Rectangle {
+            horizontal-stretch:1;
+            if AppState.seek-style=="waveform": Image { x:0px;y:0px;width:parent.width;height:parent.height;source:AppState.waveform; image-fit:fill; colorize:root.ink.with-alpha(0.1608); }
+            if AppState.seek-style=="waveform": Rectangle {
+                x:0px;y:0px;height:parent.height;width:parent.width*root.progress; clip:true;
+                Image { x:0px;y:0px;width:track.width; height:track.height; source:AppState.waveform; image-fit:fill; colorize:root.accent; }
+            }
+            if AppState.seek-style!="waveform": Rectangle {
+                y:(parent.height - 3px)/2; height:3px; background:root.ink.with-alpha(0.1608);
+                Rectangle { x:0px;y:0px;height:parent.height;width:parent.width*root.progress; background:root.accent; }
+            }
+            pointer := TouchArea {
+                pointer-event(event) => {
+                    if event.kind==PointerEventKind.down {root.drag-position=clamp(self.mouse-x/self.width,0,1)*AppState.duration;}
+                    if event.kind==PointerEventKind.up {AppState.seek(root.drag-position);}
+                }
+                moved => {if self.pressed {root.drag-position=clamp(self.mouse-x/self.width,0,1)*AppState.duration;}}
+            }
+        }
+        if !root.stacked: Text { width:42px; text:AppState.total; color:root.ink.with-alpha(AppState.light-theme && !root.dark ? max(0.65,0.5020) : 0.5020); font-size:12px; vertical-alignment:center; }
+    }
+    if root.stacked: HorizontalLayout {
+        y:root.height - 18px; height:18px;
+        Text {text:AppState.elapsed; color:root.ink.with-alpha(AppState.light-theme && !root.dark ? max(0.65,0.5020) : 0.5020); font-size:12px;}
+        Rectangle {horizontal-stretch:1;}
+        Text {text:AppState.total; color:root.ink.with-alpha(AppState.light-theme && !root.dark ? max(0.65,0.5020) : 0.5020); font-size:12px; horizontal-alignment:right;}
+    }
+}
+
+// Let the renderer pace short wheel animations.
+// Precise touchpad deltas and large jumps remain direct.
+export component ScrollMotion inherits Rectangle {
+    width:0px;height:0px;
+    in-out property<length> offset;
+    in property<length> minimum;
+    in property<length> maximum:0px;
+    in property<length> page:500px;
+    private property<length> target;
+    private property<bool> eased;
+    animate offset {duration:root.eased && !AppState.window-hidden ? 100ms : 0ms;easing:ease-out;}
+    public function snap(value:length) {self.eased=false;self.target=clamp(value,self.minimum,self.maximum);self.offset=self.target;}
+    public function nudge(delta:length) {
+        let reversing=(delta>0px && self.target<self.offset) || (delta<0px && self.target>self.offset);
+        let base=self.eased && !reversing ? self.target : self.offset;
+        self.target=clamp(base+delta,self.minimum,self.maximum);
+        self.eased=abs(delta)>=2px && abs(delta)<self.page*0.5;
+        self.offset=self.target;
+    }
+}
+
+export component VolumeControl inherits Rectangle {
+    in property<string> layer:"browse";
+    forward-focus:volume-focus;
+    accessible-role:AccessibleRole.slider;accessible-label:"Volume";accessible-value:round(AppState.volume*100);
+    volume-focus:=FocusScope {
+        enabled:AppState.focus-layer==root.layer;
+        key-pressed(event)=>{
+            if event.text==Key.UpArrow || event.text==Key.RightArrow {AppState.volume-changed(min(1,AppState.volume+0.05));return accept;}
+            if event.text==Key.DownArrow || event.text==Key.LeftArrow {AppState.volume-changed(max(0,AppState.volume - 0.05));return accept;}
+            if event.text==Key.Home {AppState.volume-changed(0);return accept;}
+            if event.text==Key.End {AppState.volume-changed(1);return accept;}
+            return reject;
+        }
+    }
+    if volume-focus.has-focus: Rectangle {border-width:2px;border-color:root.ink;border-radius:6px;}
+
+    in property<bool> dark:false;
+    private property<color> ink:root.dark ? white : AppState.ink;
+    private property<color> inverse-ink:root.dark ? black : AppState.inverse-ink;
+    private property<color> accent:root.dark ? AppState.player-accent : AppState.accent;
+    width:32px;height:32px;
+    private property<bool> open;
+    private property<float> last-volume:1;
+    Image {x:6px;y:6px;width:20px;height:20px;source:AppState.volume==0 ? Icons.mute : Icons.volume;colorize:root.ink;opacity:0.7;}
+    // Includes the gap; popup hover/drag separately keeps the close timer stopped.
+    area:=TouchArea {
+        x:-4px;y:root.open ? -144px : 0px;width:40px;height:root.open ? 176px : 32px;
+        clicked=>{if self.mouse-y>=self.height - 32px {if AppState.volume>0 {root.last-volume=AppState.volume;}AppState.volume-changed(AppState.volume==0 ? root.last-volume : 0);root.open=true;}}
+        scroll-event(event)=>{AppState.volume-changed(clamp(AppState.volume+(event.delta-y>0px ? 0.05 : -0.05),0,1));return accept;}
+        changed has-hover=>{if self.has-hover {root.open=true;}}
+    }
+    // Keep the touch region instantiated so its hover state can control the timer.
+    popup:=Rectangle {visible:root.open;
+        x:-3px;y:-144px;width:38px;height:136px;background:root.dark ? #171719 : AppState.raised-panel;border-radius:12px;border-width:1px;border-color:root.ink.with-alpha(0.0784);
+        Rectangle {x:17px;y:12px;width:3px;height:112px;background:root.ink.with-alpha(0.2000);
+            Rectangle {y:parent.height*(1 - AppState.volume);height:parent.height*AppState.volume;background:root.accent;}}
+        Rectangle {x:14px;y:12px+(1 - AppState.volume)*112px - 5px;width:10px;height:10px;border-radius:5px;background:root.accent;}
+        slider:=TouchArea {
+            pointer-event(event)=>{if event.kind==PointerEventKind.down {AppState.volume-changed(clamp(1 - (self.mouse-y - 12px)/112px,0,1));}}
+            moved=>{if self.pressed {AppState.volume-changed(clamp(1 - (self.mouse-y - 12px)/112px,0,1));}}
+            clicked=>{AppState.volume-changed(clamp(1 - (self.mouse-y - 12px)/112px,0,1));}
+            scroll-event(event)=>{AppState.volume-changed(clamp(AppState.volume+(event.delta-y>0px ? 0.05 : -0.05),0,1));return accept;}
+        }
+    }
+    Timer {interval:500ms;running:root.open && !area.has-hover && !slider.has-hover && !slider.pressed;triggered=>{root.open=false;}}
+}
+
+// Crossfade cached ambience only when its source changes, then release the old
+// image reference. No blur or artwork decoding runs on the UI thread.
+export component AmbientBackground inherits Rectangle {
+    in property<image> source;
+    in property<float> strength:0.06;
+    in property<bool> subtle:true;
+    in property<bool> animate:true;
+    private property<image> shown;
+    private property<image> previous;
+    private property<float> blend:1;
+    init=>{self.shown=self.source;self.previous=self.source;}
+    changed source=>{self.previous=self.shown;self.shown=self.source;self.blend=self.animate ? 0 : 1;}
+    Timer {interval:16ms;running:root.blend<1 && !AppState.window-hidden;triggered=>{
+        root.blend=min(1,root.blend+0.125);
+        if root.blend>=1 {root.previous=root.shown;}
+    }}
+    if root.blend<1: Image {x:0px;y:0px;width:parent.width;height:parent.height;source:root.previous;image-fit:fill;opacity:root.strength*(1 - root.blend);}
+    Image {x:0px;y:0px;width:parent.width;height:parent.height;source:root.shown;image-fit:fill;opacity:root.strength*root.blend;}
+    if root.subtle: Rectangle {x:0px;y:0px;width:root.width;height:root.height;background:AppState.base.with-alpha(0.8);}
+
+}

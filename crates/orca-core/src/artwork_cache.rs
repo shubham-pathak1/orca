@@ -6,6 +6,7 @@ use image::codecs::webp::WebPEncoder;
 use image::imageops::FilterType;
 use image::ExtendedColorType;
 
+#[derive(Debug)]
 pub struct ArtworkPaths {
     pub full: String,
     pub thumb: String,
@@ -29,12 +30,10 @@ pub fn persist_artwork(
     let thumb_path = artwork_dir.join(format!("thumb_{hash}_80.webp"));
     let preview_path = artwork_dir.join(format!("preview_{hash}_256.webp"));
 
-    if !original_path.is_file() {
-        fs::write(&original_path, bytes).map_err(|error| error.to_string())?;
-    }
+    crate::atomic_file::write(&original_path, bytes).map_err(|error| error.to_string())?;
 
-    let mut thumb_written = thumb_path.is_file();
-    let mut preview_written = preview_path.is_file();
+    let mut thumb_written = image::image_dimensions(&thumb_path).is_ok();
+    let mut preview_written = image::image_dimensions(&preview_path).is_ok();
     if !thumb_written || !preview_written {
         if let Ok(image) = image::load_from_memory(bytes) {
             if !thumb_written && write_webp_derivative(&image, &thumb_path, 80).is_ok() {
@@ -81,7 +80,7 @@ pub fn write_webp_derivative(
             ExtendedColorType::Rgba8,
         )
         .map_err(|error| error.to_string())?;
-    fs::write(output_path, &output).map_err(|error| error.to_string())
+    crate::atomic_file::write(output_path, &output).map_err(|error| error.to_string())
 }
 
 fn artwork_extension_from_mime(mime: &str) -> &'static str {

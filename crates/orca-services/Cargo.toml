@@ -1,0 +1,15 @@
+[package]
+name = "orca-services"
+version = "0.1.6-alpha"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+orca-core = { path = "../orca-core" }
+rusqlite = { version = "0.31", features = ["bundled", "backup"] }
+walkdir = "2"
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+ureq = { version = "2.9", features = ["json"] }
+
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }

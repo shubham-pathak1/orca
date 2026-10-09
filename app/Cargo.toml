@@ -1,0 +1,38 @@
+[package]
+name = "orca-slint"
+version = "0.1.7-alpha"
+edition = "2021"
+license = "MIT"
+build = "build.rs"
+
+[features]
+default = []
+gpu = ["slint/renderer-femtovg"]
+
+[dependencies]
+slint = { version = "=1.18.1", default-features = false, features = ["std", "backend-winit", "renderer-software", "accessibility", "compat-1-2", "unstable-fontique-011", "system-tray", "raw-window-handle-06"] }
+orca-services = { path = "../crates/orca-services" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+rfd = "0.15"
+notify = "=6.1.1"
+parley = "=0.11.1"
+swash = "=0.2.10"
+
+[target.'cfg(windows)'.dependencies]
+raw-window-handle = "0.6.2"
+windows = { version = "0.61.3", features = ["Foundation", "Media", "Storage", "Storage_Streams", "Win32_Foundation", "Win32_System_WinRT", "Win32_UI_Shell", "Win32_System_Registry"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_Threading"] }
+
+[build-dependencies]
+slint-build = "=1.18.1"
+winresource = "0.1.31"
+image = { version = "0.25", default-features = false, features = ["png", "ico"] }
+
+[profile.dev]
+debug = 0
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
