@@ -1,121 +1,57 @@
 # Orca
 
-Orca is a local music player for Windows built using Svelte 5, Tauri 2, and Rust.
+A free, open-source local music player.
 
-> [!IMPORTANT]
-> **Alpha release:** Orca is in active development. Performance and stability on libraries larger than **5,000 tracks** have not been broadly tested yet. Please report bugs or regressions through GitHub Issues.
+Orca is in active development. The current native prerelease targets Windows x64.
 
-## Download
+## Features
 
-Get the Windows x64 installer or portable executable from [GitHub Releases](https://github.com/shubham-pathak1/orca/releases). The portable executable runs without an installer but still uses the normal user data locations.
+- Offline local playback, search and alphabetical browsing
+- Nested folder browsing, with Songs / Folders tabs in narrow windows
+- Songs, artists, albums, genres, playlists and folders in list and grid views
+- Gapless playback, shuffle, repeat, queue reordering and session restore
+- Synced and word-timed lyrics, click-to-seek, LRC import and online lyric fetching
+- Waveform and classic seekbars, compact and full-player views
+- Song metadata and cover editing, bulk album/artist/genre tag updates
+- Online album artwork and artist pictures, custom collection covers
+- Playlist creation, editing and M3U import/export
+- Light/dark themes, minimal mode, custom fonts, cover-based backgrounds and dynamic accents
+- Windows media controls, tray integration, keyboard shortcuts and Phantom Mode
 
----
+## Getting started
 
-## Key Features
+Check [GitHub Releases](https://github.com/shubham-pathak1/orca/releases) for available builds and their release notes.
+Run the Windows setup, or extract the portable ZIP and open **Orca.exe**.
+Add your music folders in Settings.
 
-- **Local library**: Scan local folders and keep them updated as files change. Supports `MP3`, `FLAC`, `M4A`, `WAV`, `OGG`, `OPUS`, and `AIFF` / `AIF`.
-- **Playback**: Rodio-based audio playback with gapless playback, queue controls, shuffle, repeat, and waveform or standard seeking.
-- **Waveforms**: Decode and cache waveform seekbars from the track audio.
-- **Lyrics**: Prefer matching local `.lrc` files, then read embedded lyrics or fetch and cache timed or plain lyrics from LRCLIB. Enhanced LRC files with inline word timestamps display a white word-by-word sweep. Click a lyric line to seek, or import a local `.lrc` file through the metadata editor.
-- **Metadata**: Edit track tags and cover art directly in the app.
-- **Playlists**: Create playlists, set custom covers, and import or export standard M3U playlists.
-- **Windows integration**: Taskbar controls, global media shortcuts, and Windows media controls.
-- **Player views**: Library, artists, albums, genres, playlists, queue, and a full-player lyrics view.
+Online artwork fetching is experimental. Images may be unavailable or matched
+incorrectly; you can choose or replace them manually.
 
----
+Song edits write audio-file tags and covers. Album, artist and genre renames update
+the corresponding song tags; collection covers and playlists stay in Orca.
 
-## Keyboard Shortcuts
+Back up `%LOCALAPPDATA%\OrcaSlintTauri` with Orca closed before upgrading.
+Close Orca before running a newer setup. For portable builds, extract the newer
+ZIP into a separate directory. Your profile is reused.
 
-- `Space`: Play or pause
-- `Alt + N` / `Alt + P`: Next or previous song
-- `M`: Toggle mute
-- `L`: Show or hide full-player lyrics
-- `F11`: Toggle full screen
-- `Ctrl + Shift + B`: Enter or restore Phantom Mode while Orca is running
+## Contributing
 
----
+Bug reports, suggestions and contributions are welcome through
+[GitHub Issues](https://github.com/shubham-pathak1/orca/issues).
+See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for development and checks.
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the code structure.
 
-## Screenshots
+## Credits
 
-**Library**: ![Library View](docs/screenshots/library.png)
-**Albums**: ![Albums View](docs/screenshots/albums.png)
-**Artists**: ![Artists View](docs/screenshots/artist.png)
-**Full Player**: ![Full Player](docs/screenshots/fullplayer.png)
-**Synced Lyrics**: ![Lyrics View](docs/screenshots/lyrics.png)
-**Metadata Editor**: ![Metadata Editor](docs/screenshots/metadata_editor.png)
+- [Slint](https://slint.dev/) — native interface.
+- [LRCLIB](https://lrclib.net/) — lyrics.
+- [iTunes](https://www.apple.com/itunes/), [Deezer](https://www.deezer.com/), [MusicBrainz](https://musicbrainz.org/) and [Cover Art Archive](https://coverartarchive.org/) — music lookup and artwork.
+- [Wikimedia](https://commons.wikimedia.org/) — linked artist images.
+- [Rodio](https://github.com/RustAudio/rodio) and [Lofty](https://github.com/Serial-ATA/lofty-rs) — audio playback and metadata.
 
----
-
-## Tech Stack
-
-* **Frontend**: Svelte 5 (Vite), TypeScript, Tailwind CSS, HTML5 Canvas
-* **Backend**: Rust, Tauri 2, SQLite (`rusqlite`)
-* **Audio Engine**: Rodio
-* **Tagging Library**: Lofty
-
----
-
-## Repository Structure
-
-```text
-src/                 Svelte frontend codebase
-src/lib/components/  UI components (Player, Waveform, Metadata, Queue)
-src-tauri/           Tauri application backend and command handlers
-crates/orca-core/    Core database structure, scanning engine, and audio thread logic
-```
-
----
-
-## Getting Started
-
-### Prerequisites
-
-You will need the following tools installed on your Windows machine:
-1. [Rust](https://www.rust-lang.org/tools/install)
-2. [Bun](https://bun.sh/)
-3. [Tauri Windows Setup Requirements](https://v2.tauri.app/start/prerequisites/)
-
-### Development
-
-Clone the repository and install the dependencies:
-```bash
-git clone https://github.com/shubham-pathak1/orca.git
-cd orca
-bun install
-```
-
-Start the development server with live reload:
-```bash
-bun run tauri:dev
-```
-
-To run the desktop app with Rust release optimizations:
-```bash
-bun run tauri:dev -- --release
-```
-
----
-
-## Building a Release
-
-Orca uses **NSIS** to bundle a Windows executable installer. MSI installers are disabled to keep packaging simple.
-
-To build and collect the Windows x64 installer and portable executable:
-```bash
-bun run release:windows
-```
-The two release assets are placed in `release/v<version>/`. The script checks that
-the package, Tauri, and Rust crate versions match before building. The portable
-executable runs without an installer, but still uses the normal user data locations.
-
----
-
-## Contributing & Support
-
-Thank you for checking out Orca! If you would like to help improve the player:
-* Feel free to report bugs or suggest features by opening a GitHub Issue.
-* Pull requests are always welcome!
+Thanks to their maintainers and contributors.
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for more details.
+Orca's code is available under the [MIT License](LICENSE).
+Third-party libraries, fonts and online content retain their respective licenses and terms.

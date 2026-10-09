@@ -1,0 +1,155 @@
+import { LineEdit, ComboBox, Palette } from "std-widgets.slint";
+import { AppState, Song, CatalogGroup, LyricLine, LyricWord, LyricSpan, LyricRender, MetadataDraft } from "state.slint";
+import { Icons } from "icons.slint";
+import { SidebarLogos } from "sidebar-logos.slint";
+import { IconButton, TextButton, SearchField, AmbientBackground, ActionFocus } from "controls.slint";
+import { SongsView, CatalogView, CatalogDetails } from "library.slint";
+import { FoldersView } from "folders.slint";
+import { PlayerBar, FullPlayer, QueuePanel } from "players.slint";
+import { SettingsView } from "settings.slint";
+import { MetadataEditor, TrackMenu, PlaylistDialog, CollectionDialog, CollectionMenu } from "dialogs.slint";
+import "assets/fonts/PlusJakartaSans-Regular.ttf";
+import "assets/fonts/PlusJakartaSans-SemiBold.ttf";
+import "assets/fonts/PlusJakartaSans-Bold.ttf";
+export { AppState, Song, CatalogGroup, LyricLine, LyricWord, LyricSpan, LyricRender, MetadataDraft }
+
+export component OrcaWindow inherits Window {
+    title:"Orca";icon:SidebarLogos.logo-32;preferred-width:1280px;preferred-height:820px;min-width:500px;min-height:600px;
+    background:AppState.base;default-font-family:AppState.font-family;
+    private property<bool> light-theme:AppState.light-theme;
+    changed light-theme=>{Palette.color-scheme=AppState.light-theme ? ColorScheme.light : ColorScheme.dark;}
+    init => {Palette.color-scheme=AppState.light-theme ? ColorScheme.light : ColorScheme.dark;shell.focus();}
+    callback focus-shell();
+    focus-shell=>{AppState.search-focus-pending=false;AppState.text-input-focused=false;AppState.search-input-focused=false;if AppState.full-player {full-focus.focus();} else {shell.focus();}}
+    private property <length> sidebar-width:AppState.icon-sidebar ? 56px : 132px;
+    private property<string> active-view:AppState.view;
+    changed active-view=>{AppState.menu-open=false;AppState.collection-menu-open=false;if AppState.view=="settings" || AppState.view=="songs" {AppState.detail-key="";}}
+    private property<bool> dialog-active:AppState.modal-open;
+    changed dialog-active=>{if !AppState.modal-open {root.focus-shell();}}
+    private property<bool> compact:root.width<1024px;
+    private property<bool> narrow:root.width<680px;
+    private property<length> player-height:root.width - root.sidebar-width<760px ? (AppState.quality-info ? 148px : 136px) : 96px;
+    private property<length> header-height:root.narrow && AppState.view=="songs" ? 168px : root.compact ? 116px : 64px;
+    keyboard-root:=FocusScope {
+        focus-on-tab-navigation:false;
+        x:0px;y:0px;width:root.width;height:root.height;
+        capture-key-pressed(event)=>{
+            AppState.keyboard-navigation=true;
+            if event.modifiers.control && event.modifiers.shift && (event.text=="b" || event.text=="B") && AppState.tray-available && !AppState.phantom-global {AppState.phantom();return accept;}
+            if event.modifiers.control && !event.modifiers.alt && !event.modifiers.shift && (event.text=="k" || event.text=="K") && AppState.keyboard("focus-search",false) {return accept;}
+            if !event.modifiers.control && (!AppState.text-input-focused || event.modifiers.alt || event.text==Key.Escape || event.text==Key.F11) && event.text!=" " && AppState.keyboard(event.text,event.modifiers.alt) {return accept;}
+            return reject;
+        }
+    if AppState.blurred-background && !AppState.full-player: AmbientBackground {source:AppState.backdrop;strength:AppState.light-theme ? 0.08 : 0.24;}
+    shell := FocusScope {
+        focus-on-tab-navigation:false;
+        key-pressed(event)=>{if event.text==" " && !AppState.text-input-focused && AppState.keyboard(event.text,false) {return accept;}return reject;}
+        x:0px;y:0px;width:root.width;height:root.height;
+        enabled:!AppState.full-player;
+        TouchArea {clicked=>{shell.focus();}}
+        Rectangle {
+            x:0px;y:0px;width:root.sidebar-width;height:root.height;
+            Image {x:16px;y:14px;width:24px;height:24px;source:AppState.display-dpr<=1 ? SidebarLogos.logo-24 : AppState.display-dpr<=1.25 ? SidebarLogos.logo-30 : AppState.display-dpr<=1.5 ? SidebarLogos.logo-36 : AppState.display-dpr<=2 ? SidebarLogos.logo-48 : AppState.display-dpr<=3 ? SidebarLogos.logo-72 : SidebarLogos.logo-96;image-fit:contain;}
+            if !AppState.icon-sidebar: Text {x:44px;y:20px;text:"Orca";color:AppState.ink;font-size:16px;font-weight:700;}
+            for item[index] in [Icons.library,Icons.users,Icons.disc,Icons.genre,Icons.list,Icons.folder,Icons.settings]: Rectangle {
+                x:8px;y:64px+index*44px;width:parent.width - 16px;height:40px;
+                border-width:nav.has-focus ? 2px : 0px;border-color:AppState.ink;
+                accessible-role:button;accessible-label:["Library","Artists","Albums","Genres","Playlists","Folders","Settings"][index];
+                nav:=ActionFocus {activated=>{AppState.view=["songs","artists","albums","genres","playlists","folders","settings"][index];AppState.search="";AppState.detail-key="";AppState.browse();}}
+                border-radius:6px;background:AppState.view==["songs","artists","albums","genres","playlists","folders","settings"][index] ? AppState.ink.with-alpha(0.1216) : transparent;
+                Image {x:12px;y:10px;width:20px;height:20px;source:item;colorize:AppState.ink;opacity:0.65;}
+                if !AppState.icon-sidebar: Text {x:40px;height:40px;text:["Library","Artists","Albums","Genres","Playlists","Folders","Settings"][index];color:AppState.ink;font-size:14px;vertical-alignment:center;}
+                TouchArea {clicked => {AppState.unfocus();AppState.view=["songs","artists","albums","genres","playlists","folders","settings"][index];AppState.search="";AppState.detail-key="";AppState.browse();}}
+            }
+            IconButton {label:"Add music folder";x:8px;y:parent.height - 104px;icon:Icons.folderPlus;clicked => {AppState.add-folder();}}
+            if AppState.folders.length>0: Rectangle {x:28px;y:parent.height - 98px;width:16px;height:16px;border-radius:8px;background:AppState.ink;
+                Text {text:AppState.folders.length;color:AppState.inverse-ink;font-size:9px;font-weight:700;horizontal-alignment:center;vertical-alignment:center;}}
+            IconButton {label:"Refresh library";x:8px;y:parent.height - 60px;icon:Icons.refresh;clicked => {AppState.refresh();}}
+        }
+        Rectangle {
+            x:root.sidebar-width+20px;y:20px;width:root.width - self.x - 20px;height:root.height - root.player-height - 40px;
+            Rectangle {x:0px;y:0px;height:32px;clip:true;width:root.compact ? parent.width - (AppState.view=="playlists" ? 180px : 0px) : max(120px,parent.width - 650px);
+                for title[index] in ["Main Library","Artists","Albums","Genres","Playlists","Folders","Settings"]: Rectangle {
+                    if AppState.detail-key=="" && AppState.view==["songs","artists","albums","genres","playlists","folders","settings"][index]: Text {
+                    x:0px;y:0px;width:parent.width;height:32px;text:title;
+                    color:AppState.ink;font-weight:700;font-size:24px*AppState.scale;overflow:elide;
+                    }
+                }
+            }
+            Text {x:0px;y:32px;visible:AppState.detail-key=="";height:20px;text:AppState.view=="settings" ? "Tune Orca for the way you listen" : AppState.view=="songs" ? AppState.summary : AppState.catalog-summary;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.4000) : 0.4000);font-size:12px*AppState.scale;}
+            search := SearchField {
+                y:root.compact ? 64px : 0px;
+                visible:AppState.detail-key=="";
+                x:root.compact ? 0px : max(200px,parent.width - (AppState.view=="songs" ? 678px : AppState.view=="folders" ? 396px : 300px));
+                width:root.compact ? parent.width - (AppState.view=="songs" && !root.narrow ? 294px : AppState.view=="folders" ? 96px : 0px) : AppState.view=="songs" ? 380px : 300px;height:40px;
+                text <=> AppState.search;placeholder-text:"Search "+(AppState.view=="songs" ? "library" : AppState.view)+"…";
+                edited => {AppState.browse();}
+            }
+            if AppState.view=="folders" && AppState.detail-key=="": HorizontalLayout {
+                x:parent.width - 80px;y:root.compact ? 64px : 0px;width:80px;height:40px;
+                IconButton {label:"List view";width:40px;icon:Icons.list;primary:!AppState.folder-grid;clicked=>{AppState.folder-grid=false;AppState.save-settings();AppState.browse();}}
+                IconButton {label:"Grid view";width:40px;icon:Icons.grid;primary:AppState.folder-grid;clicked=>{AppState.folder-grid=true;AppState.save-settings();AppState.browse();}}
+            }
+            if AppState.view=="songs": HorizontalLayout {
+                x:root.narrow ? 0px : parent.width - 242px;y:root.narrow ? 112px : root.compact ? 64px : 0px;width:242px;height:40px;spacing:12px;
+                HorizontalLayout {width:80px;spacing:0px;
+                    IconButton {label:"List view";width:40px;icon:Icons.list;primary:!AppState.grid;clicked=>{AppState.grid=false;AppState.save-settings();AppState.browse();}}
+                    IconButton {label:"Grid view";width:40px;icon:Icons.grid;primary:AppState.grid;clicked=>{AppState.grid=true;AppState.save-settings();AppState.browse();}}}
+                ComboBox {enabled:AppState.focus-layer=="browse";accessible-label:"Sort library";width:150px;model:["Artist","Title","Album","Recently added"];current-index:AppState.sort=="artist" ? 0 : AppState.sort=="title" ? 1 : AppState.sort=="album" ? 2 : 3;selected(value) => {AppState.sort=["artist","title","album","recent"][self.current-index];AppState.save-settings();AppState.browse();}}
+            }
+            if AppState.view=="playlists" && AppState.detail-key=="": TextButton {x:root.compact ? parent.width - 120px : max(200px,parent.width - 440px);y:0px;width:120px;text:"New playlist";clicked=>{AppState.playlist-action("new-dialog","");}}
+            if AppState.view=="playlists" && AppState.detail-key=="": IconButton {label:"Import playlist (.m3u / .m3u8)";x:root.compact ? parent.width - 168px : max(152px,parent.width - 488px);y:0px;icon:Icons.export;outlined:true;clicked=>{AppState.playlist-action("import","");}}
+            if AppState.view=="songs" && AppState.detail-key=="": SongsView {y:root.header-height;height:parent.height - self.y;}
+            if AppState.detail-key!="" && (AppState.view=="artists" || AppState.view=="albums" || AppState.view=="genres" || AppState.view=="playlists"): CatalogDetails {}
+            if AppState.view!="songs" && AppState.view!="settings" && AppState.view!="folders" && AppState.detail-key=="": CatalogView {y:root.header-height;height:parent.height - self.y;}
+            if AppState.view=="folders": FoldersView {y:AppState.detail-key=="" ? root.header-height : 0px;height:parent.height - self.y;}
+            if AppState.view=="settings": SettingsView {y:root.header-height;height:parent.height - self.y;}
+        }
+        PlayerBar {x:root.sidebar-width;y:root.height - root.player-height;width:root.width - self.x;height:root.player-height;}
+    }
+    full-focus:=FocusScope {
+        focus-on-tab-navigation:false;
+        key-pressed(event)=>{if event.text==" " && AppState.keyboard(event.text,false) {return accept;}return reject;}
+        enabled:AppState.full-player;
+        private property<bool> active:AppState.full-player;
+        changed active=>{if AppState.full-player {full-focus.focus();} else if !AppState.search-focus-pending {shell.focus();}}
+        if AppState.full-player: FullPlayer {}
+    }
+    if AppState.queue-open: TouchArea {clicked => {AppState.queue-open=false;}}
+    if AppState.queue-open: QueuePanel {available-width:root.width;available-height:root.height;x:root.width - self.width - 24px;y:root.height - self.height - 24px;}
+    if AppState.menu-open: TouchArea {clicked => {AppState.menu-open=false;}}
+    if AppState.menu-open: TrackMenu {x:clamp(AppState.menu-x*1px,8px,root.width - self.width - 8px);y:clamp(AppState.menu-y*1px,8px,root.height - self.height - 8px);}
+    if AppState.metadata-open: Rectangle {
+        background:#000000b8;
+        TouchArea {}
+        MetadataEditor {x:(parent.width - self.width)/2;y:(parent.height - self.height)/2;width:min(1000px,parent.width - 40px);height:min(720px,parent.height - 40px);}
+    }
+    if AppState.collection-menu-open: TouchArea {clicked=>{AppState.collection-menu-open=false;}}
+    if AppState.collection-menu-open: CollectionMenu {x:clamp(AppState.collection-menu-x*1px,8px,root.width - self.width - 8px);y:clamp(AppState.collection-menu-y*1px,8px,root.height - self.height - 8px);}
+    if AppState.collection-dialog: Rectangle {background:#000000b8;TouchArea {}CollectionDialog {width:min(440px,parent.width - 40px);height:min(AppState.collection-kind=="folders" ? 540px : 440px,parent.height - 40px);x:(parent.width - self.width)/2;y:(parent.height - self.height)/2;}}
+    if AppState.playlist-dialog: Rectangle {background:#000000b8;TouchArea {}PlaylistDialog {width:min(440px,parent.width - 40px);x:(parent.width - self.width)/2;y:(parent.height - self.height)/2;}}
+    if AppState.error!="": Rectangle {
+        x:root.sidebar-width+20px;y:root.height - 156px;width:min(650px,root.width - self.x - 20px);height:48px;
+        background:AppState.light-theme ? #fff0ee : #292123;border-color:AppState.light-theme ? #b45e62 : #6f444a;border-width:1px;border-radius:6px;
+        Text {x:12px;width:parent.width - 60px;text:AppState.error;color:AppState.ink;vertical-alignment:center;overflow:elide;}
+        IconButton {label:"Close";x:parent.width - 44px;y:4px;icon:Icons.close;clicked => {AppState.error="";}}
+    }
+    }
+}
+
+export component OrcaTray inherits SystemTrayIcon {
+    in property<bool> playing;
+    icon: SidebarLogos.logo-32;
+    tooltip:"Orca";
+    callback action(string);
+    clicked=>{root.action("restore");}
+    Menu {
+        MenuItem {title:"Open Orca";icon:Icons.logo;activated=>{root.action("restore");}}
+        MenuSeparator {}
+        MenuItem {title:root.playing ? "Pause" : "Play";icon:root.playing ? @image-url("icons/menu-pause.svg") : @image-url("icons/menu-play.svg");activated=>{root.action("toggle");}}
+        MenuItem {title:"Previous track";icon:@image-url("icons/menu-previous.svg");activated=>{root.action("previous");}}
+        MenuItem {title:"Next track";icon:@image-url("icons/menu-next.svg");activated=>{root.action("next");}}
+        MenuSeparator {}
+        MenuItem {title:"Quit Orca";icon:@image-url("icons/menu-close.svg");activated=>{root.action("quit");}}
+    }
+}

@@ -1,25 +1,11 @@
-# Dependencies
-node_modules/
-
-# Frontend build/cache
-dist/
-.vite/
-.svelte-kit/
-vite-dev.*.log
-
-# Rust/Tauri build output
+# Rust builds and release packages
 target/
-target-check/
-src-tauri/target/
-src-tauri/gen/
 release/
 
-# Local environment
+# Local environment and logs
 .env
 .env.*
 !.env.example
-
-# Logs
 *.log
 
 # OS/editor files
@@ -33,16 +19,9 @@ Thumbs.db
 *.pdb
 *.exe
 
-# Local migration and test artifacts
-src_slint_backup/
-ui_slint_backup/
-temp_run/
-test_run/
-
 # Local app data and generated caches
 orca.db
 orca_settings.json
 audio_prefs.json
 lyrics_cache/
 thumbs-*/
-temp_logo.png

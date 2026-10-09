@@ -32,9 +32,9 @@ pub struct GenreEntry {
 pub fn get_artists(conn: &Connection) -> Result<Vec<ArtistEntry>, String> {
     let mut statement = conn
         .prepare(
-            "SELECT s.artist, COUNT(*), NULLIF(aa.artwork_path, 'DELETED'), NULLIF(aa.artwork_thumb_path, 'DELETED'),
-                    (SELECT COALESCE(s2.artwork_url, NULLIF(awa.artwork_path, 'DELETED')) FROM songs s2 LEFT JOIN album_artworks awa ON awa.album_key = s2.album_artist || ':' || s2.album WHERE s2.artist = s.artist AND COALESCE(s2.artwork_url, NULLIF(awa.artwork_path, 'DELETED')) IS NOT NULL LIMIT 1),
-                    (SELECT COALESCE(s2.artwork_thumb_url, NULLIF(awa.artwork_thumb_path, 'DELETED')) FROM songs s2 LEFT JOIN album_artworks awa ON awa.album_key = s2.album_artist || ':' || s2.album WHERE s2.artist = s.artist AND COALESCE(s2.artwork_thumb_url, NULLIF(awa.artwork_thumb_path, 'DELETED')) IS NOT NULL LIMIT 1)
+            "SELECT s.artist, COUNT(*), NULLIF(NULLIF(aa.artwork_path, 'DELETED'),''), NULLIF(NULLIF(aa.artwork_thumb_path, 'DELETED'),''),
+                    (SELECT COALESCE(NULLIF(NULLIF(s2.artwork_url,'DELETED'),''), NULLIF(NULLIF(s2.artwork_preview_url,'DELETED'),''), NULLIF(NULLIF(s2.artwork_thumb_url,'DELETED'),''), NULLIF(NULLIF(awa.artwork_path,'DELETED'),'')) FROM songs s2 LEFT JOIN album_artworks awa ON awa.album_key = s2.album_artist || ':' || s2.album WHERE s2.artist = s.artist AND COALESCE(NULLIF(NULLIF(s2.artwork_url,'DELETED'),''), NULLIF(NULLIF(s2.artwork_preview_url,'DELETED'),''), NULLIF(NULLIF(s2.artwork_thumb_url,'DELETED'),''), NULLIF(NULLIF(awa.artwork_path,'DELETED'),'')) IS NOT NULL LIMIT 1),
+                    (SELECT COALESCE(NULLIF(NULLIF(s2.artwork_thumb_url,'DELETED'),''), NULLIF(NULLIF(s2.artwork_preview_url,'DELETED'),''), NULLIF(NULLIF(s2.artwork_url,'DELETED'),''), NULLIF(NULLIF(awa.artwork_thumb_path,'DELETED'),'')) FROM songs s2 LEFT JOIN album_artworks awa ON awa.album_key = s2.album_artist || ':' || s2.album WHERE s2.artist = s.artist AND COALESCE(NULLIF(NULLIF(s2.artwork_thumb_url,'DELETED'),''), NULLIF(NULLIF(s2.artwork_preview_url,'DELETED'),''), NULLIF(NULLIF(s2.artwork_url,'DELETED'),''), NULLIF(NULLIF(awa.artwork_thumb_path,'DELETED'),'')) IS NOT NULL LIMIT 1)
              FROM songs s
              LEFT JOIN artist_artworks aa ON s.artist = aa.artist_name
              GROUP BY s.artist
@@ -54,15 +54,16 @@ pub fn get_artists(conn: &Connection) -> Result<Vec<ArtistEntry>, String> {
         })
         .map_err(|error| error.to_string())?;
 
-    rows.map(|row| row.map_err(|error| error.to_string())).collect()
+    rows.map(|row| row.map_err(|error| error.to_string()))
+        .collect()
 }
 
 pub fn get_albums(conn: &Connection) -> Result<Vec<AlbumEntry>, String> {
     let mut statement = conn
         .prepare(
             "SELECT album_artist || ':' || album AS key, album, album_artist, COUNT(*), SUM(duration),
-                    COALESCE(NULLIF(awa.artwork_path, 'DELETED'), MAX(s.artwork_preview_url)),
-                    COALESCE(NULLIF(awa.artwork_thumb_path, 'DELETED'), MAX(s.artwork_thumb_url))
+                    COALESCE(NULLIF(NULLIF(awa.artwork_path, 'DELETED'), ''), MAX(NULLIF(NULLIF(s.artwork_preview_url, 'DELETED'), '')), MAX(NULLIF(NULLIF(s.artwork_url, 'DELETED'), '')), MAX(NULLIF(NULLIF(s.artwork_thumb_url, 'DELETED'), ''))),
+                    COALESCE(NULLIF(NULLIF(awa.artwork_thumb_path, 'DELETED'), ''), MAX(NULLIF(NULLIF(s.artwork_thumb_url, 'DELETED'), '')), MAX(NULLIF(NULLIF(s.artwork_preview_url, 'DELETED'), '')), MAX(NULLIF(NULLIF(s.artwork_url, 'DELETED'), '')))
              FROM songs s
              LEFT JOIN album_artworks awa ON (s.album_artist || ':' || s.album) = awa.album_key
              GROUP BY album_artist, album
@@ -83,7 +84,8 @@ pub fn get_albums(conn: &Connection) -> Result<Vec<AlbumEntry>, String> {
         })
         .map_err(|error| error.to_string())?;
 
-    rows.map(|row| row.map_err(|error| error.to_string())).collect()
+    rows.map(|row| row.map_err(|error| error.to_string()))
+        .collect()
 }
 
 pub fn get_genres(conn: &Connection) -> Result<Vec<GenreEntry>, String> {
@@ -96,11 +98,11 @@ pub fn get_genres(conn: &Connection) -> Result<Vec<GenreEntry>, String> {
                      WHERE s2.genre = s.genre
                        AND COALESCE(s2.artwork_preview_url, NULLIF(awa.artwork_path, 'DELETED')) IS NOT NULL
                      LIMIT 1),
-                    (SELECT COALESCE(s2.artwork_thumb_url, NULLIF(awa.artwork_thumb_path, 'DELETED'))
+                    (SELECT COALESCE(NULLIF(NULLIF(s2.artwork_thumb_url,'DELETED'),''), NULLIF(NULLIF(s2.artwork_preview_url,'DELETED'),''), NULLIF(NULLIF(s2.artwork_url,'DELETED'),''), NULLIF(NULLIF(awa.artwork_thumb_path,'DELETED'),''))
                      FROM songs s2
                      LEFT JOIN album_artworks awa ON awa.album_key = s2.album_artist || ':' || s2.album
                      WHERE s2.genre = s.genre
-                       AND COALESCE(s2.artwork_thumb_url, NULLIF(awa.artwork_thumb_path, 'DELETED')) IS NOT NULL
+                       AND COALESCE(NULLIF(NULLIF(s2.artwork_thumb_url,'DELETED'),''), NULLIF(NULLIF(s2.artwork_preview_url,'DELETED'),''), NULLIF(NULLIF(s2.artwork_url,'DELETED'),''), NULLIF(NULLIF(awa.artwork_thumb_path,'DELETED'),'')) IS NOT NULL
                      LIMIT 1)
              FROM songs s
              WHERE genre IS NOT NULL AND genre != ''
@@ -119,5 +121,6 @@ pub fn get_genres(conn: &Connection) -> Result<Vec<GenreEntry>, String> {
         })
         .map_err(|error| error.to_string())?;
 
-    rows.map(|row| row.map_err(|error| error.to_string())).collect()
+    rows.map(|row| row.map_err(|error| error.to_string()))
+        .collect()
 }

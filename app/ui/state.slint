@@ -1,0 +1,165 @@
+export struct Song {
+    id: int, path: string, title: string, artist: string, album: string, album-artist:string,
+    duration: string, quality: string, cover: image, cover-missing:bool, index: int,
+}
+export struct CatalogGroup {
+    key: string, secondary: string, title: string, subtitle: string,
+    count: int, cover: image, cover-missing:bool,
+}
+export struct LyricWord {text:string,time:float,end-time:float,}
+export struct LyricLine { text: string, time: float, words:[LyricWord], }
+export struct LyricSpan { x:float,y:float,width:float,height:float,time:float,end-time:float,rtl:bool, }
+export struct LyricRender { bitmap:image,height:float,spans:[LyricSpan], }
+export struct MetadataDraft {
+    path:string,title:string,artist:string,album:string,album-artist:string,
+    year:string,track-number:string,disc-number:string,genre:string,lyrics:string,
+    artwork:string,cover-to-embed:string,remove-cover:bool,file-version:string,
+}
+
+export global AppState {
+    in-out property<bool> keyboard-navigation:false;
+    in-out property<float> display-dpr:1;
+    out property<string> focus-layer:modal-open ? "dialog" : menu-open || collection-menu-open ? "menu" : queue-open ? "queue" : full-player ? "full" : "browse";
+    out property<bool> modal-open:metadata-open || collection-dialog || playlist-dialog;
+    in-out property<color> player-accent:white;
+    in-out property<bool> light-theme:false;
+    out property<bool> full-player-dark:!light-theme || blurred-background;
+    out property<color> ink:light-theme ? #242321 : white;
+    out property<color> inverse-ink:light-theme ? #FCFBF7 : black;
+    out property<color> base:light-theme ? #FCFBF7 : #090a0c;
+    out property<color> panel:light-theme ? #F3F1EA : #141414;
+    out property<color> raised-panel:light-theme ? #F8F6F0 : #171719;
+    out property<color> queue-background:light-theme ? #F8F6F0 : #000;
+    in-out property<bool> tray-available;
+    in-out property<bool> phantom-global;
+    in-out property<bool> window-hidden;
+    callback phantom();
+    in-out property <string> view: "songs";
+    in-out property <string> search;
+    in-out property <bool> text-input-focused;
+    in-out property <string> sort: "artist";
+    in-out property <bool> browse-artwork: true;
+    in-out property <bool> compact-artwork: true;
+    in-out property <bool> full-artwork: true;
+    in-out property <bool> grid: true;
+    in-out property <bool> folder-grid: true;
+    in-out property <string> collection-path;
+    in-out property <bool> full-player: false;
+    in-out property <bool> lyrics-open: false;
+    in-out property <bool> queue-open: false;
+    in-out property <string> detail-key;
+    in-out property <string> detail-secondary;
+    in-out property <string> detail-title;
+    in-out property <string> detail-summary;
+    in-out property <image> detail-cover;
+    in-out property <image> detail-backdrop;
+    in-out property <[[CatalogGroup]]> related-albums;
+    in-out property <string> summary: "Loading library…";
+    in-out property <string> catalog-summary;
+    in-out property <string> error;
+    in-out property<int> song-first;
+    in-out property<int> song-end:32;
+    in-out property <[Song]> songs;
+    in-out property <[[Song]]> song-grid;
+    in-out property <[[CatalogGroup]]> group-grid;
+    in-out property <[Song]> queue;
+    in-out property <[LyricLine]> lyrics;
+    in-out property <float> lyrics-width;
+    in-out property <float> lyric-font-size:40;
+    in-out property <int> lyric-render-revision;
+    in-out property <int> lyric-layout-revision;
+    in-out property<float> player-cover-size:396;
+    in-out property <int> active-line:  - 1;
+    in-out property <Song> now;
+    in-out property <image> original-cover;
+    in-out property <bool> original-cover-missing;
+    in-out property <bool> detail-cover-missing;
+    in-out property <image> backdrop;
+    in-out property <image> full-backdrop;
+    in-out property <image> waveform;
+    in-out property <bool> playing;
+    in-out property <bool> shuffle;
+    in-out property <int> repeat;
+    in-out property <float> position;
+    in-out property<float> lyric-position:position;
+    in-out property <float> duration;
+    in-out property <float> volume: 1;
+    in-out property <string> elapsed: "0:00";
+    in-out property <string> total: "3:00";
+    in-out property <color> accent: #b09caa;
+    in-out property <float> scale: 1;
+    in-out property <string> font-family: "Plus Jakarta Sans";
+    in-out property <string> font-path;
+    in-out property <bool> quality-info: true;
+    in-out property <bool> dynamic-accent: true;
+    in-out property <bool> blurred-background: true;
+    in-out property <bool> gapless: true;
+    in-out property <bool> auto-artwork: false;
+    in-out property <bool> icon-sidebar: true;
+    in-out property <string> seek-style: "waveform";
+    in-out property <int> columns: 6;
+    in-out property <int> image-edge: 192;
+    in-out property <int> group-columns:1;
+    in-out property <int> jump-index: -1;
+    in-out property <int> jump-revision;
+    in-out property <string> lyrics-status;
+    in-out property <bool> metadata-open;
+    in-out property <MetadataDraft> draft;
+    in-out property <image> editor-cover;
+    in-out property <bool> editor-cover-missing;
+    in-out property <bool> editor-busy;
+    in-out property <int> editor-generation;
+    in-out property <string> editor-operation;
+    in-out property <string> editor-status;
+    in-out property <bool> menu-open;
+    in-out property <Song> menu-song;
+    in-out property <float> menu-x;
+    in-out property <float> menu-y;
+    in-out property <[CatalogGroup]> playlists;
+    in-out property <bool> playlist-dialog;
+    in-out property <string> playlist-name;
+    in-out property <string> playlist-edit-action:"create";
+    in-out property <[string]> folders;
+    callback browse();
+    callback play(string);
+    callback command(string, float);
+    callback seek(float);
+    callback volume-changed(float);
+    callback add-folder();
+    callback refresh();
+    callback folder-action(string, string);
+    callback open-group(string, string, string);
+    callback go-back();
+    callback menu(string, float, float);
+    callback queue-action(string, string, string);
+    callback save-settings();
+    in-out property<bool> collection-menu-open;
+    in-out property<float> collection-menu-x;
+    in-out property<float> collection-menu-y;
+    in-out property<CatalogGroup> collection-group;
+    in-out property<string> collection-kind;
+    in-out property<string> collection-request;
+    in-out property<image> collection-cover;
+    in-out property<bool> collection-cover-missing;
+    callback collection-menu(CatalogGroup,float,float);
+    in-out property<bool> collection-dialog;
+    in-out property<bool> collection-saving;
+    in-out property<bool> collection-fetching;
+    in-out property<string> collection-status;
+    in-out property<string> collection-name;
+    callback collection-action(string);
+    callback metadata-action(string, string);
+    callback playlist-action(string, string);
+    callback report-issue();
+    callback font-action(string);
+    callback unfocus();
+    in-out property<int> search-focus-request:0;
+    in-out property<bool> search-focus-pending:false;
+    in-out property<bool> search-input-focused:false;
+    callback keyboard(string,bool)->bool;
+    pure callback lyric-render(int,int)->LyricRender;
+    pure callback lyric-offset(int,int)->float;
+    pure callback setting-matches(string,string)->bool;
+    callback font-scale(string);
+    pure callback display-path(string)->string;
+}

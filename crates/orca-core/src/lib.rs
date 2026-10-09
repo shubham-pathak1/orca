@@ -1,8 +1,11 @@
 pub mod artwork_cache;
+pub mod atomic_file;
 pub mod audio_engine;
+pub mod audio_output;
 pub mod db;
 pub mod lastfm;
 pub mod library;
 pub mod lyrics;
+mod media_identity;
 pub mod online_artwork;
 pub mod scanner;
