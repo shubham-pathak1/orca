@@ -108,6 +108,7 @@ Report issues: https://github.com/shubham-pathak1/orca/issues
         Write-Output "Ready: $installer"
     }
     $checksums | Set-Content -LiteralPath (Join-Path $releaseRoot 'SHA256SUMS.txt') -Encoding ASCII
+    & (Join-Path $PSScriptRoot 'build-portable-windows.ps1')
     Write-Output "Ready: $archive"
     Write-Output "SHA256: $archiveHash"
     if ($dirty) { Write-Output 'BUILD-INFO records local uncommitted changes. Commit/tag the reviewed source before publishing.' }
