@@ -30,7 +30,7 @@ or share your ideas. Your feedback and contributions help make it better. Thank 
 
 ## Screenshots
 
-<details>
+<details open>
 <summary>Artists, albums, lyrics and metadata editing</summary>
 
 ### Artists
