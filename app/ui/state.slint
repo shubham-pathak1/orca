@@ -23,7 +23,7 @@ export global AppState {
     in-out property<bool> keyboard-navigation:false;
     in-out property<float> display-dpr:1;
     out property<string> focus-layer:modal-open ? "dialog" : menu-open || collection-menu-open || playlist-picker-open ? "menu" : queue-open && full-player ? "queue" : full-player ? "full" : "browse";
-    out property<bool> modal-open:metadata-open || collection-dialog || playlist-dialog || folder-dialog;
+    out property<bool> modal-open:metadata-open || collection-dialog || playlist-dialog || folder-dialog || folder-remove-open;
     in-out property<color> player-accent:white;
     in-out property<color> background-accent:#626262;
     in-out property<bool> light-theme:false;
@@ -139,6 +139,8 @@ export global AppState {
     in-out property <string> playlist-edit-action:"create";
     in-out property <[string]> folders;
     in-out property <bool> folder-dialog;
+    in-out property <bool> folder-remove-open;
+    in-out property <string> folder-remove-path;
     in-out property <bool> folder-adding;
     in-out property <string> folder-root;
     in-out property <string> folder-current;

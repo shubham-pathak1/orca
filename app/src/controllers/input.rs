@@ -235,6 +235,9 @@ pub(crate) fn install_keyboard(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<Requ
                 s.set_playlist_dialog(false);
             } else if s.get_folder_dialog() {
                 s.set_folder_dialog(false);
+            } else if s.get_folder_remove_open() {
+                s.set_folder_remove_open(false);
+                s.set_folder_remove_path("".into());
             } else if s.get_playlist_picker_open() {
                 s.set_playlist_picker_open(false);
             } else if s.get_menu_open() {
@@ -256,6 +259,7 @@ pub(crate) fn install_keyboard(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<Requ
             || s.get_playlist_dialog()
             || s.get_collection_dialog()
             || s.get_folder_dialog()
+            || s.get_folder_remove_open()
         {
             return false;
         }

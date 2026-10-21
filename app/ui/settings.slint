@@ -146,7 +146,7 @@ export component SettingsView inherits Rectangle {
                     Text {x:16px;width:parent.width - 290px;text:AppState.display-path(folder);color:AppState.ink;vertical-alignment:center;overflow:elide;}
                     TextButton {x:parent.width - 276px;y:12px;width:76px;text:"Manage";clicked => {AppState.folder-action("manage",folder);}}
                     TextButton {x:parent.width - 192px;y:12px;width:84px;text:"Rescan";clicked => {AppState.folder-action("rescan",folder);}}
-                    TextButton {x:parent.width - 100px;y:12px;width:84px;text:"Remove";clicked => {AppState.folder-action("remove",folder);}}}
+                    TextButton {x:parent.width - 100px;y:12px;width:84px;text:"Remove";clicked => {AppState.folder-remove-path=folder;AppState.folder-remove-open=true;}}}
                 if AppState.setting-matches("Automatically fetch missing artwork download album covers artist images library alpha experimental",AppState.search): SettingRow {title:"Automatically fetch artwork (Alpha)";description:"Download missing album covers and artist images when the library loads";hint:"Online artwork fetching is experimental. Images may be unavailable or matched incorrectly. You can change or remove covers manually.";
                     ToggleSwitch {label:"Automatically fetch missing artwork";x:178px;y:12px;checked <=> AppState.auto-artwork;toggled => {AppState.save-settings();}}}
             }

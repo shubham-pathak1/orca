@@ -65,4 +65,45 @@ pub(super) fn verify(case: &mut UiCase) {
     assert!(rx.try_recv().is_err());
     state.set_folder_adding(false);
     state.set_folder_rules(Rc::new(VecModel::default()).into());
+
+    state.set_view("settings".into());
+    state.set_search("Music folders".into());
+    state.set_folders(Rc::new(VecModel::from(vec!["C:/Music".into()])).into());
+    state.on_display_path(|path| path);
+    case.window.draw_if_needed(|renderer| {
+        renderer.render(&mut case.pixels, 1280);
+    });
+    screenshot(&case.pixels, "folder-removal-setting");
+    let (remove_tx, remove_rx) = std::sync::mpsc::channel();
+    state.on_folder_action(move |action, folder| {
+        remove_tx
+            .send((action.to_string(), folder.to_string()))
+            .unwrap();
+    });
+    click(&case.window, 830.0, 326.0);
+    assert!(state.get_folder_remove_open());
+    assert_eq!(state.get_folder_remove_path(), "C:/Music");
+    assert!(remove_rx.try_recv().is_err());
+    case.window.draw_if_needed(|renderer| {
+        renderer.render(&mut case.pixels, 1280);
+    });
+    screenshot(&case.pixels, "folder-removal-confirmation");
+    click(&case.window, 650.0, 492.0);
+    assert!(!state.get_folder_remove_open());
+    assert!(remove_rx.try_recv().is_err());
+
+    click(&case.window, 830.0, 326.0);
+    assert!(state.get_folder_remove_open());
+    assert!(state.invoke_keyboard(slint::platform::Key::Escape.into(), false));
+    assert!(!state.get_folder_remove_open());
+    assert!(remove_rx.try_recv().is_err());
+
+    click(&case.window, 830.0, 326.0);
+    assert!(state.get_folder_remove_open());
+    click(&case.window, 770.0, 492.0);
+    assert!(!state.get_folder_remove_open());
+    assert_eq!(
+        remove_rx.try_recv().unwrap(),
+        ("remove".into(), "C:/Music".into())
+    );
 }

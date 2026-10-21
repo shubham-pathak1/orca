@@ -50,6 +50,19 @@ export component PlaylistDialog inherits Rectangle {
         }
     }
 }
+export component RemoveFolderDialog inherits Rectangle {
+    init=>{cancel.focus();}
+    width:440px;height:244px;background:AppState.panel;border-color:AppState.ink.with-alpha(0.1255);border-width:1px;border-radius:8px;
+    VerticalLayout {padding:20px;spacing:14px;
+        Text {text:"Remove music folder?";color:AppState.ink;font-size:22px;font-weight:700;}
+        Text {text:AppState.display-path(AppState.folder-remove-path);color:AppState.ink.with-alpha(0.7);font-size:13px;overflow:elide;}
+        Text {text:"Songs found only in this folder will leave Orca's library and playlists, including Liked Songs. Your audio files will stay on disk.";color:AppState.ink;font-size:13px;wrap:word-wrap;}
+        HorizontalLayout {spacing:8px;alignment:end;
+            cancel:=TextButton {dialog-control:true;text:"Cancel";clicked=>{AppState.folder-remove-open=false;AppState.folder-remove-path="";}}
+            TextButton {dialog-control:true;text:"Remove folder";clicked=>{let folder=AppState.folder-remove-path;AppState.folder-remove-open=false;AppState.folder-remove-path="";AppState.folder-action("remove",folder);}}
+        }
+    }
+}
 component Field inherits VerticalLayout {
     public function focus-input() {input.focus();}
     in property<string> label;
