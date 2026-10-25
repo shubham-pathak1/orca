@@ -35,7 +35,7 @@ fn apple_portrait_uses_the_recording_id_and_stops_before_name_only_fallbacks() {
 }
 
 #[test]
-fn taaruk_raina_lookup_does_not_use_a_soundtrack_cover_as_artist_portrait() {
+fn artist_lookup_rejects_album_art_as_a_portrait() {
     let f = Fixture::new();
     let mut query = ArtworkQuery::artist("Taaruk Raina");
     query.title = Some("Narazi".into());
@@ -81,7 +81,7 @@ fn taaruk_raina_lookup_does_not_use_a_soundtrack_cover_as_artist_portrait() {
 }
 
 #[test]
-fn taaruk_raina_uses_a_linked_spotify_artist_portrait_when_musicbrainz_lacks_the_recording() {
+fn artist_lookup_uses_linked_spotify_portrait_when_recording_lookup_misses() {
     let f = Fixture::new();
     let mut query = ArtworkQuery::artist("Taaruk Raina");
     query.title = Some("Narazi".into());
@@ -130,7 +130,7 @@ fn taaruk_raina_uses_a_linked_spotify_artist_portrait_when_musicbrainz_lacks_the
 }
 
 #[test]
-fn amit_trivedi_uses_cross_linked_spotify_portrait_when_recording_catalogs_miss() {
+fn artist_lookup_uses_cross_linked_spotify_portrait_when_catalogs_miss() {
     let f = Fixture::new();
     let mut query = ArtworkQuery::artist("Amit Trivedi");
     query.title = Some("Yeh Fitoor Mera".into());
@@ -303,7 +303,7 @@ fn incomplete_provider_search_is_retryable_even_when_later_artist_has_no_portrai
 
 #[test]
 #[ignore = "contacts live artwork providers; uses a disposable cache"]
-fn live_cafune_lookup_uses_library_recordings_to_fetch_a_portrait() {
+fn live_library_recordings_find_an_artist_portrait() {
     let f = Fixture::new();
     let mut query = ArtworkQuery::artist("Cafuné");
     query.title = Some("Friction".into());
@@ -342,7 +342,7 @@ fn live_artist_lookup_matrix_resolves_recording_based_portraits() {
 
 #[test]
 #[ignore = "contacts live artwork providers; uses actual tag values with a disposable cache"]
-fn live_gini_lookup_combines_ansuna_and_atmos_sukoon() {
+fn live_multiple_recordings_resolve_an_artist_portrait() {
     let f = Fixture::new();
     let mut query = ArtworkQuery::artist("Gini");
     query.title = Some("Ansuna".into());
@@ -375,7 +375,7 @@ fn live_gini_lookup_combines_ansuna_and_atmos_sukoon() {
 }
 
 #[test]
-fn cafune_songs_resolve_identity_and_linked_deezer_portrait_without_wikidata() {
+fn multiple_recordings_resolve_identity_and_linked_deezer_portrait_without_wikidata() {
     let f = Fixture::new();
     let mut query = ArtworkQuery::artist("Cafuné");
     query.title = Some("Friction".into());

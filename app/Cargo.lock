@@ -3578,7 +3578,7 @@ dependencies = [
 
 [[package]]
 name = "orca-services"
-version = "0.1.6-alpha"
+version = "0.1.8-alpha"
 dependencies = [
  "image",
  "orca-core",
@@ -3591,7 +3591,7 @@ dependencies = [
 
 [[package]]
 name = "orca-core"
-version = "0.1.6-alpha"
+version = "0.1.8-alpha"
 dependencies = [
  "base64 0.22.1",
  "biquad",
@@ -3612,7 +3612,7 @@ dependencies = [
 
 [[package]]
 name = "orca-slint"
-version = "0.1.7-alpha"
+version = "0.1.8-alpha"
 dependencies = [
  "image",
  "notify",

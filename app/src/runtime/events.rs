@@ -130,7 +130,7 @@ pub(super) fn apply(
             Event::Statistics(stats) => {
                 s.set_summary(
                     format!(
-                        "{} songs / {} artists / {} albums",
+                        "{} songs | {} artists | {} albums",
                         stats.songs, stats.artists, stats.albums
                     )
                     .into(),

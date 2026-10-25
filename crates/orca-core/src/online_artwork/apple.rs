@@ -183,7 +183,7 @@ mod tests {
         .is_empty());
     }
     #[test]
-    fn rejects_release_cover_in_verified_taaruk_raina_artist_page() {
+    fn rejects_release_cover_on_a_verified_artist_page() {
         let artist = json!({
             "@type": "MusicGroup",
             "name": "Taaruk Raina",
@@ -193,7 +193,7 @@ mod tests {
         assert!(images(&page(artist), "Taaruk Raina", 1368308173).is_empty());
     }
     #[test]
-    fn rejects_bharat_chandak_promotional_cover_on_artist_page() {
+    fn rejects_promotional_cover_on_an_artist_page() {
         let artist = json!({
             "@type":"MusicGroup", "name":"Bharat Chandak",
             "url":"https://music.apple.com/us/artist/bharat-chandak/1828231642",

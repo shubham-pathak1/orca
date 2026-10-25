@@ -54,6 +54,10 @@ pub(super) fn verify(case: &mut UiCase) {
     window.dispatch_event(WindowEvent::KeyPressed { text: "m".into() });
     window.dispatch_event(WindowEvent::KeyReleased { text: "m".into() });
     assert_eq!(state.get_volume(), 0.0);
+    assert!(
+        !state.get_keyboard_navigation(),
+        "a playback shortcut after a mouse click must not show a focus ring"
+    );
     assert!(matches!(key_rx.try_recv().unwrap(),Request::Volume(v) if v==0.0));
     assert!(state.invoke_keyboard("M".into(), false));
     assert!((state.get_volume() - 0.7).abs() < 0.001);
@@ -192,6 +196,19 @@ pub(super) fn verify(case: &mut UiCase) {
         "new",
         "focusing search must select the old query"
     );
+    state.set_full_player(true);
+    ui.invoke_focus_shell();
+    window.dispatch_event(WindowEvent::KeyPressed {
+        text: slint::platform::Key::Control.into(),
+    });
+    window.dispatch_event(WindowEvent::KeyPressed { text: ",".into() });
+    window.dispatch_event(WindowEvent::KeyReleased { text: ",".into() });
+    window.dispatch_event(WindowEvent::KeyReleased {
+        text: slint::platform::Key::Control.into(),
+    });
+    assert_eq!(state.get_view().as_str(), "settings");
+    assert!(!state.get_full_player());
+    assert!(state.get_search().is_empty());
     state.set_search("".into());
     state.set_detail_key("".into());
     state.set_view("songs".into());

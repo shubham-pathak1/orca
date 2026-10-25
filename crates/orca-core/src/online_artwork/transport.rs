@@ -79,10 +79,7 @@ impl<'a> Http<'a> {
             self.musicbrainz_slot()?;
         }
         let response = ureq::get(url)
-            .set(
-                "User-Agent",
-                "Orca/0.1.6-alpha (https://github.com/shubham-pathak1/orca)",
-            )
+            .set("User-Agent", crate::USER_AGENT)
             .timeout(self.remaining()?.min(Duration::from_secs(4)))
             .call()
             .map_err(|error| match error {

@@ -40,9 +40,10 @@ export component OrcaWindow inherits Window {
         focus-on-tab-navigation:false;
         x:0px;y:0px;width:root.width;height:root.height;
         capture-key-pressed(event)=>{
-            AppState.keyboard-navigation=true;
+            if event.text==Key.Tab {AppState.keyboard-navigation=true;}
             if event.modifiers.control && event.modifiers.shift && (event.text=="b" || event.text=="B") && AppState.tray-available && !AppState.phantom-global {AppState.phantom();return accept;}
             if event.modifiers.control && !event.modifiers.alt && !event.modifiers.shift && (event.text=="k" || event.text=="K") && AppState.keyboard("focus-search",false) {return accept;}
+            if event.modifiers.control && !event.modifiers.alt && !event.modifiers.shift && event.text=="," && AppState.keyboard("open-settings",false) {return accept;}
             if !event.modifiers.control && (!AppState.text-input-focused || event.modifiers.alt || event.text==Key.Escape || event.text==Key.F11) && event.text!=" " && AppState.keyboard(event.text,event.modifiers.alt) {return accept;}
             return reject;
         }
@@ -75,7 +76,7 @@ export component OrcaWindow inherits Window {
         Rectangle {
             x:root.sidebar-width+20px;y:20px;width:root.width - self.x - 20px - (root.side-panel-docked ? root.side-panel-width : 0px);height:root.height - root.player-height - 40px;
             Rectangle {x:0px;y:0px;height:32px;clip:true;width:root.compact ? parent.width - (AppState.view=="playlists" ? 180px : 0px) : max(120px,parent.width - 650px);
-                for title[index] in ["Main Library","Artists","Albums","Genres","Playlists","Folders","Settings"]: Rectangle {
+                for title[index] in ["Library","Artists","Albums","Genres","Playlists","Folders","Settings"]: Rectangle {
                     if AppState.detail-key=="" && AppState.view==["songs","artists","albums","genres","playlists","folders","settings"][index]: Text {
                     x:0px;y:0px;width:parent.width;height:32px;text:title;
                     color:AppState.ink;font-weight:700;font-size:24px*AppState.scale;overflow:elide;

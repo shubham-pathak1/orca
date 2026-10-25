@@ -124,7 +124,7 @@ export component SettingsView inherits Rectangle {
                     ToggleSwitch {label:"Liked Songs";x:178px;y:12px;checked <=> AppState.show-liked-songs;toggled => {AppState.save-settings();AppState.browse();}}}
                 if AppState.setting-matches("Keyboard shortcuts",AppState.search): Text {text:"Keyboard shortcuts";color:AppState.ink;font-size:14px;font-weight:600;}
                 if AppState.setting-matches("Keyboard shortcuts",AppState.search): Rectangle {
-                    height:460px;border-width:1px;border-color:AppState.ink.with-alpha(0.1020);border-radius:6px;
+                    height:504px;border-width:1px;border-color:AppState.ink.with-alpha(0.1020);border-radius:6px;
                     VerticalLayout {spacing:0px;alignment:start;
                         ShortcutRow {title:"Play or pause";keys:["Space"];}
                         ShortcutRow {title:"Next song";keys:["Alt","N"];}
@@ -133,6 +133,7 @@ export component SettingsView inherits Rectangle {
                         ShortcutRow {title:"Show or hide lyrics";keys:["L"];}
                         ShortcutRow {title:"Open or close full player";keys:["F"];}
                         ShortcutRow {title:"Focus or leave search";keys:["Ctrl","K"];}
+                        ShortcutRow {title:"Open settings";keys:["Ctrl",","];}
                         ShortcutRow {title:"Show or hide queue";keys:["Q"];}
                         ShortcutRow {title:"Toggle full screen";keys:["F11"];}
                         ShortcutRow {title:"Close full player";keys:["Escape"];}
@@ -160,7 +161,7 @@ export component SettingsView inherits Rectangle {
 
             }
             if (root.tab==4 || AppState.search!="") && AppState.setting-matches("About Orca version report feedback github",AppState.search): VerticalLayout {spacing:24px;alignment:start;
-                Text {text:"Orca  v0.1.7-alpha";color:AppState.ink;font-size:22px;font-weight:600;}
+                Text {text:"Orca  v0.1.8-alpha";color:AppState.ink;font-size:22px;font-weight:600;}
                 Text {text:"Local-first music player, built for listening to the library you already own.";color:AppState.ink;font-size:14px;wrap:word-wrap;}
                 Rectangle {height:1px;background:AppState.ink.with-alpha(0.1020);}
                 Text {text:"Found a bug or have an idea? Feedback helps shape Orca.";color:AppState.ink;font-size:14px;}

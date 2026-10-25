@@ -83,7 +83,7 @@ export component IconButton inherits Rectangle {
     border-color:focus.has-focus && AppState.keyboard-navigation ? root.ink : root.ink.with-alpha(0.1020);
     Image { width:root.icon-size; height:root.icon-size; x:(parent.width - self.width)/2; y:(parent.height - self.height)/2;
         source:root.icon; colorize:root.primary ? root.inverse-ink : root.active ? root.accent : root.ink;
-        opacity: root.primary || root.active || pointer.has-hover ? 1 : 0.64; }
+        opacity: root.primary || root.active || pointer.has-hover ? 1 : root.layer=="full" ? 0.82 : 0.64; }
     pointer := TouchArea {enabled:root.enabled; clicked => {AppState.keyboard-navigation=false;focus.focus();root.clicked();} }
 }
 
@@ -177,16 +177,17 @@ export component PlaybackControls inherits HorizontalLayout {
     private property<color> accent:root.dark ? AppState.player-accent : AppState.accent;
     in property <bool> large;
     in property <bool> prominent:false;
-    spacing:root.prominent ? 14px : root.large ? 16px : 12px;
+    private property<bool> hero:root.prominent && root.large;
+    spacing:root.hero ? 12px : root.prominent ? 14px : root.large ? 16px : 12px;
     alignment:center;
-    IconButton {label:"Shuffle";layer:root.layer; dark:root.dark; icon:Icons.shuffle; icon-size:root.prominent ? 22px : 20px;width:root.prominent ? 44px : 40px;height:self.width;round:true; active:AppState.shuffle;
+    IconButton {label:"Shuffle";layer:root.layer; dark:root.dark; icon:Icons.shuffle; icon-size:root.hero ? 25px : root.prominent ? 24px : 20px;width:root.hero ? 48px : root.prominent ? 44px : 40px;height:self.width;round:true; active:AppState.shuffle;
         clicked => {AppState.command("shuffle",0);} }
-    IconButton {label:"Previous track";layer:root.layer; dark:root.dark; icon:Icons.previous;icon-size:root.prominent ? 22px : 20px;width:root.prominent ? 44px : 40px;height:self.width;round:true; clicked => {AppState.command("previous",0);} }
-    IconButton {layer:root.layer; dark:root.dark; label:AppState.playing ? "Pause" : "Play";icon:AppState.playing ? Icons.pause : Icons.play;icon-size:root.prominent ? 24px : 20px;round:true; primary:true;
-        width:root.prominent ? 56px : root.large ? 52px : 44px; height:self.width;
+    IconButton {label:"Previous track";layer:root.layer; dark:root.dark; icon:Icons.previous;icon-size:root.hero ? 25px : root.prominent ? 24px : 20px;width:root.hero ? 48px : root.prominent ? 44px : 40px;height:self.width;round:true; clicked => {AppState.command("previous",0);} }
+    IconButton {layer:root.layer; dark:root.dark; label:AppState.playing ? "Pause" : "Play";icon:AppState.playing ? Icons.pause : Icons.play;icon-size:root.hero ? 28px : root.prominent ? 26px : 20px;round:true; primary:true;
+        width:root.hero ? 64px : root.prominent ? 56px : root.large ? 52px : 44px; height:self.width;
         clicked => {AppState.command("toggle",0);} }
-    IconButton {label:"Next track";layer:root.layer; dark:root.dark; icon:Icons.next;icon-size:root.prominent ? 22px : 20px;width:root.prominent ? 44px : 40px;height:self.width;round:true; clicked => {AppState.command("next",0);} }
-    IconButton {label:"Repeat";layer:root.layer; dark:root.dark; icon:Icons.repeat;icon-size:root.prominent ? 22px : 20px;width:root.prominent ? 44px : 40px;height:self.width;round:true; active:AppState.repeat>0;
+    IconButton {label:"Next track";layer:root.layer; dark:root.dark; icon:Icons.next;icon-size:root.hero ? 25px : root.prominent ? 24px : 20px;width:root.hero ? 48px : root.prominent ? 44px : 40px;height:self.width;round:true; clicked => {AppState.command("next",0);} }
+    IconButton {label:"Repeat";layer:root.layer; dark:root.dark; icon:Icons.repeat;icon-size:root.hero ? 25px : root.prominent ? 24px : 20px;width:root.hero ? 48px : root.prominent ? 44px : 40px;height:self.width;round:true; active:AppState.repeat>0;
         clicked => {AppState.command("repeat",0);} }
 }
 

@@ -231,15 +231,15 @@ export component SongsView inherits Rectangle {
             }
         }
         Rectangle {x:0px;y:0px;height:32px;background:transparent;
-            if table.detail && !AppState.playlist-selection-mode: Text {x:8px;width:40px;text:"#";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.3765) : 0.3765);font-size:11px;font-weight:700;vertical-alignment:center;}
+            if table.detail && !AppState.playlist-selection-mode: Text {x:8px;width:40px;text:"#";color:AppState.ink;font-size:11px;font-weight:700;vertical-alignment:center;}
             if AppState.playlist-selection-mode: Text {x:8px;width:table.width - 176px;text:AppState.playlist-selection-count+" selected";color:AppState.ink;font-size:12px;font-weight:700;vertical-alignment:center;}
             if AppState.playlist-selection-mode && AppState.playlist-selection-count>0: TextButton {x:table.width - 132px;y:0px;width:94px;height:30px;text:"Remove";clicked=>{AppState.playlist-selection("remove",0);}}
             if AppState.playlist-selection-mode: IconButton {label:"Cancel selection";x:table.width - 32px;y:1px;width:30px;height:30px;icon:Icons.close;icon-size:16px;clicked=>{AppState.playlist-selection("cancel",0);}}
             if table.detail && AppState.view=="playlists" && !AppState.playlist-selection-mode: IconButton {label:"Select songs";x:table.width - 34px;y:1px;width:32px;height:30px;icon:Icons.select;icon-size:18px;clicked=>{AppState.playlist-selection("start",0);}}
-            if !AppState.playlist-selection-mode: Text {x:table.index-width;width:table.title-width - 16px;text:"TITLE";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.3765) : 0.3765);font-size:11px;font-weight:700;vertical-alignment:center;}
-            if !AppState.playlist-selection-mode && table.artist-width>0px: Text {x:table.index-width+table.title-width;width:table.artist-width;text:"ARTIST";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.3765) : 0.3765);font-size:11px;font-weight:700;vertical-alignment:center;}
-            if !AppState.playlist-selection-mode && table.album-width>0px: Text {x:table.duration-x - table.album-width;width:table.album-width;text:"ALBUM";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.3765) : 0.3765);font-size:11px;font-weight:700;vertical-alignment:center;}
-            if !AppState.playlist-selection-mode && !(table.detail && AppState.view=="playlists"): Text {x:table.duration-x;width:72px;text:"DURATION";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.3765) : 0.3765);font-size:11px;font-weight:700;horizontal-alignment:right;vertical-alignment:center;}
+            if !AppState.playlist-selection-mode: Text {x:table.index-width;width:table.title-width - 16px;text:"TITLE";color:AppState.ink;font-size:11px;font-weight:700;vertical-alignment:center;}
+            if !AppState.playlist-selection-mode && table.artist-width>0px: Text {x:table.index-width+table.title-width;width:table.artist-width;text:"ARTIST";color:AppState.ink;font-size:11px;font-weight:700;vertical-alignment:center;}
+            if !AppState.playlist-selection-mode && table.album-width>0px: Text {x:table.duration-x - table.album-width;width:table.album-width;text:"ALBUM";color:AppState.ink;font-size:11px;font-weight:700;vertical-alignment:center;}
+            if !AppState.playlist-selection-mode && !(table.detail && AppState.view=="playlists"): Text {x:table.duration-x;width:72px;text:"DURATION";color:AppState.ink;font-size:11px;font-weight:700;horizontal-alignment:right;vertical-alignment:center;}
             Rectangle {y:31px;height:1px;background:AppState.ink.with-alpha(0.1490);}
         }
     }

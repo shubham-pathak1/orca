@@ -197,10 +197,9 @@ pub(super) fn verify(case: &mut UiCase) {
     assert!(state.get_lyrics_width() > 200.0);
     click(window, 1202.0, 772.0);
     assert!(state.get_queue_open());
-    assert!(!state.get_lyrics_open());
+    assert!(state.get_lyrics_open());
     click(window, 1236.0, 38.0);
     assert!(!state.get_queue_open());
-    click(window, 1152.0, 772.0);
     assert!(state.get_lyrics_open());
     window.dispatch_event(WindowEvent::PointerMoved {
         position: slint::LogicalPosition::new(1244.0, 764.0),
@@ -290,6 +289,12 @@ pub(super) fn verify(case: &mut UiCase) {
     );
     screenshot(pixels, "full-player-like-and-playlist");
     state.set_lyrics_open(true);
+    click(window, 1212.0, 72.0);
+    assert!(state.get_queue_open());
+    assert!(state.get_lyrics_open());
+    click(window, 600.0, 400.0);
+    assert!(!state.get_queue_open());
+    assert!(state.get_lyrics_open());
     let lyric_refreshes = Rc::new(Cell::new(0));
     let observed_refreshes = lyric_refreshes.clone();
     state.on_refresh_lyrics(move || observed_refreshes.set(observed_refreshes.get() + 1));

@@ -65,7 +65,7 @@ export component PlayerBar inherits Rectangle {
                         Rectangle {width:min(artist-label.preferred-width,parent.width*0.55);clip:true;
                             artist-label:=Text {width:parent.width;height:18px*AppState.scale;text:AppState.now.artist;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.7216) : 0.7216);font-size:12px*AppState.scale;overflow:elide;
                                 TouchArea {clicked=>{AppState.unfocus();AppState.view="artists";AppState.open-group(AppState.now.artist,"",AppState.now.artist);}}}}
-                        if AppState.now.album!="": Text {text:"•";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.7216) : 0.7216);font-size:12px*AppState.scale;}
+                        if AppState.now.album!="": Text {text:"-";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.7216) : 0.7216);font-size:12px*AppState.scale;}
                         if AppState.now.album!="": Rectangle {horizontal-stretch:1;clip:true;
                             Text {width:parent.width;height:18px*AppState.scale;text:AppState.now.album;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.7216) : 0.7216);font-size:12px*AppState.scale;overflow:elide;
                                 TouchArea {clicked=>{AppState.unfocus();AppState.view="albums";AppState.open-group(AppState.now.album,AppState.now.album-artist,AppState.now.album);}}}}
@@ -83,7 +83,7 @@ export component PlayerBar inherits Rectangle {
             if AppState.show-liked-songs: IconButton {label:AppState.liked ? "Unlike song" : "Like song";icon:AppState.liked ? Icons.heartFilled : Icons.heart;enabled:AppState.now.id>0;active:AppState.liked;active-icon-only:true;clicked=>{AppState.toggle-like();}}
             IconButton {label:"Add to playlist";icon:Icons.playlistAdd;enabled:AppState.now.id>0;active:AppState.playlist-picker-open;clicked => {if AppState.playlist-picker-open {AppState.playlist-picker-open=false;} else {AppState.playlist-action("open-current","");AppState.queue-open=false;}}}
             IconButton {label:"Lyrics";icon:Icons.lyrics;enabled:AppState.now.path!="";active:AppState.lyrics-open;clicked => {AppState.lyrics-open=!AppState.lyrics-open;AppState.queue-open=false;AppState.playlist-picker-open=false;}}
-            IconButton {label:"Queue";icon:Icons.queue;active:AppState.queue-open;clicked => {AppState.queue-open=!AppState.queue-open;if AppState.queue-open {AppState.lyrics-open=false;AppState.playlist-picker-open=false;AppState.command("queue-preview",0);}}}
+            IconButton {label:"Queue";icon:Icons.queue;active:AppState.queue-open;clicked => {AppState.queue-open=!AppState.queue-open;if AppState.queue-open {AppState.playlist-picker-open=false;AppState.command("queue-preview",0);}}}
             VolumeControl {y:4px;}
         }}
     }
@@ -98,7 +98,7 @@ export component PlayerBar inherits Rectangle {
             if AppState.show-liked-songs: IconButton {label:AppState.liked ? "Unlike song" : "Like song";width:28px;height:28px;icon-size:18px;icon:AppState.liked ? Icons.heartFilled : Icons.heart;enabled:AppState.now.id>0;active:AppState.liked;active-icon-only:true;clicked=>{AppState.toggle-like();}}
             IconButton {label:"Add to playlist";width:28px;height:28px;icon-size:18px;icon:Icons.playlistAdd;enabled:AppState.now.id>0;active:AppState.playlist-picker-open;clicked=>{if AppState.playlist-picker-open {AppState.playlist-picker-open=false;} else {AppState.playlist-action("open-current","");AppState.queue-open=false;}}}
             IconButton {label:"Lyrics";width:28px;height:28px;icon-size:18px;icon:Icons.lyrics;enabled:AppState.now.path!="";active:AppState.lyrics-open;clicked=>{AppState.lyrics-open=!AppState.lyrics-open;AppState.queue-open=false;AppState.playlist-picker-open=false;}}
-            IconButton {label:"Queue";width:28px;height:28px;icon:Icons.queue;active:AppState.queue-open;clicked=>{AppState.queue-open=!AppState.queue-open;if AppState.queue-open {AppState.lyrics-open=false;AppState.playlist-picker-open=false;AppState.command("queue-preview",0);}}}
+            IconButton {label:"Queue";width:28px;height:28px;icon:Icons.queue;active:AppState.queue-open;clicked=>{AppState.queue-open=!AppState.queue-open;if AppState.queue-open {AppState.playlist-picker-open=false;AppState.command("queue-preview",0);}}}
             VolumeControl {width:28px;height:28px;}
         }
         SeekBar {height:24px;}
@@ -151,13 +151,13 @@ component LyricsViewport inherits Rectangle {
             visible:!lyrics.follow || AppState.active-line==index || self.height>lyrics.height || self.text-visible;
             private property<bool> in-view:self.y+self.height>=-lyrics.content-y - 84px && self.y<=-lyrics.content-y+lyrics.height+84px;
             private property<LyricRender> rendered:self.in-view ? AppState.lyric-render(index,AppState.lyric-render-revision) : AppState.lyric-render(-1,AppState.lyric-render-revision);
-            private property<float> line-opacity:line.time<0 ? 0.84 : AppState.active-line==index ? 1 : abs(AppState.active-line - index)==1 ? 0.34 : 0.18;
+            private property<float> line-opacity:line.time<0 ? 0.84 : AppState.active-line==index ? 1 : abs(AppState.active-line - index)==1 ? 0.56 : 0.34;
             if in-view && rendered.bitmap.width==0: Text {x:0px;y:0px;width:parent.width;height:parent.height;text:line.text;color:root.ink;font-size:AppState.lyric-font-size*1px;font-weight:900;
                 wrap:word-wrap;horizontal-alignment:center;vertical-alignment:center;
                 opacity:parent.line-opacity;
                 }
             if in-view && rendered.bitmap.width>0: karaoke := Rectangle {
-                Image {x:0px;y:0px;width:parent.width;height:parent.height;source:rendered.bitmap;colorize:root.dark ? transparent : root.ink;image-fit:fill;opacity:line.time<0 ? 0.84 : AppState.active-line==index && line.words.length>0 ? 0.24 : AppState.active-line==index ? 1 : abs(AppState.active-line - index)==1 ? 0.34 : 0.18;}
+                Image {x:0px;y:0px;width:parent.width;height:parent.height;source:rendered.bitmap;colorize:root.dark ? transparent : root.ink;image-fit:fill;opacity:line.time<0 ? 0.84 : AppState.active-line==index && line.words.length>0 ? 0.34 : AppState.active-line==index ? 1 : abs(AppState.active-line - index)==1 ? 0.56 : 0.34;}
                 for span in (AppState.active-line==index ? rendered.spans : []): Rectangle {
                     private property<float> progress:AppState.active-line==index ? clamp((AppState.lyric-position - span.time)/max(1,span.end-time - span.time),0,1) : 0;
                     x:(span.x+(span.rtl ? span.width*(1 - self.progress) : 0))*1px;y:span.y*1px;
@@ -269,7 +269,7 @@ export component FullPlayer inherits Rectangle {
     PlayerDragArea {}
     IconButton {layer:"full";label:"Back";dark:AppState.full-player-dark;x:56px;y:52px;icon:Icons.back;round:true;outlined:true;clicked => {AppState.full-player=false;}}
     IconButton {layer:"full";label:"Lyrics";dark:AppState.full-player-dark;x:parent.width - 136px;y:52px;icon:Icons.lyrics;round:true;active:AppState.lyrics-open;clicked => {AppState.lyrics-open=!AppState.lyrics-open;if AppState.lyrics-open {AppState.queue-open=false;}}}
-    IconButton {layer:"full";label:"Queue";dark:AppState.full-player-dark;x:parent.width - 88px;y:52px;icon:Icons.queue;round:true;active:AppState.queue-open;clicked => {AppState.queue-open=!AppState.queue-open;if AppState.queue-open {AppState.lyrics-open=false;AppState.command("queue-preview",0);}}}
+    IconButton {layer:"full";label:"Queue";dark:AppState.full-player-dark;x:parent.width - 88px;y:52px;icon:Icons.queue;round:true;active:AppState.queue-open;clicked => {AppState.queue-open=!AppState.queue-open;if AppState.queue-open {AppState.command("queue-preview",0);}}}
     content := Rectangle {
         visible:!root.compact-lyrics;
         x:AppState.lyrics-open ? clamp(root.width*0.09,64px,176px) : (root.width - self.width)/2;
@@ -287,13 +287,19 @@ export component FullPlayer inherits Rectangle {
                 }
             }
             Rectangle {height:root.height<720px ? 12px : 20px;}
-            Text {text:AppState.now.title;color:root.ink;font-size:(root.height<720px ? 28px : AppState.lyrics-open ? 30px : 36px)*AppState.scale;font-weight:900;horizontal-alignment:center;overflow:elide;}
+            if AppState.lyrics-open: Text {text:AppState.now.title;color:root.ink;font-size:(root.height<720px ? 28px : 30px)*AppState.scale;font-weight:900;horizontal-alignment:center;overflow:elide;}
+            if !AppState.lyrics-open: Rectangle {height:root.height<720px ? 36px : 48px;
+                Text {x:(parent.width - self.width)/2;width:root.width - 112px;height:parent.height;text:AppState.now.title;color:root.ink;font-size:(root.height<720px ? 28px : 36px)*AppState.scale;font-weight:900;horizontal-alignment:center;vertical-alignment:center;overflow:elide;
+                    Tooltip {text:@markdown("\{AppState.now.title}");}
+                }
+            }
             Rectangle {height:root.height<720px ? 4px : 8px;}
             HorizontalLayout {height:24px*AppState.scale;spacing:8px;alignment:center;
-                Text {width:min(self.preferred-width,AppState.now.album=="" ? parent.width : parent.width*0.48);overflow:elide;text:AppState.now.artist;color:root.ink.with-alpha(0.8157);font-size:(root.height<720px ? 14px : AppState.lyrics-open ? 16px : 18px)*AppState.scale;vertical-alignment:center;
+                artist-label:=Text {width:min(self.preferred-width,AppState.now.album=="" ? parent.width : parent.width*0.48);overflow:elide;text:AppState.now.artist;color:root.ink.with-alpha(0.8157);font-size:(root.height<720px ? 14px : AppState.lyrics-open ? 16px : 18px)*AppState.scale;vertical-alignment:center;
                     TouchArea {enabled:AppState.now.artist!="";clicked=>{AppState.unfocus();AppState.full-player=false;AppState.view="artists";AppState.open-group(AppState.now.artist,"",AppState.now.artist);}}}
-                if AppState.now.album!="": Text {text:"·";color:root.ink.with-alpha(0.8);font-size:(root.height<720px ? 18px : AppState.lyrics-open ? 22px : 24px)*AppState.scale;vertical-alignment:center;}
-                if AppState.now.album!="": Text {width:min(self.preferred-width,parent.width*0.48);text:AppState.now.album;color:root.ink.with-alpha(0.7529);font-size:(root.height<720px ? 14px : AppState.lyrics-open ? 16px : 18px)*AppState.scale;vertical-alignment:center;overflow:elide;
+                if AppState.now.album!="": Text {text:"-";color:root.ink.with-alpha(0.8);font-size:(root.height<720px ? 14px : AppState.lyrics-open ? 16px : 18px)*AppState.scale;vertical-alignment:center;}
+                if AppState.now.album!="": Text {width:min(self.preferred-width,max(0px,parent.width - artist-label.width - 24px*AppState.scale));text:AppState.now.album;color:root.ink.with-alpha(0.7529);font-size:(root.height<720px ? 14px : AppState.lyrics-open ? 16px : 18px)*AppState.scale;vertical-alignment:center;overflow:elide;
+                    Tooltip {text:@markdown("\{AppState.now.album}");}
                     TouchArea {clicked=>{AppState.unfocus();AppState.full-player=false;AppState.view="albums";AppState.open-group(AppState.now.album,AppState.now.album-artist,AppState.now.album);}}}
             }
             Rectangle {height:root.height<720px ? 8px : 16px;}
@@ -308,7 +314,7 @@ export component FullPlayer inherits Rectangle {
                 spacing:8px;
                 alignment:center;
                 if AppState.show-liked-songs: IconButton {layer:"full";label:AppState.liked ? "Unlike song" : "Like song";dark:AppState.full-player-dark;icon:AppState.liked ? Icons.heartFilled : Icons.heart;icon-size:root.spacious-lyrics ? 22px : 20px;width:root.spacious-lyrics ? 48px : 40px;height:self.width;round:true;active:AppState.liked;active-icon-only:true;enabled:AppState.now.id>0;clicked=>{AppState.toggle-like();}}
-                PlaybackControls {layer:"full";dark:AppState.full-player-dark;large:!AppState.lyrics-open && root.height>=720px;prominent:root.height>=720px && content.width>=384px;width:root.spacious-lyrics ? 300px : self.prominent ? 288px : root.height<720px || AppState.lyrics-open ? 252px : 276px;}
+                PlaybackControls {layer:"full";dark:AppState.full-player-dark;large:!AppState.lyrics-open && root.height>=720px;prominent:root.height>=720px && content.width>=384px;width:!AppState.lyrics-open && self.prominent ? 304px : root.spacious-lyrics ? 300px : self.prominent ? 288px : root.height<720px || AppState.lyrics-open ? 252px : 276px;}
                 IconButton {layer:"full";label:"Add to playlist";dark:AppState.full-player-dark;icon:Icons.playlistAdd;icon-size:root.spacious-lyrics ? 22px : 20px;width:root.spacious-lyrics ? 48px : 40px;height:self.width;round:true;active:AppState.playlist-picker-open;enabled:AppState.now.id>0;clicked=>{if AppState.playlist-picker-open {AppState.playlist-picker-open=false;} else {AppState.playlist-action("open-current","");AppState.queue-open=false;}}}
             }
         }

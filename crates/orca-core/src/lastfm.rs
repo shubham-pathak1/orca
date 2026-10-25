@@ -25,10 +25,7 @@ pub fn get_token(api_key: &str) -> Result<String, String> {
         LASTFM_API_URL, api_key
     );
     let resp = ureq::get(&url)
-        .set(
-            "User-Agent",
-            "Orca/0.1.6-alpha (https://github.com/shubham-pathak1/orca)",
-        )
+        .set("User-Agent", crate::USER_AGENT)
         .call()
         .map_err(|e| e.to_string())?;
 
@@ -67,10 +64,7 @@ pub fn get_session(api_key: &str, secret: &str, token: &str) -> Result<String, S
 
     let resp = ureq::post(LASTFM_API_URL)
         .set("Content-Type", "application/x-www-form-urlencoded")
-        .set(
-            "User-Agent",
-            "Orca/0.1.6-alpha (https://github.com/shubham-pathak1/orca)",
-        )
+        .set("User-Agent", crate::USER_AGENT)
         .send_string(&body)
         .map_err(|e| e.to_string())?;
 
@@ -123,10 +117,7 @@ pub fn update_now_playing(
 
     ureq::post(LASTFM_API_URL)
         .set("Content-Type", "application/x-www-form-urlencoded")
-        .set(
-            "User-Agent",
-            "Orca/0.1.6-alpha (https://github.com/shubham-pathak1/orca)",
-        )
+        .set("User-Agent", crate::USER_AGENT)
         .send_string(&body)
         .map_err(|e| e.to_string())?;
 
@@ -170,10 +161,7 @@ pub fn scrobble(
 
     ureq::post(LASTFM_API_URL)
         .set("Content-Type", "application/x-www-form-urlencoded")
-        .set(
-            "User-Agent",
-            "Orca/0.1.6-alpha (https://github.com/shubham-pathak1/orca)",
-        )
+        .set("User-Agent", crate::USER_AGENT)
         .send_string(&body)
         .map_err(|e| e.to_string())?;
 

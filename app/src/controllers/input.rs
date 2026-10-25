@@ -315,6 +315,18 @@ pub(crate) fn install_keyboard(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<Requ
                 }
                 ui.invoke_focus_shell();
             }
+            "open-settings" => {
+                s.set_full_player(false);
+                s.set_queue_open(false);
+                s.set_playlist_picker_open(false);
+                s.set_menu_open(false);
+                s.set_collection_menu_open(false);
+                s.set_view("settings".into());
+                s.set_search("".into());
+                s.set_detail_key("".into());
+                s.invoke_browse();
+                ui.invoke_focus_shell();
+            }
             "focus-search" => {
                 if !s.get_full_player()
                     && (s.get_search_input_focused() || s.get_search_focus_pending())

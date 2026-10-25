@@ -1,6 +1,6 @@
 [package]
 name = "orca-services"
-version = "0.1.6-alpha"
+version = "0.1.8-alpha"
 edition = "2021"
 license = "MIT"
 

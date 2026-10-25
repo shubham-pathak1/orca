@@ -60,7 +60,7 @@ fn collaborations_have_individual_artist_pages_while_featured_guests_do_not() {
 }
 
 #[test]
-fn song_pages_and_now_playing_keep_track_explicit_advisory() {
+fn song_pages_and_now_playing_preserve_the_explicit_flag() {
     let fixture = Fixture::new();
     let backend = fixture.backend();
     backend

@@ -4,9 +4,13 @@
 
 <h1 align="center">Orca</h1>
 
-A local open-source music player.
+<p align="center">
+  <a href="https://github.com/shubham-pathak1/orca/releases">Download</a> ·
+  <a href="https://github.com/shubham-pathak1/orca/issues">Report a bug</a> ·
+  <a href="docs/CONTRIBUTING.md">Contribute</a>
+</p>
 
-[Download](https://github.com/shubham-pathak1/orca/releases) · [Report a bug](https://github.com/shubham-pathak1/orca/issues) · [Contribute](docs/CONTRIBUTING.md)
+<p align="center">A local open-source music player.</p>
 
 Orca is still in alpha and is currently available only for Windows x64.
 Once it is stable enough, the plan is to bring it to Linux and possibly macOS too.
