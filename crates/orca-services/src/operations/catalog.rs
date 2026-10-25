@@ -27,14 +27,14 @@ pub(super) fn run(
             let (count, duration): (i64, i64) = backend
                 .conn
                 .query_row(
-                    "SELECT COUNT(*), COALESCE(SUM(duration),0) FROM active_songs WHERE artist=?1",
+                    "SELECT COUNT(*), COALESCE(SUM(duration),0) FROM active_songs WHERE artist_credit_contains(artist,title,?1)",
                     [key],
                     |row| Ok((row.get(0)?, row.get(1)?)),
                 )
                 .map_err(|e| e.to_string())?;
             let mut statement = backend
                 .conn
-                .prepare("SELECT DISTINCT album_artist,album FROM active_songs WHERE artist=?1")
+                .prepare("SELECT DISTINCT album_artist,album FROM active_songs WHERE artist_credit_contains(artist,title,?1)")
                 .map_err(|e| e.to_string())?;
             let memberships = statement
                 .query_map([key], |row| {

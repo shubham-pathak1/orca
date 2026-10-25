@@ -1,3 +1,4 @@
+pub mod artist_credits;
 pub mod artwork_cache;
 pub mod atomic_file;
 pub mod audio_engine;

@@ -35,6 +35,8 @@ pub struct ArtworkQuery {
     pub duration_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub artist_recordings: Vec<ArtistRecording>,
+    #[serde(skip)]
+    itunes_verified: bool,
 }
 impl ArtworkQuery {
     pub fn artist(artist: &str) -> Self {
@@ -46,6 +48,7 @@ impl ArtworkQuery {
             track_artist: None,
             duration_ms: None,
             artist_recordings: Vec::new(),
+            itunes_verified: false,
         }
     }
     pub fn album(artist: &str, album: &str, title: Option<&str>) -> Self {
@@ -59,6 +62,7 @@ impl ArtworkQuery {
             track_artist: None,
             duration_ms: None,
             artist_recordings: Vec::new(),
+            itunes_verified: false,
         }
     }
 }
@@ -157,6 +161,7 @@ fn lookup<T: Transport>(
         match artist::identify(query, &client) {
             Ok(Some((found, id))) => {
                 identified = found;
+                identified.itunes_verified = true;
                 let portrait_client = transport(providers::Provider::AppleMusic);
                 match apple::portrait(&identified.artist, id, &portrait_client) {
                     Ok(urls) => {

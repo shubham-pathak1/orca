@@ -96,10 +96,26 @@ pub fn update_collection_name_checked(
             .and_then(|probe| Ok(probe.guess_file_type()?))
             .and_then(|probe| probe.read())
             .map_err(|e| e.to_string())?;
+        let renamed_artist = if kind == "artists" {
+            let source = file.primary_tag().or_else(|| file.first_tag());
+            let raw = source
+                .and_then(|tag| tag.get_string(&ItemKey::TrackArtist))
+                .unwrap_or(old_name);
+            let title = source
+                .and_then(|tag| tag.get_string(&ItemKey::TrackTitle))
+                .unwrap_or_default();
+            Some(
+                crate::artist_credits::rename(raw, title, old_name, name).ok_or_else(|| {
+                    "The artist credit changed. Reopen the collection before retrying.".to_string()
+                })?,
+            )
+        } else {
+            None
+        };
         let types: Vec<_> = file.tags().iter().map(Tag::tag_type).collect();
         for tag_type in types {
             if let Some(tag) = file.tag_mut(tag_type) {
-                set_text(tag, key.clone(), name);
+                set_text(tag, key.clone(), renamed_artist.as_deref().unwrap_or(name));
                 // Keep an existing matching album credit consistent. Guest or
                 // compilation album credits must retain their original value.
                 if kind == "artists" && tag.get_string(&ItemKey::AlbumArtist) == Some(old_name) {
@@ -107,7 +123,8 @@ pub fn update_collection_name_checked(
                 }
             }
         }
-        set_text(writable_tag_mut(&mut file)?, key, name);
+        let tag = writable_tag_mut(&mut file)?;
+        set_text(tag, key, renamed_artist.as_deref().unwrap_or(name));
         save_and_verify(staged, &file)
     })
 }

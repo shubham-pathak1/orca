@@ -35,6 +35,192 @@ fn apple_portrait_uses_the_recording_id_and_stops_before_name_only_fallbacks() {
 }
 
 #[test]
+fn taaruk_raina_lookup_does_not_use_a_soundtrack_cover_as_artist_portrait() {
+    let f = Fixture::new();
+    let mut query = ArtworkQuery::artist("Taaruk Raina");
+    query.title = Some("Narazi".into());
+    query.album = "Narazi".into();
+    query.duration_ms = Some(168_065);
+    let script = Script::new(vec![
+        (
+            "itunes.apple.com".into(),
+            Ok(
+                json!({"results":[{"artistId":1368308173,"artistName":"Taaruk Raina","trackName":"Narazi","collectionName":"Narazi - Single","trackTimeMillis":168065}]}),
+            ),
+        ),
+        ("api.deezer.com/search?".into(), Ok(json!({"data":[]}))),
+        (
+            "musicbrainz.org/ws/2/artist?".into(),
+            Ok(json!({"artists":[{"id":"taaruk","name":"Taaruk Raina"}]})),
+        ),
+        (
+            "musicbrainz.org/ws/2/recording?".into(),
+            Ok(json!({"recordings":[]})),
+        ),
+        (
+            "artist/taaruk?".into(),
+            Ok(
+                json!({"relations":[{"url":{"resource":"https://www.deezer.com/artist/112652242"}}]}),
+            ),
+        ),
+    ]);
+    script.pages.borrow_mut().push_back((
+        "music.apple.com/us/artist/-/1368308173".into(),
+        Ok(format!("<script type=\"application/ld+json\">{}</script>", json!({
+            "@type":"MusicGroup","name":"Taaruk Raina",
+            "url":"https://music.apple.com/us/artist/taaruk-raina/1368308173",
+            "image":"https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/2f/2c/80/2f2c8010-7b0e-2439-27f5-65c02c89875d/8903431095619_cover.jpg/486x486bb.png"
+        }))),
+    ));
+    assert_eq!(
+        lookup(&query, &f.0, LookupMode::Manual, |_| script.clone()).unwrap_err(),
+        LookupError::NotFound
+    );
+    assert_eq!(script.calls.borrow().len(), 6);
+    assert!(script.replies.borrow().is_empty());
+}
+
+#[test]
+fn taaruk_raina_uses_a_linked_spotify_artist_portrait_when_musicbrainz_lacks_the_recording() {
+    let f = Fixture::new();
+    let mut query = ArtworkQuery::artist("Taaruk Raina");
+    query.title = Some("Narazi".into());
+    query.album = "Narazi".into();
+    query.duration_ms = Some(168_065);
+    let script = Script::new(vec![
+        (
+            "itunes.apple.com".into(),
+            Ok(
+                json!({"results":[{"artistId":1368308173,"artistName":"Taaruk Raina","trackName":"Narazi","collectionName":"Narazi - Single","trackTimeMillis":168065}]}),
+            ),
+        ),
+        ("api.deezer.com/search?".into(), Ok(json!({"data":[]}))),
+        (
+            "musicbrainz.org/ws/2/artist?".into(),
+            Ok(json!({"artists":[{"id":"taaruk","name":"Taaruk Raina"}]})),
+        ),
+        (
+            "musicbrainz.org/ws/2/recording?".into(),
+            Ok(json!({"recordings":[]})),
+        ),
+        (
+            "artist/taaruk?".into(),
+            Ok(
+                json!({"relations":[{"url":{"resource":"https://open.spotify.com/artist/1FWl7I9wJpb7Bhhutef4Xe"}}]}),
+            ),
+        ),
+    ]);
+    script.pages.borrow_mut().push_back((
+        "music.apple.com/us/artist/-/1368308173".into(),
+        Ok(format!("<script type=\"application/ld+json\">{}</script>", json!({
+            "@type":"MusicGroup","name":"Taaruk Raina",
+            "url":"https://music.apple.com/us/artist/taaruk-raina/1368308173",
+            "image":"https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/2f/2c/80/2f2c8010-7b0e-2439-27f5-65c02c89875d/8903431095619_cover.jpg/486x486bb.png"
+        }))),
+    ));
+    script.pages.borrow_mut().push_back((
+        "open.spotify.com/artist/1FWl7I9wJpb7Bhhutef4Xe".into(),
+        Ok("<meta property=\"og:title\" content=\"Taaruk Raina\"/><meta property=\"og:image\" content=\"https://i.scdn.co/image/ab6761610000e5eb3820e6ad7f4a0233c81ee6d8\"/>".into()),
+    ));
+    assert!(lookup(&query, &f.0, LookupMode::Manual, |_| script.clone()).is_ok());
+    assert_eq!(
+        script.calls.borrow().last().unwrap(),
+        "https://i.scdn.co/image/ab6761610000e5eb3820e6ad7f4a0233c81ee6d8"
+    );
+}
+
+#[test]
+fn amit_trivedi_uses_cross_linked_spotify_portrait_when_recording_catalogs_miss() {
+    let f = Fixture::new();
+    let mut query = ArtworkQuery::artist("Amit Trivedi");
+    query.title = Some("Yeh Fitoor Mera".into());
+    query.album = "Fitoor".into();
+    let script = Script::new(vec![
+        ("itunes.apple.com".into(), Ok(json!({"results":[]}))),
+        ("api.deezer.com/search?".into(), Ok(json!({"data":[]}))),
+        (
+            "musicbrainz.org/ws/2/artist?".into(),
+            Ok(json!({"artists":[{"id":"amit","name":"Amit Trivedi"}]})),
+        ),
+        (
+            "musicbrainz.org/ws/2/recording?".into(),
+            Ok(json!({"recordings":[]})),
+        ),
+        (
+            "artist/amit?".into(),
+            Ok(json!({"relations":[
+                {"url":{"resource":"https://music.apple.com/in/artist/266194087"}},
+                {"url":{"resource":"https://open.spotify.com/artist/7HCqGPJcQTyGJ2yqntbuyr"}}
+            ]})),
+        ),
+    ]);
+    script.pages.borrow_mut().push_back((
+        "open.spotify.com/artist/7HCqGPJcQTyGJ2yqntbuyr".into(),
+        Ok("<meta property=\"og:title\" content=\"Amit Trivedi\"/><meta property=\"og:image\" content=\"https://i.scdn.co/image/ab6761610000e5eb3820e6ad7f4a0233c81ee6d8\"/>".into()),
+    ));
+    assert!(lookup(&query, &f.0, LookupMode::Manual, |_| script.clone()).is_ok());
+    assert_eq!(
+        script.calls.borrow().last().unwrap(),
+        "https://i.scdn.co/image/ab6761610000e5eb3820e6ad7f4a0233c81ee6d8"
+    );
+}
+
+#[test]
+fn single_name_match_without_recording_or_cross_link_does_not_choose_a_portrait() {
+    let f = Fixture::new();
+    let mut query = ArtworkQuery::artist("Same Name");
+    query.title = Some("Missing Song".into());
+    let script = Script::new(vec![
+        ("itunes.apple.com".into(), Ok(json!({"results":[]}))),
+        ("api.deezer.com/search?".into(), Ok(json!({"data":[]}))),
+        (
+            "musicbrainz.org/ws/2/artist?".into(),
+            Ok(json!({"artists":[{"id":"same","name":"Same Name"}]})),
+        ),
+        (
+            "musicbrainz.org/ws/2/recording?".into(),
+            Ok(json!({"recordings":[]})),
+        ),
+        (
+            "artist/same?".into(),
+            Ok(
+                json!({"relations":[{"url":{"resource":"https://open.spotify.com/artist/7HCqGPJcQTyGJ2yqntbuyr"}}]}),
+            ),
+        ),
+    ]);
+    assert_eq!(
+        lookup(&query, &f.0, LookupMode::Manual, |_| script.clone()).unwrap_err(),
+        LookupError::NotFound
+    );
+    assert_eq!(script.calls.borrow().len(), 5);
+}
+
+#[test]
+fn spotify_portrait_rejects_wrong_artist_album_art_and_unlinked_pages() {
+    let linked =
+        vec![json!({"url":{"resource":"https://open.spotify.com/artist/1FWl7I9wJpb7Bhhutef4Xe"}})];
+    let image = "https://i.scdn.co/image/ab6761610000e5eb3820e6ad7f4a0233c81ee6d8";
+    for page in [
+        format!("<meta property=\"og:title\" content=\"Other Artist\"/><meta property=\"og:image\" content=\"{image}\"/>"),
+        "<meta property=\"og:title\" content=\"Taaruk Raina\"/><meta property=\"og:image\" content=\"https://i.scdn.co/image/ab67616d0000b2733820e6ad7f4a0233c81ee6d8\"/>".into(),
+        "<meta property=\"og:title\" content=\"Taaruk Raina\"/><meta property=\"og:image\" content=\"https://i.scdn.co.evil.example/image/ab6761610000e5eb3820e6ad7f4a0233c81ee6d8\"/>".into(),
+    ] {
+        let script = Script::new(vec![]);
+        script.pages.borrow_mut().push_back(("open.spotify.com/artist/1FWl7I9wJpb7Bhhutef4Xe".into(), Ok(page)));
+        assert!(crate::online_artwork::portrait::spotify(&linked, "Taaruk Raina", &script).unwrap().is_empty());
+    }
+    let unlinked =
+        vec![json!({"url":{"resource":"https://open.spotify.com/album/1FWl7I9wJpb7Bhhutef4Xe"}})];
+    let script = Script::new(vec![]);
+    assert!(
+        crate::online_artwork::portrait::spotify(&unlinked, "Taaruk Raina", &script)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(script.calls.borrow().is_empty());
+}
+
+#[test]
 fn apple_page_timeout_preserves_deezer_fallback() {
     let f = Fixture::new();
     let mut query = ArtworkQuery::artist("Cafuné");

@@ -70,7 +70,12 @@ pub(super) fn query(fetch: &CoverFetch, track: Option<&Track>) -> ArtworkQuery {
         .title
         .as_deref()
         .or_else(|| track.map(|t| t.title.as_str()));
-    let mut query = ArtworkQuery::album(artist, &fetch.album, title);
+    let album = if fetch.album.trim().eq_ignore_ascii_case("Unknown Album") {
+        ""
+    } else {
+        &fetch.album
+    };
+    let mut query = ArtworkQuery::album(artist, album, title);
     query.track_artist = fetch
         .track_artist
         .clone()
@@ -149,5 +154,18 @@ mod tests {
         assert_eq!(query.album, "Edited album");
         assert_eq!(query.artist, "Album artist");
         assert_eq!(query.duration_ms, Some(123000));
+    }
+
+    #[test]
+    fn missing_album_tag_uses_song_identity_instead_of_placeholder() {
+        let fetch: CoverFetch = serde_json::from_value(serde_json::json!({
+            "kind":"albums", "key":"Unknown Album", "artist":"Alys",
+            "album":"Unknown Album", "title":"Gamble"
+        }))
+        .unwrap();
+        let result = query(&fetch, None);
+        assert_eq!(result.artist, "Alys");
+        assert_eq!(result.album, "");
+        assert_eq!(result.title.as_deref(), Some("Gamble"));
     }
 }

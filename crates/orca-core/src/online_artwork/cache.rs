@@ -17,7 +17,7 @@ fn open(directory: &Path) -> Result<Connection, String> {
     Ok(conn)
 }
 fn key(query: &ArtworkQuery) -> String {
-    serde_json::json!([4, query]).to_string()
+    serde_json::json!([5, query]).to_string()
 }
 fn now() -> i64 {
     SystemTime::now()

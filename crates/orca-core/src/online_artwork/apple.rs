@@ -88,6 +88,7 @@ fn collect(value: &Value, artist: &str, id: u64, images: &mut Vec<String>, depth
             || !url
                 .host_str()
                 .is_some_and(|host| host.ends_with(".mzstatic.com"))
+            || release_cover_url(&url)
         {
             continue;
         }
@@ -98,6 +99,24 @@ fn collect(value: &Value, artist: &str, id: u64, images: &mut Vec<String>, depth
             break;
         }
     }
+}
+
+// Apple sometimes puts release artwork in an otherwise correctly identified
+// artist's structured `image` field. Music* assets include Taaruk Raina's
+// soundtrack cover, Bharat Chandak's I-POPSTAR image, and Alys's single cover.
+fn release_cover_url(url: &url::Url) -> bool {
+    url.path_segments().is_some_and(|segments| {
+        segments.filter(|part| !part.is_empty()).any(|part| {
+            let lower = part.to_ascii_lowercase();
+            lower.starts_with("music")
+                && lower[5..]
+                    .chars()
+                    .next()
+                    .is_some_and(|ch| ch.is_ascii_digit())
+                || lower.ends_with("_cover.jpg")
+                || lower == "artwork.jpg"
+        })
+    })
 }
 
 fn artist_url_matches(link: &str, id: u64) -> bool {
@@ -162,6 +181,25 @@ mod tests {
             947078210
         )
         .is_empty());
+    }
+    #[test]
+    fn rejects_release_cover_in_verified_taaruk_raina_artist_page() {
+        let artist = json!({
+            "@type": "MusicGroup",
+            "name": "Taaruk Raina",
+            "url": "https://music.apple.com/us/artist/taaruk-raina/1368308173",
+            "image": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/2f/2c/80/2f2c8010-7b0e-2439-27f5-65c02c89875d/8903431095619_cover.jpg/486x486bb.png"
+        });
+        assert!(images(&page(artist), "Taaruk Raina", 1368308173).is_empty());
+    }
+    #[test]
+    fn rejects_bharat_chandak_promotional_cover_on_artist_page() {
+        let artist = json!({
+            "@type":"MusicGroup", "name":"Bharat Chandak",
+            "url":"https://music.apple.com/us/artist/bharat-chandak/1828231642",
+            "image":"https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/a3/bf/9c/a3bf9ca2-e841-6657-f1e4-6f5a2e396843/885288782271.jpg/486x486bb.png"
+        });
+        assert!(images(&page(artist), "Bharat Chandak", 1828231642).is_empty());
     }
     #[test]
     fn malformed_scripts_do_not_hide_later_valid_artist_data() {

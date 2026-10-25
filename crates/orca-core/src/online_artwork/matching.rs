@@ -3,6 +3,13 @@ use super::ArtworkQuery;
 use serde_json::Value;
 
 pub(super) use crate::media_identity::{album_matches, names_match};
+pub(super) fn artist_credit_contains(credit: &str, artist: &str) -> bool {
+    names_match(credit, artist)
+        || credit
+            .split(" & ")
+            .flat_map(|part| part.split(", "))
+            .any(|part| names_match(part, artist))
+}
 pub(super) fn lead_artist(artist: &str) -> &str {
     artist.split(';').next().unwrap_or(artist).trim()
 }
@@ -20,7 +27,7 @@ pub(super) fn track_matches(track: &Value, query: &ArtworkQuery) -> bool {
     let artist = lead_artist(query.track_artist.as_deref().unwrap_or(&query.artist));
     track["artistName"]
         .as_str()
-        .is_some_and(|name| names_match(artist, name))
+        .is_some_and(|name| artist_credit_contains(name, artist))
         && query.title.as_deref().is_some_and(|title| {
             track["trackName"]
                 .as_str()

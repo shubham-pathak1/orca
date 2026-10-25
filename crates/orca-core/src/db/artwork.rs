@@ -33,19 +33,19 @@ pub fn remove_artist_artwork(conn: &Connection, artist_name: &str) -> Result<(),
 
 pub fn get_artists_needing_artwork(conn: &Connection) -> Result<Vec<String>, String> {
     let mut statement = conn
-        .prepare(
-            "SELECT DISTINCT s.artist FROM active_songs s
-             LEFT JOIN artist_artworks aa ON s.artist = aa.artist_name
-             WHERE aa.artwork_path IS NULL
-             ORDER BY s.artist COLLATE NOCASE ASC",
-        )
+        .prepare("SELECT artist_name FROM artist_artworks WHERE artwork_path IS NOT NULL")
         .map_err(|error| error.to_string())?;
     let rows = statement
-        .query_map([], |row| row.get(0))
+        .query_map([], |row| row.get::<_, String>(0))
         .map_err(|error| error.to_string())?;
-
-    rows.map(|row| row.map_err(|error| error.to_string()))
-        .collect()
+    let covered = rows
+        .collect::<rusqlite::Result<std::collections::HashSet<_>>>()
+        .map_err(|error| error.to_string())?;
+    Ok(super::get_artists(conn)?
+        .into_iter()
+        .filter(|artist| !covered.contains(&artist.name))
+        .map(|artist| artist.name)
+        .collect())
 }
 
 pub fn update_album_artwork(

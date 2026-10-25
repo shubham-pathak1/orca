@@ -108,7 +108,11 @@ pub(super) fn identify(
             .filter_map(|t| t["artistId"].as_u64())
             .collect();
         intersect(&mut evidence, ids)?;
-        if let Some(name) = matches.first().and_then(|t| t["artistName"].as_str()) {
+        if let Some(name) = matches
+            .first()
+            .and_then(|t| t["artistName"].as_str())
+            .filter(|name| names_match(name, &query.artist))
+        {
             canonical = Some(name.to_owned());
         }
     }

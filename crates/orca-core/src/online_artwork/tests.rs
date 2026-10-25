@@ -13,6 +13,68 @@ use std::{
 };
 
 #[test]
+fn itunes_multi_artist_credit_still_matches_a_precise_song_and_album() {
+    let mut query = ArtworkQuery::album(
+        "Alys",
+        "gamble (feat. demxntia)",
+        Some("gamble (feat. demxntia)"),
+    );
+    query.duration_ms = Some(128_607);
+    let script = Script::new(vec![(
+        "itunes.apple.com/search?".into(),
+        Ok(json!({"results":[{
+            "artistId":1491132097,"artistName":"Alys & Fcj",
+            "trackName":"Gamble (feat. Demxntia)",
+            "collectionName":"Gamble (feat. Demxntia) - Single",
+            "trackTimeMillis":128607,"collectionId":1,
+            "artworkUrl100":"https://is1-ssl.mzstatic.com/image/100x100bb.jpg"
+        }]})),
+    )]);
+    assert_eq!(
+        providers::candidates(Provider::Itunes, &query, &script).unwrap(),
+        ["https://is1-ssl.mzstatic.com/image/600x600bb.jpg"]
+    );
+}
+
+#[test]
+fn itunes_collaboration_result_keeps_the_requested_artist_identity() {
+    let mut query = ArtworkQuery::artist("Alys");
+    query.title = Some("gamble (feat. demxntia)".into());
+    query.album = "gamble (feat. demxntia)".into();
+    query.duration_ms = Some(128_607);
+    let script = Script::new(vec![(
+        "itunes.apple.com/search?".into(),
+        Ok(json!({"results":[{
+            "artistId":1491132097,"artistName":"Alys & Fcj",
+            "trackName":"Gamble (feat. Demxntia)",
+            "collectionName":"Gamble (feat. Demxntia) - Single",
+            "trackTimeMillis":128607
+        }]})),
+    )]);
+    let (identified, id) = artist::identify(&query, &script).unwrap().unwrap();
+    assert_eq!(id, 1491132097);
+    assert_eq!(identified.artist, "Alys");
+}
+
+#[test]
+#[ignore = "contacts live artwork providers; uses a disposable artwork cache"]
+fn live_collaboration_and_soundtrack_album_covers_are_decodable() {
+    for query in [
+        ArtworkQuery::album(
+            "Alys",
+            "gamble (feat. demxntia)",
+            Some("gamble (feat. demxntia)"),
+        ),
+        ArtworkQuery::album("Amit Trivedi", "Fitoor", Some("Yeh Fitoor Mera")),
+    ] {
+        let fixture = Fixture::new();
+        let paths = fetch(&query, &fixture.0, LookupMode::Manual)
+            .unwrap_or_else(|error| panic!("{query:?}: {error}"));
+        assert!(image::image_dimensions(paths.full).is_ok());
+    }
+}
+
+#[test]
 fn artist_lookup_identifies_with_itunes_then_verifies_deezer_recording_and_downloads_portrait() {
     let f = Fixture::new();
     let mut query = ArtworkQuery::artist("GINI");
@@ -126,6 +188,31 @@ fn musicbrainz_disambiguates_names_with_recording_evidence() {
     assert_eq!(
         providers::candidates(Provider::MusicBrainz, &query, &script).unwrap_err(),
         LookupError::PortraitNotFound
+    );
+    assert_eq!(script.calls.borrow().len(), 3);
+}
+
+#[test]
+fn musicbrainz_single_name_match_still_needs_recording_or_linked_identity() {
+    let mut query = ArtworkQuery::artist("Taaruk Raina");
+    query.title = Some("Narazi".into());
+    query.album = "Narazi".into();
+    query.duration_ms = Some(168_065);
+    let script = Script::new(vec![
+        (
+            "musicbrainz.org/ws/2/artist?".into(),
+            Ok(json!({"artists":[{"id":"taaruk","name":"Taaruk Raina"}]})),
+        ),
+        (
+            "musicbrainz.org/ws/2/recording?".into(),
+            Ok(json!({"recordings":[]})),
+        ),
+        ("artist/taaruk?".into(), Ok(json!({"relations":[]}))),
+    ]);
+    assert!(
+        providers::candidates(Provider::MusicBrainz, &query, &script)
+            .unwrap()
+            .is_empty()
     );
     assert_eq!(script.calls.borrow().len(), 3);
 }

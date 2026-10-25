@@ -1,6 +1,65 @@
 use super::*;
 
 #[test]
+fn collaborations_have_individual_artist_pages_while_featured_guests_do_not() {
+    let fixture = Fixture::new();
+    let backend = fixture.backend();
+    backend.conn.execute_batch("INSERT INTO songs(path,title,artist,album_artist,album,duration,artwork_url) VALUES
+        ('khaare.flac','Khaare Raste','Raghav Kaushik; Yashika Sikka','Raghav Kaushik','Khaare Raste',180000,'khaare.jpg'),
+        ('visa.flac','visa (feat. Abhi The Nomad)','again&again; Abhi The Nomad','again&again','visa',166000,'visa.jpg'),
+        ('piya.flac','Piya','Khwaab; Divyam Sodhi; LIKHARI','Khwaab','Piya',141000,'piya.jpg');").unwrap();
+    let groups = backend.groups("artists", "").unwrap();
+    let names: std::collections::HashSet<_> =
+        groups.iter().map(|group| group.key.as_str()).collect();
+    assert_eq!(groups.len(), 6);
+    for name in [
+        "Raghav Kaushik",
+        "Yashika Sikka",
+        "again&again",
+        "Khwaab",
+        "Divyam Sodhi",
+        "LIKHARI",
+    ] {
+        assert!(names.contains(name), "missing {name}");
+    }
+    assert!(!names.contains("Abhi The Nomad"));
+    assert!(!names.contains("Raghav Kaushik; Yashika Sikka"));
+    assert_eq!(backend.statistics().unwrap().artists, 6);
+
+    let query = types::Query {
+        kind: "artists".into(),
+        key: "Yashika Sikka".into(),
+        ..Default::default()
+    };
+    let page = backend.page(&query, 0, 10).unwrap();
+    assert_eq!(page.total, 1);
+    assert_eq!(page.tracks[0].artist, "Raghav Kaushik; Yashika Sikka");
+    assert_eq!(backend.context_paths(&query).unwrap(), ["khaare.flac"]);
+    let detail: serde_json::Value = serde_json::from_str(
+        &backend
+            .operation(r#"{"action":"artist-detail","key":"Yashika Sikka"}"#)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(detail["count"], 1);
+    assert_eq!(detail["albumCount"], 1);
+    assert_eq!(detail["artwork"], "khaare.jpg");
+
+    let guest = types::Query {
+        kind: "artists".into(),
+        key: "Abhi The Nomad".into(),
+        ..Default::default()
+    };
+    assert_eq!(backend.page(&guest, 0, 10).unwrap().total, 0);
+    assert_eq!(
+        db::get_artists_needing_artwork(&backend.conn)
+            .unwrap()
+            .len(),
+        6
+    );
+}
+
+#[test]
 fn song_pages_and_now_playing_keep_track_explicit_advisory() {
     let fixture = Fixture::new();
     let backend = fixture.backend();

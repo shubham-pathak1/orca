@@ -260,14 +260,42 @@ fn musicbrainz_artist(
         .filter_map(|a| a["id"].as_str())
         .collect();
     let contextual;
-    if identities.len() > 1 {
+    let has_recording_evidence = query.title.as_ref().is_some_and(|t| !t.trim().is_empty())
+        || query
+            .artist_recordings
+            .iter()
+            .any(|recording| !recording.title.trim().is_empty());
+    let ambiguous_name = identities.len() > 1;
+    let sole_name_match = (identities.len() == 1)
+        .then(|| identities.iter().next().map(|id| (*id).to_string()))
+        .flatten();
+    if !identities.is_empty() && (ambiguous_name || has_recording_evidence) {
         contextual = super::artist::musicbrainz_identity(query, client)?;
         identities.retain(|id| contextual.as_deref() == Some(*id));
-        if identities.len() != 1 {
+        if ambiguous_name && identities.len() != 1 {
             return Err(LookupError::AmbiguousArtist);
         }
     }
     if identities.len() != 1 {
+        // A library recording may be absent from MusicBrainz even when the
+        // artist has a curated Spotify link. Require either an iTunes-verified
+        // recording or an independent Apple Music link on that unique MB
+        // identity before accepting Spotify's artist-only image.
+        if let Some(id) = sole_name_match {
+            let detail = client.json(&format!(
+                "https://musicbrainz.org/ws/2/artist/{id}?inc=url-rels&fmt=json"
+            ))?;
+            let relations = array(&detail, "relations")?;
+            let apple_linked = relations.iter().any(|relation| {
+                relation["url"]["resource"]
+                    .as_str()
+                    .and_then(super::apple::linked_artist_id)
+                    .is_some()
+            });
+            if query.itunes_verified || apple_linked {
+                return super::portrait::spotify(relations, artist, client);
+            }
+        }
         return Ok(vec![]);
     }
     let id = identities.into_iter().next().unwrap();

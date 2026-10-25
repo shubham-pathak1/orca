@@ -21,6 +21,12 @@ pub(super) fn from_relations(
         Err(error) => super::record_failure(&mut failure, error),
         _ => {}
     }
+    match spotify(relations, artist, client) {
+        Ok(images) if !images.is_empty() => return Ok(images),
+        Err(LookupError::Cancelled) => return Err(LookupError::Cancelled),
+        Err(error) => super::record_failure(&mut failure, error),
+        _ => {}
+    }
     let mut seen = HashSet::new();
     for id in relations
         .iter()
@@ -73,6 +79,76 @@ pub(super) fn from_relations(
         }
     }
     Err(failure.unwrap_or(LookupError::PortraitNotFound))
+}
+
+/// A Spotify page linked from the verified MusicBrainz identity can supply an
+/// artist-specific image. Album images use a different image identifier.
+pub(super) fn spotify(
+    relations: &[Value],
+    artist: &str,
+    client: &impl Transport,
+) -> Result<Vec<String>, LookupError> {
+    let Some(page_url) = relations
+        .iter()
+        .filter_map(|relation| relation["url"]["resource"].as_str())
+        .find(|link| spotify_artist_url(link))
+    else {
+        return Ok(Vec::new());
+    };
+    if client.cancelled() {
+        return Err(LookupError::Cancelled);
+    }
+    let page = client.text(page_url)?;
+    if !meta_content(&page, "og:title").is_some_and(|name| names_match(artist, name)) {
+        return Ok(Vec::new());
+    }
+    let Some(image) = meta_content(&page, "og:image") else {
+        return Ok(Vec::new());
+    };
+    let Ok(url) = url::Url::parse(image) else {
+        return Ok(Vec::new());
+    };
+    let Some(asset) = url.path().strip_prefix("/image/") else {
+        return Ok(Vec::new());
+    };
+    if url.scheme() != "https"
+        || url.host_str() != Some("i.scdn.co")
+        || !asset.starts_with("ab676161")
+        || asset.len() < 32
+        || !asset.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Ok(Vec::new());
+    }
+    Ok(vec![image.to_string()])
+}
+
+fn spotify_artist_url(link: &str) -> bool {
+    let Ok(url) = url::Url::parse(link) else {
+        return false;
+    };
+    if url.scheme() != "https" || url.host_str() != Some("open.spotify.com") {
+        return false;
+    }
+    let Some(parts) = url.path_segments() else {
+        return false;
+    };
+    let parts: Vec<_> = parts.collect();
+    matches!(parts.as_slice(), ["artist", id] if id.len() == 22 && id.bytes().all(|byte| byte.is_ascii_alphanumeric()))
+}
+
+fn meta_content<'a>(page: &'a str, property: &str) -> Option<&'a str> {
+    for tag in page
+        .split("<meta")
+        .skip(1)
+        .filter_map(|tag| tag.split_once('>').map(|(attributes, _)| attributes))
+    {
+        if !tag.contains(&format!("property=\"{property}\"")) {
+            continue;
+        }
+        let (_, content) = tag.split_once("content=\"")?;
+        return content.split_once('"').map(|(value, _)| value);
+    }
+    None
 }
 
 fn deezer_id(link: &str) -> Option<u64> {

@@ -1,4 +1,5 @@
 //! Versioned, transactional SQLite migrations. Public callers share one schema.
+use rusqlite::functions::FunctionFlags;
 use rusqlite::{Connection, TransactionBehavior};
 use std::{collections::HashSet, path::PathBuf, time::Duration};
 
@@ -32,6 +33,18 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
     )
     .map_err(|e| e.to_string())?;
     migrate(&mut conn).map_err(|e| format!("Library migration failed: {e}"))?;
+    conn.create_scalar_function(
+        "artist_credit_contains",
+        3,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        |ctx| {
+            let artist: String = ctx.get(0)?;
+            let title: String = ctx.get(1)?;
+            let name: String = ctx.get(2)?;
+            Ok(crate::artist_credits::contains(&artist, &title, &name))
+        },
+    )
+    .map_err(|e| e.to_string())?;
     Ok(conn)
 }
 

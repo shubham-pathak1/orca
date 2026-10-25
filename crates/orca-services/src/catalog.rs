@@ -41,7 +41,7 @@ fn read_track(row: &rusqlite::Row<'_>) -> rusqlite::Result<ffi::Track> {
 // User input is always bound. Only allowlisted SQL identifiers are interpolated.
 pub(super) fn predicate(kind: &str) -> &'static str {
     match kind {
-        "artists" => "s.artist = ?2",
+        "artists" => "artist_credit_contains(s.artist,s.title,?2)",
         "albums" => "s.album = ?2 AND s.album_artist = ?3",
         "genres" => "COALESCE(s.genre,'Unknown') = ?2",
         "folders" if cfg!(windows) => "substr(replace(s.path,char(92),'/'),1,length(rtrim(replace(?2,char(92),'/'),'/'))+1) = (rtrim(replace(?2,char(92),'/'),'/') || '/') COLLATE NOCASE",
@@ -167,9 +167,10 @@ impl Backend {
     }
 
     pub fn statistics(&self) -> Result<ffi::Statistics, String> {
-        let (songs, artists, albums, genres) = self.conn.query_row(
-            "SELECT COUNT(*),COUNT(DISTINCT artist),COUNT(DISTINCT album_artist || char(0) || album),COUNT(DISTINCT COALESCE(genre,'Unknown')) FROM active_songs", [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))).map_err(|e| e.to_string())?;
+        let (songs, albums, genres) = self.conn.query_row(
+            "SELECT COUNT(*),COUNT(DISTINCT album_artist || char(0) || album),COUNT(DISTINCT COALESCE(genre,'Unknown')) FROM active_songs", [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).map_err(|e| e.to_string())?;
+        let artists = u32::try_from(db::get_artists(&self.conn)?.len()).unwrap_or(u32::MAX);
         let playlists = self
             .conn
             .query_row("SELECT COUNT(*) FROM playlists", [], |r| r.get(0))
