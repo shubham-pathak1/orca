@@ -15,6 +15,10 @@
 Orca is still in alpha and is currently available only for Windows x64.
 Once it is stable enough, the plan is to bring it to Linux and possibly macOS too.
 
+**Large libraries:** Orca has not been validated with libraries larger than
+5,000 songs. Performance with larger libraries may vary, including slower
+browsing and higher resource use.
+
 If you try Orca, please [report any bugs](https://github.com/shubham-pathak1/orca/issues)
 or share your ideas. Your feedback and contributions help make it better. Thank you! :)
 
