@@ -18,7 +18,7 @@ Once it is stable enough, the plan is to bring it to Linux and possibly macOS to
 If you try Orca, please [report any bugs](https://github.com/shubham-pathak1/orca/issues)
 or share your ideas. Your feedback and contributions help make it better. Thank you! :)
 
-![Orca's main library showing album artwork, search and playback controls](https://ik.imagekit.io/shubhampathak/orca-web/library.png)
+![Orca's main library showing album artwork, search and playback controls](https://ik.imagekit.io/shubhampathak/orca-web/library.png?v=20261026)
 
 ## Features
 
@@ -39,19 +39,19 @@ or share your ideas. Your feedback and contributions help make it better. Thank 
 
 ### Artists
 
-![Artist page with songs and albums from the local library](https://ik.imagekit.io/shubhampathak/orca-web/artist.png)
+![Artist page with songs and albums from the local library](https://ik.imagekit.io/shubhampathak/orca-web/artist.png?v=20261026)
 
 ### Albums
 
-![Album page with track details and playback controls](https://ik.imagekit.io/shubhampathak/orca-web/album.png)
+![Album page with track details and playback controls](https://ik.imagekit.io/shubhampathak/orca-web/album.png?v=20261026)
 
 ### Lyrics
 
-![Full player with album artwork and synced lyrics](https://ik.imagekit.io/shubhampathak/orca-web/full_player_lyrics.png)
+![Full player with album artwork and synced lyrics](https://ik.imagekit.io/shubhampathak/orca-web/fullplayer_lyrics.png?v=20261026)
 
 ### Metadata editing
 
-![Song metadata editor with cover and lyrics controls](https://ik.imagekit.io/shubhampathak/orca-web/metadata_editor.png)
+![Song metadata editor with cover and lyrics controls](https://ik.imagekit.io/shubhampathak/orca-web/metadata_editor.png?v=20261026)
 
 </details>
 
