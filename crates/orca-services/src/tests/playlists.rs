@@ -16,7 +16,9 @@ fn liked_songs_are_a_permanent_playable_collection() {
             [],
         )
         .unwrap();
+    let library_revision = backend.snapshot().unwrap().revision;
     backend.set_song_liked(2, true).unwrap();
+    assert_eq!(backend.snapshot().unwrap().revision, library_revision);
     assert!(backend.is_song_liked(2).unwrap());
     let playlists = backend.groups("playlists", "").unwrap();
     assert_eq!(playlists[0].count, 1);
@@ -71,6 +73,7 @@ fn liked_songs_are_a_permanent_playable_collection() {
     assert_eq!(queue["songs"][0]["path"], "two.wav");
     assert!(backend.song_playlist_ids(2).unwrap().is_empty());
     backend.set_song_liked(2, false).unwrap();
+    assert_eq!(backend.snapshot().unwrap().revision, library_revision);
     assert_eq!(backend.page(&query, 0, 20).unwrap().total, 0);
     assert_eq!(backend.groups("playlists", "").unwrap()[0].key, "liked");
 }

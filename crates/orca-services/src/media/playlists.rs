@@ -107,7 +107,6 @@ impl Backend {
 
     pub fn set_song_liked(&self, song_id: i64, liked: bool) -> Result<(), String> {
         db::set_song_liked(&self.conn, song_id, liked)?;
-        self.scan.revision.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
 }
