@@ -12,7 +12,7 @@ mod operations;
 mod playback;
 mod scanning;
 pub mod types;
-pub use bootstrap::{import_library, new_backend, prepare_data_dir};
+pub use bootstrap::{import_library, migrate_profile_directory, new_backend, prepare_data_dir};
 pub use orca_core::atomic_file::write as write_state_file;
 // Historical DTO alias; no foreign-function boundary is involved.
 pub use types as ffi;

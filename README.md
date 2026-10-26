@@ -72,7 +72,9 @@ stay in Orca, preserving embedded song artwork.
 
 Close Orca before installing an update. For portable builds, extract the new ZIP
 into a separate directory. Your existing library, playlists and settings are reused.
-Back up `%LOCALAPPDATA%\OrcaSlintTauri` with Orca closed before upgrading.
+Close Orca before upgrading. On first launch, 0.1.8 automatically moves an
+existing `%LOCALAPPDATA%\OrcaSlintTauri` profile to the permanent
+`%LOCALAPPDATA%\Orca` folder. Later releases reuse that folder.
 
 ## Development
 

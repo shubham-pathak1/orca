@@ -91,7 +91,7 @@ pub(super) fn verify(case: &mut UiCase) {
         state.set_playlist_picker_open(true);
         assert!(state.invoke_keyboard("q".into(), false));
         assert!(state.get_queue_open());
-        assert!(!state.get_lyrics_open() && !state.get_playlist_picker_open());
+        assert!(state.get_lyrics_open() && !state.get_playlist_picker_open());
         assert!(
             matches!(
                 key_rx.try_recv().unwrap(),
@@ -101,6 +101,7 @@ pub(super) fn verify(case: &mut UiCase) {
         );
         assert!(state.invoke_keyboard("Q".into(), false));
         assert!(!state.get_queue_open());
+        assert!(state.get_lyrics_open());
         assert!(state.invoke_keyboard("focus-search".into(), false));
         std::thread::sleep(Duration::from_millis(3));
         slint::platform::update_timers_and_animations();

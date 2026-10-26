@@ -78,20 +78,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     selector.select()?;
     eprintln!("Orca renderer: {renderer}");
     let audio = !args.iter().any(|a| a == "--no-audio");
-    let directory = args
-        .windows(2)
-        .find(|a| a[0] == "--data-dir")
-        .map(|a| PathBuf::from(&a[1]))
-        .unwrap_or_else(|| {
-            if let Some(base) = std::env::var_os("LOCALAPPDATA") {
-                PathBuf::from(base).join("OrcaSlintTauri")
-            } else if let Some(base) = std::env::var_os("XDG_DATA_HOME") {
-                PathBuf::from(base).join("orca-slint")
-            } else {
-                PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
-                    .join(".local/share/orca-slint")
-            }
-        });
+    let directory = if let Some(path) = args.windows(2).find(|a| a[0] == "--data-dir") {
+        PathBuf::from(&path[1])
+    } else if let Some(base) = std::env::var_os("LOCALAPPDATA") {
+        orca_services::migrate_profile_directory(&PathBuf::from(base))?
+    } else if let Some(base) = std::env::var_os("XDG_DATA_HOME") {
+        PathBuf::from(base).join("orca-slint")
+    } else {
+        PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/share/orca-slint")
+    };
     std::fs::create_dir_all(&directory)?;
     // Import a SQLite snapshot on first use without modifying Tauri's database.
     // Backend startup moves referenced artwork into the native profile.

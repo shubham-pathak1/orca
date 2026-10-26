@@ -12,6 +12,8 @@ use std::{
     time::Duration,
 };
 mod artwork_migration;
+mod profile_migration;
+pub use profile_migration::migrate_profile_directory;
 /// Import committed WAL pages without replacing an existing destination.
 /// Referenced artwork is copied into the native profile on backend startup.
 pub fn import_library(source_db: &Path, destination: &Path) -> Result<(), String> {

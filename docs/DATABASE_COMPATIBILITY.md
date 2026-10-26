@@ -4,6 +4,15 @@ Orca upgrades old libraries on startup. A successful migration must preserve
 playlists, settings, and metadata, and it must be transactional. Test upgrades
 with disposable copies of older databases; never test against a user's library.
 
+On Windows, 0.1.8 uses `%LOCALAPPDATA%\Orca` as its stable profile directory.
+It moves an existing 0.1.7 native profile from
+`%LOCALAPPDATA%\OrcaSlintTauri` on first launch, then updates stored local
+artwork and settings paths. A direct upgrade from the 0.1.6 Tauri app still
+imports `%APPDATA%\orca\orca.db` when no native library exists. If both native
+profile directories contain libraries before migration, the 0.1.7 native
+library takes priority and the existing new folder is retained as an automatic
+backup. Once the new profile is marked migrated, subsequent releases reuse it.
+
 `PRAGMA user_version` is the minimum schema version a reader must support. The
 released native app supports version 2. Compatible additions, such as the
 `liked_songs` table, retain version 2 because that app can safely ignore them.

@@ -309,7 +309,6 @@ pub(crate) fn install_keyboard(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<Requ
             "q" if !alt => {
                 s.set_queue_open(!s.get_queue_open());
                 if s.get_queue_open() {
-                    s.set_lyrics_open(false);
                     s.set_playlist_picker_open(false);
                     let _ = tx.send(Request::Command(PlayerAction::QueuePreview));
                 }

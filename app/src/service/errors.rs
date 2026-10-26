@@ -14,7 +14,11 @@ pub(crate) fn operation(error: &orca_services::operation_types::OperationError) 
 }
 pub fn friendly(error: &str) -> String {
     let lower = error.to_lowercase();
-    if lower.starts_with("library folder is unavailable") {
+    if lower.starts_with("could not move the existing orca profile") {
+        "Orca could not move your existing profile. Close other Orca windows and try again. Your library was left in its original folder.".into()
+    } else if lower.starts_with("could not back up the existing orca profile") {
+        "Orca could not back up the existing profile folder. Close other Orca windows and try again.".into()
+    } else if lower.starts_with("library folder is unavailable") {
         "This music folder is unavailable. Reconnect it, or remove it in Settings > Library.".into()
     } else if lower.starts_with("collection edit stopped")
         || lower.starts_with("a collection with this name")

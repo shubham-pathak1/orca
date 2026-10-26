@@ -7,6 +7,7 @@ mod folders;
 mod lyrics;
 mod metadata;
 mod playlists;
+mod profile_migration;
 mod recovery;
 mod scanning;
 

@@ -275,7 +275,7 @@ export component CatalogDetails inherits Rectangle {
                 Text {text:AppState.detail-summary;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.6275) : 0.6275);font-size:14px;overflow:elide;}
                 HorizontalLayout {alignment:start;spacing:8px;
                     IconButton {label:"Play";icon:Icons.play;primary:true;round:true;width:44px;height:44px;clicked=>{AppState.command("play-context",0);}}
-                    IconButton {label:"Add to queue";icon:Icons.addQueue;outlined:true;round:true;width:44px;height:44px;clicked=>{AppState.queue-open=true;AppState.lyrics-open=false;AppState.command("queue-context",0);}}
+                    IconButton {label:"Add to queue";icon:Icons.addQueue;outlined:true;round:true;width:44px;height:44px;clicked=>{AppState.queue-open=true;AppState.command("queue-context",0);}}
                     if AppState.view!="playlists" || AppState.detail-key!="liked": IconButton {label:"Edit details";icon:Icons.edit;outlined:true;round:true;clicked=>{AppState.collection-action("name");}}
                     if !AppState.browse-artwork: IconButton {label:"Change cover";icon:Icons.folderPlus;outlined:true;round:true;clicked=>{AppState.collection-action("cover");}}
                 }
