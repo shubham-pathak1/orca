@@ -68,8 +68,8 @@ try {
 Extract the ZIP and open Orca.exe. Add music folders in Settings.
 Song metadata and cover edits write your audio files. Collection name edits
 update matching song tags; collection covers and playlists stay in Orca.
-Close Orca before upgrading. Version 0.1.8 automatically moves an existing
-%LOCALAPPDATA%\OrcaSlintTauri profile to %LOCALAPPDATA%\Orca on first launch.
+Close Orca before upgrading. Version 0.1.8 automatically moves your existing
+library, playlists, artwork and settings to its permanent data folder.
 Later releases reuse that folder.
 Extract newer builds into a separate directory; your profile is reused.
 Software rendering is the default; Orca.exe --gpu selects GPU rendering.
