@@ -358,13 +358,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
     controllers::folders::install(&ui, service.tx.clone());
+    let catalog_scroll = Rc::new(RefCell::new(None::<(String, f32)>));
     {
         let weak = ui.as_weak();
         let header_art = detail_art.clone();
         let header_albums = related.clone();
+        let catalog_scroll = catalog_scroll.clone();
         state.on_open_group(move |key, secondary, title| {
             if let Some(ui) = weak.upgrade() {
                 let s = ui.global::<AppState>();
+                if s.get_detail_key().is_empty() {
+                    *catalog_scroll.borrow_mut() =
+                        Some((s.get_view().to_string(), s.get_catalog_scroll_y()));
+                }
                 header_art.borrow_mut().0.clear();
                 header_art.borrow_mut().1.clear();
                 header_albums.groups.borrow_mut().clear();
@@ -383,6 +389,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     {
         let weak = ui.as_weak();
+        let catalog_scroll = catalog_scroll.clone();
         state.on_go_back(move || {
             if let Some(ui) = weak.upgrade() {
                 let s = ui.global::<AppState>();
@@ -406,6 +413,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     s.set_detail_key("".into());
                     s.set_detail_secondary("".into());
+                    s.set_catalog_scroll_restore_pending(false);
+                    if let Some((view, position)) = catalog_scroll.borrow().as_ref() {
+                        if view == s.get_view().as_str() {
+                            s.set_catalog_scroll_target(*position);
+                            s.set_catalog_scroll_restore_pending(true);
+                        }
+                    }
                 }
                 s.set_search("".into());
                 s.invoke_browse();

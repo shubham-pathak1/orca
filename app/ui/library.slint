@@ -132,8 +132,13 @@ component RelatedAlbumsGrid inherits Rectangle {
 
 export component CatalogView inherits Rectangle {
     motion:=ScrollMotion {offset<=>list.content-y;minimum:-max(0px,list.content-height - list.height);page:list.height;}
+    private property<string> current-view:AppState.view;
+    changed current-view=>{motion.snap(0px);}
     list:=ListView {x:0px;y:0px;width:AppState.view=="folders" ? parent.width : parent.width - 44px;height:parent.height;
     horizontal-scrollbar-policy:always-off;vertical-scrollbar-policy:always-off;
+    changed content-y=>{if AppState.detail-key=="" {AppState.catalog-scroll-y=self.content-y/1px;}}
+    private property<int> restore-revision:AppState.catalog-scroll-restore-revision;
+    changed restore-revision=>{if AppState.detail-key=="" {motion.snap(AppState.catalog-scroll-target*1px);}}
     private property<int> jump-revision:AppState.jump-revision;
     changed jump-revision=>{motion.snap(-clamp(floor(AppState.jump-index/max(1,AppState.group-columns))*self.content-height/max(1,AppState.group-grid.length),0px,max(0px,self.content-height - self.height)));}
     for row in AppState.group-grid: HorizontalLayout {

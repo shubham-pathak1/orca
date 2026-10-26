@@ -126,6 +126,21 @@ pub(super) fn apply(
                 *groups.groups.borrow_mut() = rows;
                 groups.reset();
                 artwork_epoch.set(artwork_epoch.get().wrapping_add(1));
+                if s.get_catalog_scroll_restore_pending() && s.get_detail_key().is_empty() {
+                    s.set_catalog_scroll_restore_pending(false);
+                    let weak = ui.as_weak();
+                    let view = s.get_view();
+                    slint::Timer::single_shot(Duration::from_millis(16), move || {
+                        if let Some(ui) = weak.upgrade() {
+                            let state = ui.global::<AppState>();
+                            if state.get_detail_key().is_empty() && state.get_view() == view {
+                                state.set_catalog_scroll_restore_revision(
+                                    state.get_catalog_scroll_restore_revision().wrapping_add(1),
+                                );
+                            }
+                        }
+                    });
+                }
             }
             Event::Statistics(stats) => {
                 s.set_summary(
@@ -407,7 +422,9 @@ pub(super) fn apply(
                 } else if result == crate::protocol::PlaylistChange::Renamed {
                     s.set_detail_title(s.get_playlist_name());
                     s.invoke_browse();
-                } else {
+                } else if result != crate::protocol::PlaylistChange::Membership
+                    || s.get_view() == "playlists"
+                {
                     s.invoke_browse();
                 }
             }

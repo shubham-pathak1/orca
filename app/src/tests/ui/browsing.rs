@@ -175,6 +175,43 @@ pub(super) fn verify(case: &mut UiCase) {
             *pixels, before,
             "{view} overview must respond to wheel scrolling"
         );
+        let scrolled_pixel = pixels[150 * 1280 + 100];
+        let previous_scroll = state.get_catalog_scroll_y();
+        assert!(
+            previous_scroll < 0.0,
+            "{view} should record its scroll position"
+        );
+        state.set_detail_key(format!("{view}-0-0").into());
+        window.draw_if_needed(|renderer| {
+            renderer.render(pixels, 1280);
+        });
+        state.set_detail_key("".into());
+        window.draw_if_needed(|renderer| {
+            renderer.render(pixels, 1280);
+        });
+        state.set_catalog_scroll_target(previous_scroll);
+        state.set_catalog_scroll_restore_revision(
+            state.get_catalog_scroll_restore_revision().wrapping_add(1),
+        );
+        window.draw_if_needed(|renderer| {
+            renderer.render(pixels, 1280);
+        });
+        std::thread::sleep(Duration::from_millis(20));
+        slint::platform::update_timers_and_animations();
+        window.draw_if_needed(|renderer| {
+            renderer.render(pixels, 1280);
+        });
+        screenshot(pixels, &format!("catalog-return-{view}"));
+        assert!(
+            (state.get_catalog_scroll_y() - previous_scroll).abs() < 1.0,
+            "{view} should return to the previous scroll position: before {previous_scroll}, after {}",
+            state.get_catalog_scroll_y()
+        );
+        assert_eq!(
+            pixels[150 * 1280 + 100],
+            scrolled_pixel,
+            "{view} should show the same row after returning"
+        );
     }
     state.set_view("songs".into());
 }

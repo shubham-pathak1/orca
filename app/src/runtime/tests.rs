@@ -52,6 +52,27 @@ pub(crate) fn verify_completions(ui: &OrcaWindow) {
     let browses = Rc::new(Cell::new(0));
     let counter = browses.clone();
     state.on_browse(move || counter.set(counter.get() + 1));
+    state.set_view("songs".into());
+    events
+        .send(Event::PlaylistChanged(
+            crate::protocol::PlaylistChange::Membership,
+        ))
+        .unwrap();
+    events::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
+    assert_eq!(
+        browses.get(),
+        0,
+        "liking a song must not reload the library"
+    );
+    state.set_view("playlists".into());
+    events
+        .send(Event::PlaylistChanged(
+            crate::protocol::PlaylistChange::Membership,
+        ))
+        .unwrap();
+    events::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
+    assert_eq!(browses.get(), 1, "liked playlists must still update");
+    state.set_view("songs".into());
     // Test completion ownership, without timing a large asset decode in debug.
     let fixture = std::env::temp_dir().join(format!(
         "orca-runtime-completion-{}.png",
@@ -76,7 +97,7 @@ pub(crate) fn verify_completions(ui: &OrcaWindow) {
         before,
         "automatic completion must retain decoded covers"
     );
-    assert_eq!(browses.get(), 1);
+    assert_eq!(browses.get(), 2);
     assert!(matches!(
         requests.try_recv().unwrap(),
         crate::protocol::Request::Reconcile
