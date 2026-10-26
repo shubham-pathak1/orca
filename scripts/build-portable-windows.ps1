@@ -16,7 +16,7 @@ try {
     if (-not $dumpbin) { throw 'The x64 MSVC dependency inspector was not found.' }
     # An explicit target keeps static CRT flags away from host build scripts and procedural macros.
     $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS = '-C target-feature=+crt-static'
-    & cargo build --release --locked --offline --features gpu --target x86_64-pc-windows-msvc --manifest-path app/Cargo.toml --target-dir target/slint --jobs 2
+    & cargo build --release --locked --offline --target x86_64-pc-windows-msvc --manifest-path app/Cargo.toml --target-dir target/slint --jobs 2
     if ($LASTEXITCODE -ne 0) { throw 'Standalone portable compilation failed.' }
     $executable = Join-Path $repoRoot 'target/slint/x86_64-pc-windows-msvc/release/orca-slint.exe'
     $dependencies = & $dumpbin.FullName /DEPENDENTS $executable

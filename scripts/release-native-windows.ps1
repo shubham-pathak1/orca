@@ -50,7 +50,7 @@ try {
             if ($LASTEXITCODE -ne 0) { throw "Tests failed: $project" }
         }
     }
-    & cargo build --release --locked --offline --features gpu --manifest-path app/Cargo.toml --target-dir target/slint --jobs 2
+    & cargo build --release --locked --offline --manifest-path app/Cargo.toml --target-dir target/slint --jobs 2
     if ($LASTEXITCODE -ne 0) { throw 'Native release compilation failed.' }
     $executable = Join-Path $repoRoot 'target/slint/release/orca-slint.exe'
     $actualVersion = (Get-Item -LiteralPath $executable).VersionInfo.ProductVersion
@@ -72,7 +72,7 @@ Close Orca before upgrading. Version 0.1.8 automatically moves your existing
 library, playlists, artwork and settings to its permanent data folder.
 Later releases reuse that folder.
 Extract newer builds into a separate directory; your profile is reused.
-Software rendering is the default; Orca.exe --gpu selects GPU rendering.
+Orca uses software rendering.
 Keep the included Microsoft Visual C++ runtime DLL beside Orca.exe.
 Release notes: https://github.com/shubham-pathak1/orca/releases
 Report issues: https://github.com/shubham-pathak1/orca/issues
@@ -83,7 +83,7 @@ Report issues: https://github.com/shubham-pathak1/orca/issues
     [ordered]@{
         version = $nativeVersion; platform = 'windows-x64'; frontend = 'slint';
         commit = "$commit"; uncommittedChanges = $dirty; compiler = "$compiler";
-        builtUtc = [DateTime]::UtcNow.ToString('o'); rendererDefault = 'software'; features = @('gpu')
+        builtUtc = [DateTime]::UtcNow.ToString('o'); rendererDefault = 'software'; features = @()
     } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $package 'BUILD-INFO.json') -Encoding UTF8
     $exeHash = (Get-FileHash -LiteralPath (Join-Path $package 'Orca.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
     $runtimeHash = (Get-FileHash -LiteralPath (Join-Path $package 'vcruntime140.dll') -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -110,7 +110,6 @@ Report issues: https://github.com/shubham-pathak1/orca/issues
         Write-Output "Ready: $installer"
     }
     $checksums | Set-Content -LiteralPath (Join-Path $releaseRoot 'SHA256SUMS.txt') -Encoding ASCII
-    & (Join-Path $PSScriptRoot 'build-portable-windows.ps1')
     Write-Output "Ready: $archive"
     Write-Output "SHA256: $archiveHash"
     if ($dirty) { Write-Output 'BUILD-INFO records local uncommitted changes. Commit/tag the reviewed source before publishing.' }
