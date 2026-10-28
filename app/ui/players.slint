@@ -70,7 +70,7 @@ export component PlayerBar inherits Rectangle {
                             Text {width:parent.width;height:18px*AppState.scale;text:AppState.now.album;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.7216) : 0.7216);font-size:12px*AppState.scale;overflow:elide;
                                 TouchArea {clicked=>{AppState.unfocus();AppState.view="albums";AppState.open-group(AppState.now.album,AppState.now.album-artist,AppState.now.album);}}}}
                     }
-                    if AppState.quality-info: Text {x:0px;y:39px*AppState.scale;width:parent.width;height:13px*AppState.scale;text:AppState.now.quality;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.7216) : 0.7216);font-size:10px*AppState.scale;overflow:elide;}
+                    if AppState.quality-info: Text {x:0px;y:39px*AppState.scale;width:parent.width;height:13px*AppState.scale;text:AppState.now.quality;color:AppState.secondary-ink;font-size:11px*AppState.scale;font-weight:600;overflow:elide;}
                 }
             }
         }
@@ -93,7 +93,7 @@ export component PlayerBar inherits Rectangle {
             if AppState.compact-artwork: Rectangle {width:parent.height;height:parent.height;border-radius:3px;clip:true;CoverImage {x:0px;y:0px;width:parent.width;height:parent.height;artwork:AppState.now.cover;missing:AppState.now.cover-missing;image-fit:cover;}TouchArea {clicked=>{AppState.full-player=true;}scroll-event(event)=>{if AppState.player-swipe(event.delta-x/1px,event.delta-y/1px) {return accept;}return reject;}}}
             VerticalLayout {spacing:2px;alignment:center;
                 Text {text:AppState.now.title=="" ? "No track playing" : AppState.now.title;color:AppState.ink;font-size:14px*AppState.scale;font-weight:700;overflow:elide;TouchArea {clicked=>{AppState.unfocus();AppState.full-player=true;}scroll-event(event)=>{if AppState.player-swipe(event.delta-x/1px,event.delta-y/1px) {return accept;}return reject;}}}
-                if AppState.quality-info: Text {text:AppState.now.quality;color:AppState.ink.with-alpha(AppState.light-theme ? 0.65 : 0.72);font-size:10px*AppState.scale;overflow:elide;}
+                if AppState.quality-info: Text {text:AppState.now.quality;color:AppState.secondary-ink;font-size:11px*AppState.scale;font-weight:600;overflow:elide;}
             }
             if AppState.show-liked-songs: IconButton {label:AppState.liked ? "Unlike song" : "Like song";width:28px;height:28px;icon-size:18px;icon:AppState.liked ? Icons.heartFilled : Icons.heart;enabled:AppState.now.id>0;active:AppState.liked;active-icon-only:true;clicked=>{AppState.toggle-like();}}
             IconButton {label:"Add to playlist";width:28px;height:28px;icon-size:18px;icon:Icons.playlistAdd;enabled:AppState.now.id>0;active:AppState.playlist-picker-open;clicked=>{if AppState.playlist-picker-open {AppState.playlist-picker-open=false;} else {AppState.playlist-action("open-current","");AppState.queue-open=false;}}}
@@ -250,7 +250,7 @@ component QualityBadge inherits Rectangle {
     in property<color> ink;
     width:quality-label.preferred-width+18px;height:22px;border-radius:5px;
     border-width:1px;border-color:root.ink.with-alpha(0.18);background:transparent;
-    quality-label:=Text {x:9px;y:0px;height:parent.height;text:root.text;color:root.ink.with-alpha(0.82);font-size:10px*AppState.scale;font-weight:600;vertical-alignment:center;}
+    quality-label:=Text {x:9px;y:0px;height:parent.height;text:root.text;color:root.ink.with-alpha(0.86);font-size:11px*AppState.scale;font-weight:600;vertical-alignment:center;}
 }
 
 export component FullPlayer inherits Rectangle {
@@ -370,7 +370,7 @@ export component QueuePanel inherits Rectangle {
     private property<bool> drag-moved;
 
     Text {x:20px;y:18px;text:"Queue";color:root.ink;font-size:19.52px;font-weight:900;}
-    Text {x:20px;y:44px;text:AppState.shuffle ? "Shuffle is on" : max(0,AppState.queue.length - 1)+" up next";color:root.ink.with-alpha(AppState.light-theme && !(AppState.full-player && AppState.full-player-dark) ? max(0.65,0.4510) : 0.4510);font-size:12px;}
+    Text {x:20px;y:44px;text:AppState.shuffle ? "Shuffle is on" : max(0,AppState.queue.length - 1)+" up next";color:root.ink.with-alpha(0.78);font-size:14px*AppState.scale;font-weight:600;}
     TextButton {layer:root.docked ? "browse" : "queue";dark:AppState.full-player && AppState.full-player-dark;x:parent.width - 128px;y:20px;width:64px;height:36px;text:"Clear";clicked => {AppState.queue-action("clear","","");}}
     IconButton {layer:root.docked ? "browse" : "queue";label:"Close";dark:AppState.full-player && AppState.full-player-dark;x:parent.width - 56px;y:20px;width:36px;height:36px;icon:Icons.close;round:true;outlined:!root.docked;clicked => {AppState.queue-open=false;}}
     queue-list:=ListView {x:12.8px;y:80px;width:parent.width - 25.6px;height:parent.height - 92.8px;horizontal-scrollbar-policy:always-off;
@@ -392,8 +392,8 @@ export component QueuePanel inherits Rectangle {
                 if AppState.browse-artwork: Rectangle {width:48px;height:48px;border-radius:7.68px;clip:true;CoverImage {x:0px;y:0px;width:parent.width;height:parent.height;artwork:song.cover;missing:song.cover-missing;image-fit:cover;}}
                 VerticalLayout {horizontal-stretch:1;spacing:1px;alignment:center;
                     Text {text:song.title;color:root.ink;font-size:14.72px;font-weight:700;overflow:elide;}
-                    Text {text:song.artist;color:root.ink.with-alpha(AppState.light-theme && !(AppState.full-player && AppState.full-player-dark) ? max(0.65,0.4784) : 0.4784);font-size:12.48px;overflow:elide;}}
-                Text {width:48px;horizontal-alignment:right;text:song.duration;color:root.ink.with-alpha(AppState.light-theme && !(AppState.full-player && AppState.full-player-dark) ? max(0.65,0.4784) : 0.4784);font-size:13.44px;vertical-alignment:center;}
+                    Text {text:song.artist;color:root.ink.with-alpha(0.78);font-size:14px*AppState.scale;font-weight:600;overflow:elide;}}
+                Text {width:48px;horizontal-alignment:right;text:song.duration;color:root.ink.with-alpha(0.78);font-size:14px*AppState.scale;font-weight:600;vertical-alignment:center;}
             }
             pointer := TouchArea {
                 moved=> {if self.pressed && abs(self.mouse-y/1px - root.drag-origin)>5 {root.drag-moved=true;}}

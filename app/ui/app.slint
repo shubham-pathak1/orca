@@ -83,7 +83,7 @@ export component OrcaWindow inherits Window {
                     }
                 }
             }
-            Text {x:0px;y:32px;visible:AppState.detail-key=="";height:20px;text:AppState.view=="settings" ? "Tune Orca for the way you listen" : AppState.view=="songs" ? AppState.summary : AppState.catalog-summary;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.4000) : 0.4000);font-size:12px*AppState.scale;}
+            Text {x:0px;y:32px;visible:AppState.detail-key=="";height:20px;text:AppState.view=="settings" ? "Tune Orca for the way you listen" : AppState.view=="songs" ? AppState.summary : AppState.catalog-summary;color:AppState.secondary-ink;font-size:14px*AppState.scale;font-weight:600;}
             search := SearchField {
                 y:root.compact ? 64px : 0px;
                 visible:AppState.detail-key=="";

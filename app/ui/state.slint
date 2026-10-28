@@ -29,6 +29,7 @@ export global AppState {
     in-out property<bool> light-theme:false;
     out property<bool> full-player-dark:!light-theme || full-player-background!="off";
     out property<color> ink:light-theme ? #242321 : white;
+    out property<color> secondary-ink:ink.with-alpha(0.78);
     out property<color> inverse-ink:light-theme ? #FCFBF7 : black;
     out property<color> base:light-theme ? #FCFBF7 : #090a0c;
     out property<color> panel:light-theme ? #F3F1EA : #141414;
