@@ -244,8 +244,8 @@ export component SeekBar inherits Rectangle {
     }
 }
 
-// Let the renderer pace short wheel animations.
-// Precise touchpad deltas and large jumps remain direct.
+// Linear interpolation avoids an ease-out pulse on each wheel step.
+// Deltas up to 8px and large jumps apply directly.
 export component ScrollMotion inherits Rectangle {
     width:0px;height:0px;
     in-out property<length> offset;
@@ -254,13 +254,13 @@ export component ScrollMotion inherits Rectangle {
     in property<length> page:500px;
     private property<length> target;
     private property<bool> eased;
-    animate offset {duration:root.eased && !AppState.window-hidden ? 100ms : 0ms;easing:ease-out;}
+    animate offset {duration:root.eased && !AppState.window-hidden ? 100ms : 0ms;easing:linear;}
     public function snap(value:length) {self.eased=false;self.target=clamp(value,self.minimum,self.maximum);self.offset=self.target;}
     public function nudge(delta:length) {
         let reversing=(delta>0px && self.target<self.offset) || (delta<0px && self.target>self.offset);
         let base=self.eased && !reversing ? self.target : self.offset;
         self.target=clamp(base+delta,self.minimum,self.maximum);
-        self.eased=abs(delta)>=2px && abs(delta)<self.page*0.5;
+        self.eased=abs(delta)>8px && abs(delta)<self.page*0.5;
         self.offset=self.target;
     }
 }

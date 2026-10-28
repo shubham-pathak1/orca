@@ -92,6 +92,31 @@ pub(super) fn verify(case: &mut UiCase) {
         initial_red > intermediate_red && intermediate_red > final_red,
         "small wheel input must move through an intermediate frame before settling"
     );
+    for delta in [-1.8, -2.2] {
+        window.dispatch_event(WindowEvent::PointerScrolled {
+            position: slint::LogicalPosition::new(100.0, 150.0),
+            delta_x: 0.0,
+            delta_y: delta,
+        });
+        window.draw_if_needed(|renderer| {
+            renderer.render(pixels, 1280);
+        });
+    }
+    let precise_red = red_height(pixels);
+    assert!(
+        (3..=5).contains(&(final_red - precise_red)),
+        "fine input crossing 2px must apply the complete distance immediately"
+    );
+    let precise_settled = pixels.clone();
+    std::thread::sleep(Duration::from_millis(110));
+    slint::platform::update_timers_and_animations();
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    assert_eq!(
+        *pixels, precise_settled,
+        "fine input must not leave a trailing animation"
+    );
     window.dispatch_event(WindowEvent::PointerScrolled {
         position: slint::LogicalPosition::new(100.0, 150.0),
         delta_x: 0.0,
