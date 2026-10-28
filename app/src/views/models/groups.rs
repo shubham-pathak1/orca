@@ -12,6 +12,25 @@ pub struct GroupGrid {
     pub edge: Cell<u32>,
 }
 impl GroupGrid {
+    pub fn visible_collections(
+        &self,
+        kind: orca_services::operation_types::CollectionKind,
+    ) -> Vec<orca_services::operation_types::CollectionIdentity> {
+        let groups = self.groups.borrow();
+        let columns = self.columns.get().max(1);
+        self.visible_rows
+            .borrow()
+            .iter()
+            .filter(|(_, row)| row.strong_count() > 0)
+            .flat_map(|(&row, _)| groups.iter().skip(row * columns).take(columns))
+            .take(64)
+            .map(|group| orca_services::operation_types::CollectionIdentity {
+                kind: kind.clone(),
+                key: group.key.clone(),
+                secondary: group.secondary.clone(),
+            })
+            .collect()
+    }
     pub fn reset(&self) {
         self.visible_rows.borrow_mut().clear();
         self.notify.reset();

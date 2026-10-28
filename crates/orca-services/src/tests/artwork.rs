@@ -1,6 +1,193 @@
 use super::*;
 
 #[test]
+fn automatic_artwork_is_scoped_deduplicated_and_local_first() {
+    use operation_types::{ArtworkDemand, CollectionIdentity, CollectionKind, OperationRequest};
+    let fixture = Fixture::new();
+    let backend = fixture.backend();
+    seed(&backend);
+    backend
+        .conn
+        .execute(
+            "UPDATE songs SET artwork_url='embedded-cover.webp' WHERE artist='B'",
+            [],
+        )
+        .unwrap();
+    let id: i64 = backend
+        .conn
+        .query_row("SELECT id FROM songs WHERE artist='A' LIMIT 1", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    let jobs = backend
+        .artwork_demand_jobs(&ArtworkDemand {
+            playing: Some(id),
+            tracks: vec![id, id],
+            collections: vec![CollectionIdentity {
+                kind: CollectionKind::Artists,
+                key: "A".into(),
+                secondary: String::new(),
+            }],
+        })
+        .unwrap();
+    assert_eq!(jobs.len(), 2, "one missing album and one artist, once each");
+    assert!(
+        matches!(&jobs[0], OperationRequest::FetchCoverAuto(fetch) if fetch.kind == CollectionKind::Albums)
+    );
+    assert!(jobs.iter().all(|job| matches!(job, OperationRequest::FetchCoverAuto(fetch) if fetch.artist != "B" && fetch.key != "B")));
+    let covered = backend
+        .artwork_demand_jobs(&ArtworkDemand {
+            collections: vec![CollectionIdentity {
+                kind: CollectionKind::Albums,
+                key: "Shared".into(),
+                secondary: "B".into(),
+            }],
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(
+        covered.is_empty(),
+        "embedded covers must prevent online album lookups"
+    );
+    db::remove_artist_artwork(&backend.conn, "A").unwrap();
+    backend
+        .conn
+        .execute("UPDATE songs SET library_visible=0 WHERE artist='A'", [])
+        .unwrap();
+    assert!(backend
+        .artwork_demand_jobs(&ArtworkDemand {
+            playing: Some(id),
+            tracks: vec![id],
+            ..Default::default()
+        })
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn automatic_artwork_respects_saved_removal_and_rechecks_queued_jobs() {
+    use operation_types::{ArtworkDemand, CollectionIdentity, CollectionKind, OperationResult};
+    let fixture = Fixture::new();
+    let backend = fixture.backend();
+    seed(&backend);
+    let demand = ArtworkDemand {
+        collections: vec![CollectionIdentity {
+            kind: CollectionKind::Artists,
+            key: "A".into(),
+            secondary: String::new(),
+        }],
+        ..Default::default()
+    };
+    let queued = backend.artwork_demand_jobs(&demand).unwrap().pop().unwrap();
+    db::remove_artist_artwork(&backend.conn, "A").unwrap();
+    assert!(backend.artwork_demand_jobs(&demand).unwrap().is_empty());
+    assert!(
+        matches!(
+            backend.execute(&queued).unwrap(),
+            OperationResult::ArtworkSkipped
+        ),
+        "a later manual removal must supersede queued network work"
+    );
+}
+
+#[test]
+fn automatic_artwork_jobs_are_bounded_at_the_service_boundary() {
+    use operation_types::{ArtworkDemand, CollectionIdentity, CollectionKind};
+    let fixture = Fixture::new();
+    let backend = fixture.backend();
+    for index in 0..200 {
+        backend.conn.execute("INSERT INTO songs(path,title,artist,album_artist,album,duration) VALUES(?1,'Track',?2,?2,'Album',1000)", params![format!("{index}.wav"),format!("Artist {index}")]).unwrap();
+    }
+    let jobs = backend
+        .artwork_demand_jobs(&ArtworkDemand {
+            collections: (0..200)
+                .map(|index| CollectionIdentity {
+                    kind: CollectionKind::Artists,
+                    key: format!("Artist {index}"),
+                    secondary: String::new(),
+                })
+                .collect(),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(jobs.len(), 64);
+    backend
+        .conn
+        .execute("UPDATE songs SET artwork_url='embedded.webp'", [])
+        .unwrap();
+    let ids = backend.context_ids(&types::Query::default()).unwrap();
+    let demand = ArtworkDemand {
+        tracks: ids.into_iter().take(80).collect(),
+        ..Default::default()
+    };
+    let first = backend.artwork_demand_jobs(&demand).unwrap();
+    let attempted = first
+        .iter()
+        .map(|job| {
+            let operation_types::OperationRequest::FetchCoverAuto(fetch) = job else {
+                panic!()
+            };
+            CollectionIdentity {
+                kind: fetch.kind.clone(),
+                key: fetch.key.clone(),
+                secondary: fetch.artist.clone(),
+            }
+        })
+        .collect();
+    let next = backend
+        .artwork_demand_jobs_excluding(&demand, &attempted)
+        .unwrap();
+    assert_eq!(
+        (first.len(), next.len()),
+        (64, 16),
+        "later visible collections must not starve behind the first bounded batch"
+    );
+}
+
+#[test]
+fn bulk_artwork_cursor_survives_restart_and_cancellation_without_network() {
+    use operation_types::ArtworkBulkAction;
+    let fixture = Fixture::new();
+    let backend = fixture.backend();
+    for index in 0..160 {
+        let artist = format!("Artist {index:03}");
+        backend.conn.execute("INSERT INTO songs(path,title,artist,album_artist,album,duration,artwork_url) VALUES(?1,'Track',?2,?2,'Album',1000,'embedded.webp')", params![format!("{index}.wav"),artist]).unwrap();
+        db::remove_artist_artwork(&backend.conn, &artist).unwrap();
+    }
+    backend
+        .artwork_bulk_control(&ArtworkBulkAction::Start)
+        .unwrap();
+    let (first, changed) = backend
+        .artwork_bulk_step(&std::sync::atomic::AtomicBool::new(false))
+        .unwrap();
+    assert!(!first.complete && !changed && !first.key.is_empty());
+    let (cancelled, _) = backend
+        .artwork_bulk_step(&std::sync::atomic::AtomicBool::new(true))
+        .unwrap();
+    assert_eq!(first.key, cancelled.key);
+    drop(backend);
+    let backend = fixture.backend();
+    let resumed = backend
+        .artwork_bulk_control(&ArtworkBulkAction::Resume)
+        .unwrap();
+    assert_eq!(resumed.key, first.key);
+    assert!(!resumed.running, "restart must wait for an explicit Resume");
+    let mut finished = false;
+    for _ in 0..10 {
+        let (progress, changed) = backend
+            .artwork_bulk_step(&std::sync::atomic::AtomicBool::new(false))
+            .unwrap();
+        assert!(!changed);
+        assert_eq!(progress.attempted, 0);
+        if progress.complete {
+            finished = true;
+            break;
+        }
+    }
+    assert!(finished);
+}
+
+#[test]
 #[ignore = "contacts artwork providers with a staged edit in a disposable library"]
 fn editor_artwork_uses_current_draft_and_does_not_commit_it() {
     let f = Fixture::new();
@@ -537,7 +724,7 @@ fn collection_editor_uses_full_cover_without_changing_saved_overrides() {
 }
 
 #[test]
-fn removed_artwork_is_eligible_for_refetch_and_new_cover_keeps_display_name() {
+fn removed_artwork_stays_removed_until_a_manual_replacement_and_keeps_display_name() {
     let f = Fixture::new();
     let b = f.backend();
     seed(&b);
@@ -548,21 +735,21 @@ fn removed_artwork_is_eligible_for_refetch_and_new_cover_keeps_display_name() {
         r#"{"action":"collection-edit","kind":"albums","key":"Shared","secondary":"A","cover":""}"#,
     )
     .unwrap();
-    let jobs: serde_json::Value =
-        serde_json::from_str(&b.operation(r#"{"action":"missing-artwork"}"#).unwrap()).unwrap();
-    let jobs = jobs["jobs"].as_array().unwrap();
-    assert_eq!(
-        jobs.iter()
-            .filter(|job| job["kind"] == "artists" && job["key"] == "A")
-            .count(),
-        1
-    );
-    assert_eq!(
-        jobs.iter()
-            .filter(|job| job["kind"] == "albums" && job["key"] == "A:Shared")
-            .count(),
-        1
-    );
+    let jobs = b
+        .artwork_jobs_for_collections([
+            operation_types::CollectionIdentity {
+                kind: operation_types::CollectionKind::Artists,
+                key: "A".into(),
+                secondary: String::new(),
+            },
+            operation_types::CollectionIdentity {
+                kind: operation_types::CollectionKind::Albums,
+                key: "Shared".into(),
+                secondary: "A".into(),
+            },
+        ])
+        .unwrap();
+    assert!(jobs.is_empty());
     // A successful provider result must replace the removal override too.
     db::update_artist_artwork(&b.conn, "A", Some("new.png"), Some("new-thumb.png")).unwrap();
     b.clear_collection_cover_override("artists", "A", "")

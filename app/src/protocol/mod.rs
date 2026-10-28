@@ -30,6 +30,7 @@ pub enum Request {
     Refresh,
     RefreshLyrics,
     Reconcile,
+    ArtworkRefresh(u64, Vec<u32>),
     SourceChanged,
     CollectionDraft(String),
     Queue(QueueAction),
@@ -46,6 +47,7 @@ pub enum Request {
 }
 pub enum Event {
     Page(u64, u32, u32, Vec<Track>),
+    PagesSkipped(u64, Vec<u32>),
     Groups(u64, Vec<Group>),
     Statistics(Statistics),
     FolderChildren {
@@ -57,7 +59,7 @@ pub enum Event {
     },
     Playback(Snapshot),
     Now(Track),
-    GroupGone(String, String, String),
+    GroupGone(u64, String, String, String),
     CollectionDraft(String),
     Queue(Vec<Track>),
     Neighbors(String, Vec<Track>),
@@ -72,6 +74,8 @@ pub enum Event {
     LikedStatus(i64, bool),
     Jump(u64, u32),
     Operation(OperationRequest, OperationResult),
+    CatalogDetail(u64, OperationRequest, OperationResult),
+    CatalogError(u64, String),
     OperationFailed(OperationRequest, OperationError),
     MetadataSaved(String, i32),
     MetadataFailed(i32, String),

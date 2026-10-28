@@ -40,6 +40,11 @@ export global AppState {
     callback phantom();
     in-out property <string> view: "songs";
     in-out property <string> search;
+    in-out property<bool> catalog-loading;
+    in-out property<int> known-artists:-1;
+    in-out property<int> known-albums:-1;
+    in-out property<int> known-genres:-1;
+    in-out property<int> known-playlists:-1;
     in-out property <bool> text-input-focused;
     in-out property <string> sort: "artist";
     in-out property <bool> browse-artwork: true;
@@ -73,6 +78,9 @@ export global AppState {
     in-out property <string> error;
     in-out property<int> song-first;
     in-out property<int> song-end:32;
+    in-out property<int> library-scroll-index;
+    in-out property<float> library-scroll-fraction;
+    in-out property<bool> library-view-restore;
     in-out property <[Song]> songs;
     in-out property <[[Song]]> song-grid;
     in-out property <[[CatalogGroup]]> group-grid;
@@ -113,6 +121,11 @@ export global AppState {
     in-out property <string> full-player-background: "artwork";
     in-out property <bool> gapless: true;
     in-out property <bool> auto-artwork: false;
+    in-out property <bool> artwork-bulk-started: false;
+    in-out property <bool> artwork-bulk-running: false;
+    in-out property <bool> artwork-bulk-complete: false;
+    in-out property <string> artwork-bulk-progress;
+    callback artwork-bulk(string);
     in-out property <bool> icon-sidebar: true;
     in-out property <string> seek-style: "waveform";
     in-out property <int> columns: 6;

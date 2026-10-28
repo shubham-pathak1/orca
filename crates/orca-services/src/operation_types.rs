@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CollectionKind {
     Artists,
@@ -38,12 +38,43 @@ impl TryFrom<&str> for CollectionKind {
         }
     }
 }
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CollectionIdentity {
     pub kind: CollectionKind,
     pub key: String,
     #[serde(default)]
     pub secondary: String,
+}
+/// A replaceable viewport snapshot, not a growing list of network jobs.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ArtworkDemand {
+    pub playing: Option<i64>,
+    pub tracks: Vec<i64>,
+    pub collections: Vec<CollectionIdentity>,
+}
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ArtworkBulkProgress {
+    pub started: bool,
+    pub complete: bool,
+    #[serde(skip)]
+    pub running: bool,
+    #[serde(skip)]
+    pub waiting: bool,
+    #[serde(skip)]
+    pub retry_after_ms: u64,
+    pub attempted: u64,
+    pub found: u64,
+    pub phase: u8,
+    pub key: String,
+    pub secondary: String,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ArtworkBulkAction {
+    Start,
+    Pause,
+    Resume,
+    Status,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CollectionEdit {
@@ -119,7 +150,7 @@ pub enum OperationRequest {
     RemoveSource {
         key: String,
     },
-    MissingArtwork,
+    ArtworkBulk(ArtworkBulkAction),
     ArtistDetail {
         key: String,
         #[serde(default)]
@@ -257,10 +288,6 @@ pub struct SourceRemoved {
     pub removed_paths: Vec<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MissingArtwork {
-    pub jobs: Vec<OperationRequest>,
-}
-#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ArtworkResult {
     pub key: String,
     pub kind: CollectionKind,
@@ -317,7 +344,8 @@ pub enum OperationResult {
     CollectionEdited,
     Sources(Sources),
     SourceRemoved(SourceRemoved),
-    MissingArtwork(MissingArtwork),
+    ArtworkSkipped,
+    ArtworkBulk(ArtworkBulkProgress),
     Detail(CollectionDetail),
     Songs(Songs),
     Artwork(ArtworkResult),
@@ -362,7 +390,7 @@ mod tests {
             secondary: String::new()
         }
         .is_local_read());
-        assert!(!OperationRequest::MissingArtwork.is_local_read());
+        assert!(!OperationRequest::ArtworkBulk(ArtworkBulkAction::Start).is_local_read());
         assert!(!OperationRequest::RemoveSource {
             key: "music".into()
         }

@@ -36,8 +36,8 @@ struct Entry {
     accent: [u8; 3],
 }
 
-// The model holds paths, not decoded images. Only visible delegates request
-// artwork, and the cache owns a bounded number of decoded buffers.
+// Track metadata retains artwork paths. Visible delegates hold image handles;
+// the cache separately bounds retained buffers and queues nearby prefetch work.
 pub struct ArtworkCache {
     entries: HashMap<Key, Entry>,
     failures: HashMap<String, usize>,
@@ -196,7 +196,9 @@ impl ArtworkCache {
         }
     }
     fn grid_key(&self, path: &str, tiles: &[String], edge: u32, landscape: bool) -> Key {
-        let edge = edge.clamp(8, 1024);
+        // Nearby card sizes share a bitmap. Round upward within the supported
+        // size range so bucketing does not undershoot the requested edge.
+        let edge = edge.clamp(8, 1024).div_ceil(32) * 32;
         Key {
             path: if tiles.len() > 1 {
                 "genre-collage".into()
@@ -255,15 +257,25 @@ impl ArtworkCache {
         if path.is_empty() {
             return Image::default();
         }
-        self.request_key(Key {
+        self.request_key(self.cover_key(path, edge, radius, false))
+    }
+    fn cover_key(&self, path: &str, edge: u32, radius: u32, player: bool) -> Key {
+        let circle = !player && radius > 0 && radius >= edge / 2 && edge > 0;
+        let quantum = if edge <= 96 { 8 } else { 32 };
+        let edge = if circle {
+            edge.clamp(8, 1024).div_ceil(quantum) * quantum
+        } else {
+            edge.clamp(8, 1024)
+        };
+        Key {
             path: path.into(),
             tiles: vec![],
-            edge: edge.clamp(8, 1024),
-            height: 0,
-            radius,
+            edge,
+            height: if player { edge } else { 0 },
+            radius: if circle { edge / 2 } else { radius },
             backdrop: false,
             revision: self.revision,
-        })
+        }
     }
     pub fn panel_backdrop(&mut self, path: &str, width: u32, height: u32, radius: u32) -> Image {
         if path.is_empty() {
@@ -301,15 +313,7 @@ impl ArtworkCache {
         }
     }
     pub fn prefetch_cover(&mut self, path: &str, edge: u32, radius: u32, player: bool) {
-        self.prefetch_key(Key {
-            path: path.into(),
-            tiles: vec![],
-            edge: edge.clamp(8, 1024),
-            height: if player { edge.clamp(8, 1024) } else { 0 },
-            radius,
-            backdrop: false,
-            revision: self.revision,
-        });
+        self.prefetch_key(self.cover_key(path, edge, radius, player));
     }
     pub fn prefetch_backdrop(&mut self, path: &str, width: u32, height: u32, radius: u32) {
         let factor = (2048.0 / width.max(height).max(1) as f32).min(1.0);

@@ -1,13 +1,20 @@
 //! Visible artwork ownership and speculative prefetch policy, separate from rendering.
 use super::RuntimeModels;
 use crate::{AppState, OrcaWindow};
+use orca_services::operation_types::{ArtworkDemand, CollectionIdentity, CollectionKind};
 use slint::ComponentHandle;
-use std::cell::Cell;
+use std::{
+    cell::{Cell, RefCell},
+    time::{Duration, Instant},
+};
 type RangeSignature = (u64, u64, usize, usize, u32);
 type SongSignature = (u64, u64, usize, usize, u32, bool);
 type NeighborSignature = (u64, u32, u32, u32, bool, bool);
 #[derive(Default)]
 pub(super) struct ArtworkSchedule {
+    online_tick: Cell<Option<Instant>>,
+    online_candidate: RefCell<Option<(ArtworkDemand, Instant)>>,
+    online_sent: RefCell<Option<ArtworkDemand>>,
     song_warm: Cell<Option<SongSignature>>,
     catalog_warm: Cell<Option<RangeSignature>>,
     related_warm: Cell<Option<RangeSignature>>,
@@ -201,5 +208,94 @@ pub(super) fn tick(
         schedule.neighbor_warm.set(None);
     }
     cache.borrow_mut().retain_requests(&wanted_art);
+    online_artwork(ui, models, schedule);
     collection_draft
+}
+
+fn online_artwork(ui: &OrcaWindow, models: &RuntimeModels, schedule: &ArtworkSchedule) {
+    let state = ui.global::<AppState>();
+    let playing =
+        (state.get_auto_artwork() && models.now.borrow().id > 0).then_some(models.now.borrow().id);
+    let track_changed = schedule
+        .online_sent
+        .borrow()
+        .as_ref()
+        .is_none_or(|sent| sent.playing != playing);
+    if !track_changed
+        && schedule
+            .online_tick
+            .get()
+            .is_some_and(|at| at.elapsed() < Duration::from_millis(200))
+    {
+        return;
+    }
+    schedule.online_tick.set(Some(Instant::now()));
+    let mut demand = ArtworkDemand::default();
+    if state.get_auto_artwork() {
+        demand.playing = playing;
+        if !state.get_window_hidden()
+            && !state.get_full_player()
+            && state.get_view() != "settings"
+            && !state.get_catalog_loading()
+        {
+            if state.get_view() == "songs" && state.get_grid() && state.get_detail_key().is_empty()
+            {
+                let columns = models.grid.columns.get().max(1);
+                demand.tracks = models.tracks.visible_ids(
+                    models
+                        .grid
+                        .visible_rows
+                        .borrow()
+                        .iter()
+                        .filter(|(_, row)| row.strong_count() > 0)
+                        .flat_map(|(&row, _)| row * columns..(row + 1) * columns),
+                );
+            } else if state.get_view() == "songs" || !state.get_detail_key().is_empty() {
+                demand.tracks = models.tracks.visible_ids(
+                    state.get_song_first().max(0) as usize..state.get_song_end().max(0) as usize,
+                );
+            }
+            if let Ok(kind @ (CollectionKind::Artists | CollectionKind::Albums)) =
+                CollectionKind::try_from(state.get_view().as_str())
+            {
+                if state.get_detail_key().is_empty() {
+                    demand.collections = models.groups.visible_collections(kind);
+                } else {
+                    demand.collections.push(CollectionIdentity {
+                        kind,
+                        key: state.get_detail_key().into(),
+                        secondary: state.get_detail_secondary().into(),
+                    });
+                }
+            }
+            demand
+                .collections
+                .extend(models.related.visible_collections(CollectionKind::Albums));
+        }
+    }
+    demand.tracks.sort_unstable();
+    demand.tracks.dedup();
+    demand.collections.sort_by(|a, b| {
+        (a.kind.as_str(), &a.key, &a.secondary).cmp(&(b.kind.as_str(), &b.key, &b.secondary))
+    });
+    demand.collections.dedup();
+    demand.collections.truncate(64);
+    if schedule.online_sent.borrow().as_ref() == Some(&demand) {
+        *schedule.online_candidate.borrow_mut() = None;
+        return;
+    }
+    let mut candidate = schedule.online_candidate.borrow_mut();
+    if candidate
+        .as_ref()
+        .is_none_or(|(current, _)| current != &demand)
+    {
+        *candidate = Some((demand.clone(), Instant::now()));
+    }
+    if track_changed
+        || !state.get_auto_artwork()
+        || candidate.as_ref().unwrap().1.elapsed() >= Duration::from_millis(400)
+    {
+        models.service.artwork_demand.submit(demand.clone());
+        *schedule.online_sent.borrow_mut() = Some(demand);
+    }
 }

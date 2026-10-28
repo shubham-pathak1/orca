@@ -77,7 +77,7 @@ fn build_song(
         explicit: track.explicit,
         cover_missing,
         cover: if thumbnail {
-            // Exact physical size avoids another resize in the software renderer.
+            // Prepare list thumbnails at the physical row-cover size.
             cache
                 .borrow_mut()
                 .rounded(path, edge, (edge / 32).clamp(1, 12))
@@ -104,6 +104,14 @@ pub struct Tracks {
     tx: Sender<Request>,
 }
 impl Tracks {
+    pub fn clear(&self, generation: u64) {
+        self.rows.borrow_mut().clear();
+        self.text_rows.borrow_mut().clear();
+        self.pages.borrow_mut().clear();
+        self.pending.borrow_mut().clear();
+        self.generation.set(generation);
+        self.count.set(0);
+    }
     pub fn new(tx: Sender<Request>, cache: Rc<RefCell<ArtworkCache>>) -> Self {
         Self {
             artwork: Cell::new(true),
@@ -145,6 +153,15 @@ impl Tracks {
                 .borrow_mut()
                 .insert(offset + index, text_song(&track, offset + index));
             self.rows.borrow_mut().insert(offset + index, track);
+        }
+    }
+    pub fn discard_pages(&self, generation: u64, offsets: &[u32]) {
+        if self.generation.get() != generation {
+            return;
+        }
+        let mut pending = self.pending.borrow_mut();
+        for offset in offsets {
+            pending.remove(&(*offset as usize));
         }
     }
     pub fn row(&self, index: usize, edge: u32, grid: bool) -> Song {
@@ -192,6 +209,13 @@ impl Tracks {
             }
         }
     }
+    pub fn visible_ids(&self, indices: impl Iterator<Item = usize>) -> Vec<i64> {
+        let rows = self.rows.borrow();
+        indices
+            .filter_map(|index| rows.get(&index).map(|track| track.id))
+            .take(128)
+            .collect()
+    }
     pub fn prefetch_range(&self, start: usize, end: usize, edge: u32, grid: bool) {
         if !self.artwork.get() {
             return;
@@ -200,16 +224,16 @@ impl Tracks {
         let mut cache = self.cache.borrow_mut();
         for index in start..end.min(self.count.get()) {
             if let Some(track) = rows.get(&index) {
-                cache.prefetch_cover(
-                    artwork_path(track, !grid),
-                    edge,
-                    if grid {
-                        (edge / 64).clamp(1, 8)
-                    } else {
-                        (edge / 32).clamp(1, 12)
-                    },
-                    false,
-                );
+                if grid {
+                    cache.prefetch_grid_cover(artwork_path(track, false), edge, false);
+                } else {
+                    cache.prefetch_cover(
+                        artwork_path(track, true),
+                        edge,
+                        (edge / 32).clamp(1, 12),
+                        false,
+                    );
+                }
             } else {
                 let offset = index / 128 * 128;
                 if self.pending.borrow_mut().insert(offset) {

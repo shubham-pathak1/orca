@@ -195,6 +195,14 @@ fn pending_reloads_do_not_clear_already_visible_grid_covers() {
     assert_eq!(row.row_data(0).unwrap().cover.size().width, 160);
     grid.artwork_changed(&[0]);
     assert_eq!(row.row_data(0).unwrap().cover.size().width, 160);
+    let unchanged = grid.store.rows.borrow().get(&0).unwrap().clone();
+    grid.store.apply(2, 0, 1, vec![unchanged]);
+    let _ = grid.row_data(0);
+    assert_eq!(
+        row.row_data(0).unwrap().cover.size().width,
+        160,
+        "an unchanged result must retain its cover across search generations"
+    );
     drop(model);
     drop(row);
     grid.artwork_changed(&[]);

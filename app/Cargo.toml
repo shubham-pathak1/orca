@@ -12,7 +12,7 @@ gpu = ["slint/renderer-femtovg"]
 [dependencies]
 slint = { version = "=1.18.1", default-features = false, features = ["std", "backend-winit", "renderer-software", "accessibility", "compat-1-2", "unstable-fontique-011", "system-tray", "raw-window-handle-06"] }
 orca-services = { path = "../crates/orca-services" }
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 rfd = "0.15"

@@ -6,7 +6,7 @@ pub(super) fn verify(case: &mut UiCase) {
     let state = ui.global::<AppState>();
     let pixels = &mut case.pixels;
     let songs = &case.songs;
-    // Wheel input updates the grid in the next frame, without an animation tail.
+    // Coarse wheel steps glide; fine deltas and large jumps remain direct.
     let fixture = |color: [u8; 4]| {
         slint::Image::from_rgba8(
             slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
@@ -129,8 +129,8 @@ pub(super) fn verify(case: &mut UiCase) {
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
-    // Every catalog overview must respond to wheel input through the same
-    // virtualized native scrolling path, including compact artist/playlist rows.
+    // Catalog overviews share wheel handling and virtualized rows, including
+    // compact artist and playlist entries.
     for view in ["artists", "albums", "genres", "playlists"] {
         state.set_view(view.into());
         state.set_group_columns(6);
@@ -213,5 +213,111 @@ pub(super) fn verify(case: &mut UiCase) {
             "{view} should show the same row after returning"
         );
     }
+    let saved_songs = state.get_songs();
+    let saved_grid = state.get_song_grid();
+    let saved_groups = state.get_group_grid();
+    state.set_view("songs".into());
+    state.set_grid(true);
+    state.set_library_view_restore(false);
+    let library: Vec<Song> = (0..600)
+        .map(|index| Song {
+            path: format!("position-{index}").into(),
+            title: format!("Song {index}").into(),
+            ..Default::default()
+        })
+        .collect();
+    state.set_songs(Rc::new(VecModel::from(library.clone())).into());
+    state.set_song_grid(
+        Rc::new(VecModel::from(
+            library
+                .chunks(6)
+                .map(|chunk| Rc::new(VecModel::from(chunk.to_vec())).into())
+                .collect::<Vec<slint::ModelRc<Song>>>(),
+        ))
+        .into(),
+    );
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    std::thread::sleep(Duration::from_millis(20));
+    slint::platform::update_timers_and_animations();
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    state.set_jump_index(180);
+    state.set_jump_revision(state.get_jump_revision().wrapping_add(1));
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    std::thread::sleep(Duration::from_millis(20));
+    slint::platform::update_timers_and_animations();
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    let anchor = state.get_library_scroll_index();
+    screenshot(pixels, "library-anchor-before-switch");
+    assert!(
+        anchor >= 174,
+        "grid should record a song anchor after jumping, got {anchor}"
+    );
+    for grid in [false, true] {
+        state.set_library_view_restore(true);
+        state.set_grid(grid);
+        window.draw_if_needed(|renderer| {
+            renderer.render(pixels, 1280);
+        });
+        std::thread::sleep(Duration::from_millis(25));
+        slint::platform::update_timers_and_animations();
+        window.draw_if_needed(|renderer| {
+            renderer.render(pixels, 1280);
+        });
+        assert!(
+            (state.get_library_scroll_index() - anchor).abs() < 6,
+            "switching list/grid must preserve the visible song range"
+        );
+        if !grid {
+            assert!(
+                (state.get_song_first() - anchor).abs() <= 2,
+                "the rendered list viewport must restore near the grid's song anchor"
+            );
+        }
+        screenshot(
+            pixels,
+            if grid {
+                "library-position-restored-grid"
+            } else {
+                "library-position-restored-list"
+            },
+        );
+    }
+    state.set_songs(Default::default());
+    state.set_song_grid(Default::default());
+    state.set_group_grid(Default::default());
+    state.set_search("missing result".into());
+    for view in ["songs", "artists", "albums", "genres", "playlists"] {
+        state.set_view(view.into());
+        state.set_catalog_loading(true);
+        window.draw_if_needed(|renderer| {
+            renderer.render(pixels, 1280);
+        });
+        let pending = pixels.clone();
+        state.set_catalog_loading(false);
+        window.draw_if_needed(|renderer| {
+            renderer.render(pixels, 1280);
+        });
+        let changed = (200..650)
+            .flat_map(|y| (200..1000).map(move |x| y * 1280 + x))
+            .filter(|&index| pixels[index] != pending[index])
+            .count();
+        assert!(
+            changed > 100,
+            "{view} must show an empty-search message only after loading finishes"
+        );
+        screenshot(pixels, &format!("empty-search-{view}"));
+    }
+    state.set_search("".into());
+    state.set_songs(saved_songs);
+    state.set_song_grid(saved_grid);
+    state.set_group_grid(saved_groups);
     state.set_view("songs".into());
 }

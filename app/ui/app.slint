@@ -100,8 +100,8 @@ export component OrcaWindow inherits Window {
             if AppState.view=="songs": HorizontalLayout {
                 x:root.narrow ? 0px : parent.width - 242px;y:root.narrow ? 112px : root.compact ? 64px : 0px;width:242px;height:40px;spacing:12px;
                 HorizontalLayout {width:80px;spacing:0px;
-                    IconButton {label:"List view";width:40px;icon:Icons.list;primary:!AppState.grid;clicked=>{AppState.grid=false;AppState.save-settings();AppState.browse();}}
-                    IconButton {label:"Grid view";width:40px;icon:Icons.grid;primary:AppState.grid;clicked=>{AppState.grid=true;AppState.save-settings();AppState.browse();}}}
+                    IconButton {label:"List view";width:40px;icon:Icons.list;primary:!AppState.grid;clicked=>{if AppState.grid {AppState.library-view-restore=true;AppState.grid=false;AppState.save-settings();}}}
+                    IconButton {label:"Grid view";width:40px;icon:Icons.grid;primary:AppState.grid;clicked=>{if !AppState.grid {AppState.library-view-restore=true;AppState.grid=true;AppState.save-settings();}}}}
                 ComboBox {enabled:AppState.focus-layer=="browse";accessible-label:"Sort library";width:150px;model:["Artist","Title","Album","Recently added"];current-index:AppState.sort=="artist" ? 0 : AppState.sort=="title" ? 1 : AppState.sort=="album" ? 2 : 3;selected(value) => {AppState.sort=["artist","title","album","recent"][self.current-index];AppState.save-settings();AppState.browse();}}
             }
             if AppState.view=="playlists" && AppState.detail-key=="": TextButton {x:root.compact ? parent.width - 120px : max(200px,parent.width - 440px);y:0px;width:120px;text:"New playlist";clicked=>{AppState.playlist-action("new-dialog","");}}

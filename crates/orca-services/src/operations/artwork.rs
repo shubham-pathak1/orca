@@ -1,13 +1,10 @@
 use crate::{
     operation_types::{
-        ArtworkResult, CollectionKind, CoverFetch, MissingArtwork, OperationRequest,
-        OperationResult,
+        ArtworkResult, CollectionIdentity, CollectionKind, OperationRequest, OperationResult,
     },
     Backend,
 };
 use orca_core::db;
-use serde_json::json;
-use std::collections::HashSet;
 
 pub(super) fn run(
     backend: &Backend,
@@ -15,54 +12,27 @@ pub(super) fn run(
     stop: Option<&std::sync::atomic::AtomicBool>,
 ) -> Result<OperationResult, String> {
     let response = match operation {
-        OperationRequest::MissingArtwork => {
-            let overrides = backend.collection_overrides()?;
-            let mut jobs = Vec::new();
-            let mut candidates = HashSet::new();
-            for name in db::get_artists_needing_artwork(&backend.conn)? {
-                candidates.insert(("artists".to_string(), name, String::new()));
-            }
-            for (_, title, artist) in db::get_albums_needing_artwork(&backend.conn)? {
-                candidates.insert(("albums".to_string(), title, artist));
-            }
-            for kind in ["artists", "albums"] {
-                for group in backend.groups(kind, "")? {
-                    let identity = json!([kind, group.key, group.secondary]).to_string();
-                    if overrides.get(&identity).and_then(|v| v["cover"].as_str()) == Some("") {
-                        candidates.insert((kind.into(), group.key, group.secondary));
-                    }
-                }
-            }
-            for (kind, key, secondary) in candidates {
-                let identity = json!([kind, key, secondary]).to_string();
-                if overrides
-                    .get(&identity)
-                    .and_then(|v| v["cover"].as_str())
-                    .is_some_and(|cover| !cover.is_empty())
-                {
-                    continue;
-                }
-                jobs.push(OperationRequest::FetchCoverAuto(CoverFetch {
-                    kind: CollectionKind::try_from(kind.as_str()).map_err(|e| e.to_string())?,
-                    key: if kind == "albums" {
-                        format!("{secondary}:{key}")
-                    } else {
-                        key.clone()
-                    },
-                    artist: secondary,
-                    album: if kind == "albums" { key } else { String::new() },
-                    title: None,
-                    track_artist: None,
-                    duration_ms: None,
-                    editor_generation: None,
-                    editor_path: None,
-                    collection_draft: false,
-                    collection_seed: String::new(),
-                }));
-            }
-            OperationResult::MissingArtwork(MissingArtwork { jobs })
+        OperationRequest::ArtworkBulk(action) => {
+            OperationResult::ArtworkBulk(backend.artwork_bulk_control(action)?)
         }
         OperationRequest::FetchCover(fetch) | OperationRequest::FetchCoverAuto(fetch) => {
+            let automatic = matches!(operation, OperationRequest::FetchCoverAuto(_));
+            let identity = CollectionIdentity {
+                kind: fetch.kind.clone(),
+                key: if fetch.kind == CollectionKind::Albums {
+                    fetch.album.clone()
+                } else {
+                    fetch.key.clone()
+                },
+                secondary: fetch.artist.clone(),
+            };
+            if automatic
+                && backend
+                    .artwork_jobs_for_collections([identity.clone()])?
+                    .is_empty()
+            {
+                return Ok(OperationResult::ArtworkSkipped);
+            }
             let kind = fetch.kind.as_str();
             let key = fetch.key.as_str();
             let artist = fetch.artist.as_str();
@@ -102,6 +72,9 @@ pub(super) fn run(
             };
             if stop.is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Relaxed)) {
                 return Err("Artwork search cancelled".into());
+            }
+            if automatic && backend.artwork_jobs_for_collections([identity])?.is_empty() {
+                return Ok(OperationResult::ArtworkSkipped);
             }
             let staged = fetch.editor_path.is_some() || fetch.collection_draft;
             if !staged {

@@ -11,9 +11,10 @@ use crate::{
 use orca_services::{
     new_backend,
     operation_types::OperationRequest,
-    types::{PlaybackCommand, Query, Track},
+    types::{PlaybackCommand, Track},
 };
 use std::{
+    collections::VecDeque,
     fs,
     path::PathBuf,
     sync::{
@@ -59,10 +60,25 @@ pub(super) fn run(worker: LibraryWorker) {
     let mut settings: Settings =
         read_json(&directory.join("slint-settings.json")).unwrap_or_default();
     auto_artwork.store(settings.auto_artwork, Ordering::Relaxed);
-    if settings.auto_artwork {
-        let _ = operations.try_send(OperationRequest::MissingArtwork);
-    }
     let mut session = read_session(&directory.join("slint-session.json")).unwrap_or_default();
+    if !session.navigation.order.is_empty() {
+        let ids = backend.ids_for_paths(&session.navigation.order);
+        let removed: Vec<_> = session.navigation.removed.iter().cloned().collect();
+        let played: Vec<_> = session.navigation.played.iter().cloned().collect();
+        if let (Ok(ids), Ok(removed_ids), Ok(played_ids)) = (
+            ids,
+            backend.ids_for_paths(&removed),
+            backend.ids_for_paths(&played),
+        ) {
+            let current_id = backend.id_for_path(&session.path).ok().flatten();
+            session.navigation.migrate_legacy(
+                ids,
+                current_id,
+                removed_ids.into_iter().collect(),
+                played_ids.into_iter().collect(),
+            );
+        }
+    }
     let mut session_writer = SessionWriter::default();
     let mut playback = PlaybackState {
         navigation: std::mem::take(&mut session.navigation),
@@ -71,6 +87,8 @@ pub(super) fn run(worker: LibraryWorker) {
     let mut catalog = CatalogState::default();
     let mut saved = Instant::now();
     let mut last_revision = 0;
+    let mut library_change_pending = false;
+    let mut initial_statistics = true;
     let mut session_save_failed = false;
     let mut pending_scans = std::collections::VecDeque::<String>::new();
     let mut was_scanning = false;
@@ -108,7 +126,7 @@ pub(super) fn run(worker: LibraryWorker) {
             )));
         })
         .ok();
-    let roots = backend.statistics().map(|s| s.roots).unwrap_or_default();
+    let roots = backend.library_roots().unwrap_or_default();
     if let Some(watcher) = watcher.as_mut() {
         for error in watcher.sync(&roots) {
             let _ = events.send(Event::Error(error));
@@ -121,21 +139,73 @@ pub(super) fn run(worker: LibraryWorker) {
     );
     let mut reconcile = true;
     let mut source_mutation = false;
+    let mut deferred_request = None;
     let _ = events.send(Event::Ready);
     while !worker_stop.load(Ordering::Relaxed) {
         let mut shutdown = false;
-        if let Ok(request) = requests.recv_timeout(Duration::from_millis(200)) {
+        let next_request = deferred_request
+            .take()
+            .or_else(|| requests.recv_timeout(Duration::from_millis(200)).ok());
+        if let Some(request) = next_request {
             let refresh_queue = matches!(
                 &request,
-                Request::Play(..) | Request::Queue(..) | Request::Collection(..)
+                Request::Play(..)
+                    | Request::Queue(..)
+                    | Request::Collection(..)
+                    | Request::ArtworkRefresh(..)
             ) || matches!(&request,Request::Command(action) if action.refresh_queue());
             let result: Result<(), String> = (|| {
                 match request {
                     Request::Browse(at, new_query, kind) => {
-                        catalog.browse(&backend, &events, at, new_query, kind, &query_revision)?
+                        if let Err(error) =
+                            catalog.browse(&backend, &events, at, new_query, kind, &query_revision)
+                        {
+                            let _ = events.send(Event::CatalogError(at, error));
+                        }
                     }
                     Request::Page(at, offset) => {
-                        catalog.page(&backend, &events, at, offset, &query_revision)?
+                        let mut pages = VecDeque::from([(at, offset)]);
+                        let mut skipped = Vec::new();
+                        while let Ok(next) = requests.try_recv() {
+                            match next {
+                                Request::Page(page_at, page_offset) => {
+                                    if !pages.contains(&(page_at, page_offset)) {
+                                        pages.push_back((page_at, page_offset));
+                                    }
+                                    if pages.len() > 2 {
+                                        if let Some(old) = pages.pop_front() {
+                                            skipped.push(old);
+                                        }
+                                    }
+                                }
+                                other => {
+                                    deferred_request = Some(other);
+                                    break;
+                                }
+                            }
+                        }
+                        if deferred_request.is_some() {
+                            skipped.extend(pages.drain(..));
+                        }
+                        if !skipped.is_empty() {
+                            let mut by_generation =
+                                std::collections::HashMap::<u64, Vec<u32>>::new();
+                            for (page_at, page_offset) in skipped {
+                                by_generation.entry(page_at).or_default().push(page_offset);
+                            }
+                            for (generation, offsets) in by_generation {
+                                let _ = events.send(Event::PagesSkipped(generation, offsets));
+                            }
+                        }
+                        for (page_at, page_offset) in pages {
+                            catalog.page(
+                                &backend,
+                                &events,
+                                page_at,
+                                page_offset,
+                                &query_revision,
+                            )?;
+                        }
                     }
                     Request::Play(target, from_queue, play_query) => {
                         playback.play(&backend, audio, target, from_queue, play_query)?
@@ -195,7 +265,7 @@ pub(super) fn run(worker: LibraryWorker) {
                             .to_string_lossy()
                             .into_owned();
                         let adding = adding
-                            && !backend.statistics()?.roots.iter().any(|existing| {
+                            && !backend.library_roots()?.iter().any(|existing| {
                                 std::path::Path::new(existing).canonicalize().ok()
                                     == std::path::Path::new(&root).canonicalize().ok()
                             });
@@ -258,6 +328,20 @@ pub(super) fn run(worker: LibraryWorker) {
                             }
                         }
                     }
+                    Request::ArtworkRefresh(at, offsets) => {
+                        catalog.refresh_artwork(
+                            &backend,
+                            &events,
+                            at,
+                            &offsets,
+                            &query_revision,
+                        )?;
+                        if !playback.path.is_empty() {
+                            if let Ok(track) = backend.track(&playback.path) {
+                                let _ = events.send(Event::Now(track));
+                            }
+                        }
+                    }
                     Request::SourceChanged => {
                         reconcile = true;
                         source_mutation = false;
@@ -267,7 +351,7 @@ pub(super) fn run(worker: LibraryWorker) {
                     }
                     Request::Refresh => {
                         reconcile = true;
-                        for folder in backend.statistics()?.roots {
+                        for folder in backend.library_roots()? {
                             if !pending_scans.contains(&folder) {
                                 pending_scans.push_back(folder);
                             }
@@ -376,13 +460,9 @@ pub(super) fn run(worker: LibraryWorker) {
                                 },
                             )?;
                         }
-                        let enabled = value.auto_artwork && !settings.auto_artwork;
                         settings = value;
                         auto_artwork.store(settings.auto_artwork, Ordering::Relaxed);
                         write_json(&directory.join("slint-settings.json"), &settings)?;
-                        if enabled {
-                            let _ = operations.try_send(OperationRequest::MissingArtwork);
-                        }
                     }
                     Request::Font(font_path) => {
                         let bytes = fs::read(&font_path).map_err(|e| e.to_string())?;
@@ -402,9 +482,10 @@ pub(super) fn run(worker: LibraryWorker) {
             if refresh_queue {
                 let tracks = playback
                     .navigation
-                    .upcoming(&playback.path)
+                    .upcoming_limited(&playback.path, 20, |id| {
+                        backend.path_for_id(id).ok().flatten()
+                    })
                     .into_iter()
-                    .take(20)
                     .filter_map(|p| backend.track(&p).ok())
                     .collect();
                 let _ = events.send(Event::Queue(tracks));
@@ -415,7 +496,7 @@ pub(super) fn run(worker: LibraryWorker) {
                 };
                 let neighbors = playback
                     .navigation
-                    .neighbors(current)
+                    .neighbors_compact(current, |id| backend.path_for_id(id).ok().flatten())
                     .into_iter()
                     .filter_map(|p| backend.track(&p).ok())
                     .collect();
@@ -431,17 +512,54 @@ pub(super) fn run(worker: LibraryWorker) {
         }
         if reconcile {
             reconcile = false;
-            let roots = backend.statistics().map(|s| s.roots).unwrap_or_default();
+            let roots = backend.library_roots().unwrap_or_default();
             pending_scans.retain(|root| roots.contains(root));
             if let Some(watcher) = watcher.as_mut() {
                 for error in watcher.sync(&roots) {
                     let _ = events.send(Event::Error(error));
                 }
             }
-            if let Ok(paths) = backend.context_paths(&Query::default()) {
-                let allowed: std::collections::HashSet<_> = paths.into_iter().collect();
-                playback.navigation.prune(&allowed);
-                if !playback.preloaded.is_empty() && !allowed.contains(&playback.preloaded) {
+            {
+                if playback.navigation.is_compact() {
+                    if let Some(query) = playback.navigation.context_query.as_ref() {
+                        if let Ok(ids) = backend.context_ids(query) {
+                            let current = if playback.path.is_empty() {
+                                &session.path
+                            } else {
+                                &playback.path
+                            };
+                            let current_id = backend.id_for_path(current).ok().flatten();
+                            playback.navigation.prune_compact(ids, current_id, |path| {
+                                backend.id_for_path(path).ok().flatten().is_some()
+                            });
+                        }
+                    }
+                } else {
+                    // Prune paths retained by a legacy session without loading
+                    // the full catalog into the playback state.
+                    let paths: std::collections::HashSet<_> = playback
+                        .navigation
+                        .order
+                        .iter()
+                        .chain(playback.navigation.manual.iter())
+                        .chain(playback.navigation.history.iter())
+                        .chain(playback.navigation.removed.iter())
+                        .chain(playback.navigation.played.iter())
+                        .cloned()
+                        .collect();
+                    let allowed = paths
+                        .into_iter()
+                        .filter(|path| backend.id_for_path(path).ok().flatten().is_some())
+                        .collect();
+                    playback.navigation.prune(&allowed);
+                }
+                if !playback.preloaded.is_empty()
+                    && backend
+                        .id_for_path(&playback.preloaded)
+                        .ok()
+                        .flatten()
+                        .is_none()
+                {
                     let _ = cancel_preload(
                         &mut playback.preloaded,
                         &mut playback.planned_navigation,
@@ -454,7 +572,9 @@ pub(super) fn run(worker: LibraryWorker) {
                         },
                     );
                 }
-                if !playback.path.is_empty() && !allowed.contains(&playback.path) {
+                if !playback.path.is_empty()
+                    && backend.id_for_path(&playback.path).ok().flatten().is_none()
+                {
                     if audio {
                         let _ = backend.playback_command(PlaybackCommand::Stop);
                     }
@@ -468,14 +588,14 @@ pub(super) fn run(worker: LibraryWorker) {
                 }
                 let rows = playback
                     .navigation
-                    .upcoming(&playback.path)
+                    .upcoming_limited(&playback.path, 20, |id| {
+                        backend.path_for_id(id).ok().flatten()
+                    })
                     .into_iter()
-                    .take(20)
                     .filter_map(|p| backend.track(&p).ok())
                     .collect();
                 let _ = events.send(Event::Queue(rows));
-                let _ = events.send(Event::Statistics(backend.statistics().unwrap_or_default()));
-                let _ = events.send(Event::LibraryChanged);
+                library_change_pending = true;
             }
         }
         match backend.snapshot() {
@@ -525,7 +645,11 @@ pub(super) fn run(worker: LibraryWorker) {
                 }
                 if snapshot.path != playback.path {
                     playback.path = snapshot.path.clone();
+                    let was_manual = playback.navigation.manual.contains(&playback.path);
                     playback.navigation.record(&playback.path);
+                    if let Some(id) = backend.id_for_path(&playback.path).ok().flatten() {
+                        playback.navigation.mark_id(id, was_manual);
+                    }
                     if !playback.path.is_empty() {
                         let at = revision.fetch_add(1, Ordering::Relaxed) + 1;
                         if let Ok(track) = backend.track(&playback.path) {
@@ -537,15 +661,18 @@ pub(super) fn run(worker: LibraryWorker) {
                         }
                         let tracks = playback
                             .navigation
-                            .upcoming(&playback.path)
+                            .upcoming_limited(&playback.path, 20, |id| {
+                                backend.path_for_id(id).ok().flatten()
+                            })
                             .into_iter()
-                            .take(20)
                             .filter_map(|p| backend.track(&p).ok())
                             .collect();
                         let _ = events.send(Event::Queue(tracks));
                         let neighbors = playback
                             .navigation
-                            .neighbors(&playback.path)
+                            .neighbors_compact(&playback.path, |id| {
+                                backend.path_for_id(id).ok().flatten()
+                            })
                             .into_iter()
                             .filter_map(|p| backend.track(&p).ok())
                             .collect();
@@ -558,7 +685,10 @@ pub(super) fn run(worker: LibraryWorker) {
                 if snapshot.ended != playback.ended {
                     playback.ended = snapshot.ended;
                     let mut planned = playback.navigation.clone();
-                    if let Some(next) = planned.next(&playback.path, false, true) {
+                    if let Some(next) = planned.next_compact(&playback.path, false, true, |id| {
+                        backend.path_for_id(id).ok().flatten()
+                    }) {
+                        let was_manual = planned.manual.contains(&next);
                         if let Err(error) = submit_play(
                             &mut playback.navigation,
                             &mut playback.requested,
@@ -569,6 +699,10 @@ pub(super) fn run(worker: LibraryWorker) {
                             },
                         ) {
                             let _ = events.send(Event::Error(error));
+                        } else if let Some(id) =
+                            backend.id_for_path(&playback.requested).ok().flatten()
+                        {
+                            playback.navigation.mark_id(id, was_manual);
                         }
                     }
                 }
@@ -580,7 +714,9 @@ pub(super) fn run(worker: LibraryWorker) {
                     && playback.preloaded.is_empty()
                 {
                     let mut planned = playback.navigation.clone();
-                    if let Some(next) = planned.next(&playback.path, false, true) {
+                    if let Some(next) = planned.next_compact(&playback.path, false, true, |id| {
+                        backend.path_for_id(id).ok().flatten()
+                    }) {
                         if backend
                             .playback_command(PlaybackCommand::QueueNext((&next).into()))
                             .is_ok()
@@ -592,9 +728,16 @@ pub(super) fn run(worker: LibraryWorker) {
                 }
                 if snapshot.revision != last_revision {
                     last_revision = snapshot.revision;
+                    library_change_pending = true;
+                }
+                if library_change_pending && !snapshot.scanning {
+                    library_change_pending = false;
                     let _ =
                         events.send(Event::Statistics(backend.statistics().unwrap_or_default()));
-                    let _ = events.send(Event::LibraryChanged);
+                    if !initial_statistics {
+                        let _ = events.send(Event::LibraryChanged);
+                    }
+                    initial_statistics = false;
                 }
                 if !snapshot.scanning && !source_mutation {
                     if was_scanning {
@@ -605,15 +748,12 @@ pub(super) fn run(worker: LibraryWorker) {
                             let _ = events.send(Event::Error(error));
                         } else {
                             if let Some(watcher) = watcher.as_mut() {
-                                let roots =
-                                    backend.statistics().map(|s| s.roots).unwrap_or_default();
+                                let roots = backend.library_roots().unwrap_or_default();
                                 for error in watcher.sync(&roots) {
                                     let _ = events.send(Event::Error(error));
                                 }
                             }
                         }
-                    } else if was_scanning && settings.auto_artwork {
-                        let _ = operations.try_send(OperationRequest::MissingArtwork);
                     }
                 }
                 was_scanning = snapshot.scanning;

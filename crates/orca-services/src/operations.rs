@@ -16,7 +16,7 @@ pub(super) fn run_with_stop(
         OperationRequest::CollectionEdit(_) => mutations::run(backend, operation, stop),
         OperationRequest::LibrarySources => mutations::run(backend, operation, stop),
         OperationRequest::RemoveSource { .. } => mutations::run(backend, operation, stop),
-        OperationRequest::MissingArtwork => artwork::run(backend, operation, stop),
+        OperationRequest::ArtworkBulk(_) => artwork::run(backend, operation, stop),
         OperationRequest::ArtistDetail { .. } => catalog::run(backend, operation, stop),
         OperationRequest::CollectionPreview(_) => catalog::run(backend, operation, stop),
         OperationRequest::GroupDetail(_) => catalog::run(backend, operation, stop),

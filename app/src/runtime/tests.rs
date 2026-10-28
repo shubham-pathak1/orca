@@ -2,6 +2,7 @@
 use super::*;
 use crate::protocol::{Event, MetadataAssetKind, OperationError, OperationRequest};
 use slint::ModelNotify;
+use std::sync::atomic::Ordering;
 
 pub(crate) fn verify_completions(ui: &OrcaWindow) {
     let (service, events, requests) = Service::test_channels();
@@ -74,6 +75,23 @@ pub(crate) fn verify_completions(ui: &OrcaWindow) {
     assert_eq!(browses.get(), 1, "liked playlists must still update");
     state.set_view("songs".into());
     // Test completion ownership, without timing a large asset decode in debug.
+    models.service.latest_query.store(2, Ordering::Relaxed);
+    state.set_catalog_loading(true);
+    events.send(Event::Page(1, 0, 0, vec![])).unwrap();
+    events
+        .send(Event::CatalogError(1, "Stale search".into()))
+        .unwrap();
+    events::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
+    assert!(
+        state.get_catalog_loading(),
+        "stale searches must not finish the current search"
+    );
+    events.send(Event::Page(2, 0, 0, vec![])).unwrap();
+    events::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
+    assert!(
+        !state.get_catalog_loading(),
+        "empty current results must finish the search"
+    );
     let fixture = std::env::temp_dir().join(format!(
         "orca-runtime-completion-{}.png",
         std::process::id()
@@ -97,10 +115,14 @@ pub(crate) fn verify_completions(ui: &OrcaWindow) {
         before,
         "automatic completion must retain decoded covers"
     );
-    assert_eq!(browses.get(), 2);
+    assert_eq!(
+        browses.get(),
+        1,
+        "artwork completion must not restart the catalog query"
+    );
     assert!(matches!(
         requests.try_recv().unwrap(),
-        crate::protocol::Request::Reconcile
+        crate::protocol::Request::ArtworkRefresh(2, _)
     ));
 
     // Collection saves and artwork reconciliation update the same song. They

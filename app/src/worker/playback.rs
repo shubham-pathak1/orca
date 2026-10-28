@@ -21,8 +21,13 @@ impl PlaybackState {
         }
         let mut planned = self.navigation.clone();
         if !from_queue {
-            planned.context(backend.context_paths(&play_query)?, &target);
+            let ids = backend.context_ids(&play_query)?;
+            let id = backend
+                .id_for_path(&target)?
+                .ok_or("Song is no longer in the library")?;
+            planned.compact_context(ids, play_query, id, &target);
         }
+        let was_manual = planned.manual.iter().any(|path| path == &target);
         submit_play(
             &mut self.navigation,
             &mut self.requested,
@@ -30,6 +35,9 @@ impl PlaybackState {
             target,
             |target| backend.playback_command(PlaybackCommand::Play((target).into())),
         )?;
+        if let Some(id) = backend.id_for_path(&self.requested)? {
+            self.navigation.mark_id(id, was_manual);
+        }
         self.preloaded.clear();
         self.planned_navigation = None;
         Ok(())
@@ -43,9 +51,13 @@ impl PlaybackState {
     ) -> Result<(), String> {
         match action {
             CollectionAction::Play if audio => {
-                if let Some(target) = backend.context_paths(&collection)?.first().cloned() {
+                let ids = backend.context_ids(&collection)?;
+                if let Some(id) = ids.first().copied() {
+                    let Some(target) = backend.path_for_id(id)? else {
+                        return Ok(());
+                    };
                     let mut planned = self.navigation.clone();
-                    planned.context(backend.context_paths(&collection)?, &target);
+                    planned.compact_context(ids, collection, id, &target);
                     submit_play(
                         &mut self.navigation,
                         &mut self.requested,
@@ -53,6 +65,7 @@ impl PlaybackState {
                         target,
                         |target| backend.playback_command(PlaybackCommand::Play((target).into())),
                     )?;
+                    self.navigation.mark_id(id, false);
                     self.preloaded.clear();
                     self.planned_navigation = None;
                 }
@@ -60,7 +73,7 @@ impl PlaybackState {
             CollectionAction::AddToQueue => {
                 let mut all = collection;
                 all.search.clear();
-                let targets = backend.context_paths(&all)?;
+                let targets = backend.context_paths_limited(&all, 64)?;
                 cancel_preload(&mut self.preloaded, &mut self.planned_navigation, || {
                     if audio {
                         backend.playback_command(PlaybackCommand::ClearQueued)
@@ -69,6 +82,9 @@ impl PlaybackState {
                     }
                 })?;
                 for target in targets {
+                    if self.navigation.manual.len() >= 20 {
+                        break;
+                    }
                     self.navigation.removed.remove(&target);
                     if target != self.path && !self.navigation.manual.contains(&target) {
                         self.navigation.manual.push(target);
@@ -130,7 +146,12 @@ impl PlaybackState {
                     &self.requested
                 };
                 let mut planned = self.navigation.clone();
-                if let Some(next) = planned.next(current, action == PlayerAction::Previous, false) {
+                if let Some(next) =
+                    planned.next_compact(current, action == PlayerAction::Previous, false, |id| {
+                        backend.path_for_id(id).ok().flatten()
+                    })
+                {
+                    let was_manual = planned.manual.contains(&next);
                     submit_play(
                         &mut self.navigation,
                         &mut self.requested,
@@ -138,6 +159,9 @@ impl PlaybackState {
                         next,
                         |target| backend.playback_command(PlaybackCommand::Play((target).into())),
                     )?;
+                    if let Some(id) = backend.id_for_path(&self.requested)? {
+                        self.navigation.mark_id(id, was_manual);
+                    }
                     self.preloaded.clear();
                     self.planned_navigation = None;
                 }
@@ -168,17 +192,31 @@ impl PlaybackState {
         }
         match action {
             QueueAction::Add(source) => {
+                if !self.navigation.manual.contains(&source) && self.navigation.manual.len() >= 20 {
+                    return Err("Queue is full (20 songs)".into());
+                }
                 self.navigation.removed.remove(&source);
+                if let Some(id) = backend.id_for_path(&source)? {
+                    self.navigation.removed_ids.remove(&id);
+                }
                 self.navigation.manual.retain(|p| p != &source);
                 self.navigation.manual.push(source);
             }
-            QueueAction::Remove(source) => self.navigation.remove(&self.path, &source),
-            QueueAction::Clear => self.navigation.clear(&self.path),
-            QueueAction::Move { source, target } => {
-                self.navigation.reorder(&self.path, &source, &target)
+            QueueAction::Remove(source) => {
+                self.navigation
+                    .remove_compact(&self.path, &source, backend.id_for_path(&source)?)
             }
+            QueueAction::Clear => self.navigation.clear_compact(&self.path),
+            QueueAction::Move { source, target } => self.navigation.reorder_compact(
+                &self.path,
+                &source,
+                &target,
+                |id| backend.path_for_id(id).ok().flatten(),
+                |path| backend.id_for_path(path).ok().flatten(),
+            ),
             QueueAction::Play(source) if audio => {
                 let planned = self.navigation.clone();
+                let was_manual = planned.manual.contains(&source);
                 submit_play(
                     &mut self.navigation,
                     &mut self.requested,
@@ -186,6 +224,9 @@ impl PlaybackState {
                     source,
                     |target| backend.playback_command(PlaybackCommand::Play((target).into())),
                 )?;
+                if let Some(id) = backend.id_for_path(&self.requested)? {
+                    self.navigation.mark_id(id, was_manual);
+                }
                 self.preloaded.clear();
                 self.planned_navigation = None;
             }

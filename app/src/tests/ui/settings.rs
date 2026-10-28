@@ -10,6 +10,32 @@ pub(super) fn verify(case: &mut UiCase) {
     state.set_font_path("".into());
     state.set_font_family("".into());
     state.set_view("settings".into());
+    let bulk_actions = Rc::new(RefCell::new(Vec::new()));
+    let observed_bulk = bulk_actions.clone();
+    state.on_artwork_bulk(move |action| observed_bulk.borrow_mut().push(action.to_string()));
+    state.set_search("bulk".into());
+    state.set_artwork_bulk_started(true);
+    state.set_artwork_bulk_running(true);
+    state.set_artwork_bulk_progress("Fetching · 12 lookups · 4 images found".into());
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    screenshot(pixels, "bulk-artwork-setting");
+    click(window, 800.0, 212.0);
+    assert_eq!(
+        bulk_actions.borrow().last().map(String::as_str),
+        Some("pause")
+    );
+    state.set_artwork_bulk_running(false);
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    click(window, 800.0, 212.0);
+    assert_eq!(
+        bulk_actions.borrow().last().map(String::as_str),
+        Some("resume")
+    );
+    state.set_artwork_bulk_started(false);
     state.set_search("Font preset".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);

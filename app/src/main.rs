@@ -240,18 +240,98 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         let weak = ui.as_weak();
         let service = service.clone();
         let timer = browse.clone();
+        let last_browse = Rc::new(RefCell::new(None::<(orca_services::types::Query, String)>));
+        let tracks = tracks.clone();
+        let list = list.clone();
+        let grid = grid.clone();
+        let groups = groups.clone();
+        let related = related.clone();
+        let detail_art = detail_art.clone();
         state.on_browse(move || {
-            let weak = weak.clone();
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            let (query, view) = query(&ui);
+            let generation = service.latest_query.fetch_add(1, Ordering::Relaxed) + 1;
+            let previous = last_browse.borrow().clone();
+            let changed = previous.as_ref() != Some(&(query.clone(), view.clone()));
+            let search_changed = previous.as_ref().is_some_and(|(old, old_view)| {
+                old_view == &view
+                    && old.kind == query.kind
+                    && old.key == query.key
+                    && old.secondary == query.secondary
+                    && old.sort == query.sort
+                    && old.search != query.search
+            });
+            let detail_changed = previous.as_ref().is_none_or(|(old, old_view)| {
+                old_view != &view
+                    || old.kind != query.kind
+                    || old.key != query.key
+                    || old.secondary != query.secondary
+            });
+            if detail_changed && view == "settings" {
+                service.artwork_bulk(orca_services::operation_types::ArtworkBulkAction::Status);
+            }
+            *last_browse.borrow_mut() = Some((query.clone(), view.clone()));
+            let state = ui.global::<AppState>();
+            state.set_catalog_loading(view != "settings");
+            if changed && !search_changed {
+                state.set_library_scroll_index(0);
+                state.set_library_scroll_fraction(0.0);
+                state.set_library_view_restore(false);
+                tracks.clear(generation);
+                list.notify.reset();
+                grid.notify.reset();
+                grid.visible_rows.borrow_mut().clear();
+                groups.groups.borrow_mut().clear();
+                groups.reset();
+                let count = match view.as_str() {
+                    "artists" => state.get_known_artists(),
+                    "albums" => state.get_known_albums(),
+                    "genres" => state.get_known_genres(),
+                    "playlists" => state.get_known_playlists(),
+                    _ => -1,
+                };
+                state.set_catalog_summary(if count >= 0 && query.search.is_empty() {
+                    format!(
+                        "{count} {}",
+                        if count == 1 {
+                            view.trim_end_matches('s')
+                        } else {
+                            &view
+                        }
+                    )
+                    .into()
+                } else {
+                    "".into()
+                });
+            }
+            if search_changed {
+                state.set_library_scroll_index(0);
+                state.set_library_scroll_fraction(0.0);
+                state.set_library_view_restore(false);
+                state.set_jump_index(0);
+                state.set_jump_revision(state.get_jump_revision().wrapping_add(1));
+            }
+            if detail_changed {
+                *detail_art.borrow_mut() = (String::new(), String::new());
+                related.groups.borrow_mut().clear();
+                related.reset();
+                let state = ui.global::<AppState>();
+                state.set_detail_cover(slint::Image::default());
+                state.set_detail_backdrop(slint::Image::default());
+                state.set_detail_summary("Loading...".into());
+            }
             let service = service.clone();
+            let delay = if search_changed { 100 } else { 0 };
             timer.start(
                 TimerMode::SingleShot,
-                Duration::from_millis(100),
+                Duration::from_millis(delay),
                 move || {
-                    if let Some(ui) = weak.upgrade() {
-                        let generation = service.latest_query.fetch_add(1, Ordering::Relaxed) + 1;
-                        let (query, view) = query(&ui);
-                        let _ = service.tx.send(Request::Browse(generation, query, view));
-                    }
+                    let _ =
+                        service
+                            .tx
+                            .send(Request::Browse(generation, query.clone(), view.clone()));
                 },
             );
         });
@@ -261,6 +341,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         let weak = ui.as_weak();
         state.on_play(move |path| {
             if let Some(ui) = weak.upgrade() {
+                if ui.global::<AppState>().get_catalog_loading() {
+                    return;
+                }
                 let _ = tx.send(play_request(&ui, path.into()));
             }
         });
@@ -315,6 +398,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
     {
+        let service = service.clone();
+        state.on_artwork_bulk(move |action| {
+            use orca_services::operation_types::ArtworkBulkAction;
+            let action = match action.as_str() {
+                "start" => ArtworkBulkAction::Start,
+                "pause" => ArtworkBulkAction::Pause,
+                "resume" => ArtworkBulkAction::Resume,
+                _ => ArtworkBulkAction::Status,
+            };
+            service.artwork_bulk(action);
+        });
+    }
+    {
         let tx = service.tx.clone();
         state.on_refresh_lyrics(move || {
             let _ = tx.send(Request::RefreshLyrics);
@@ -363,10 +459,24 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         let weak = ui.as_weak();
         let header_art = detail_art.clone();
         let header_albums = related.clone();
+        let catalog_groups = groups.clone();
+        let header_cache = cache.clone();
         let catalog_scroll = catalog_scroll.clone();
         state.on_open_group(move |key, secondary, title| {
             if let Some(ui) = weak.upgrade() {
                 let s = ui.global::<AppState>();
+                if s.get_catalog_loading() {
+                    return;
+                }
+                let selected = catalog_groups
+                    .groups
+                    .borrow()
+                    .iter()
+                    .chain(header_albums.groups.borrow().iter())
+                    .find(|group| {
+                        group.key == key.as_str() && group.secondary == secondary.as_str()
+                    })
+                    .cloned();
                 if s.get_detail_key().is_empty() {
                     *catalog_scroll.borrow_mut() =
                         Some((s.get_view().to_string(), s.get_catalog_scroll_y()));
@@ -384,6 +494,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 s.set_detail_title(title);
                 s.set_search("".into());
                 s.invoke_browse();
+                if let Some(group) = selected {
+                    if s.get_browse_artwork() {
+                        s.set_detail_cover(
+                            header_cache.borrow_mut().cached_cover(&[&group.artwork]),
+                        );
+                    }
+                    *header_art.borrow_mut() = (group.artwork.clone(), group.artwork);
+                    s.set_detail_summary(format!("{} songs", group.count).into());
+                }
             }
         });
     }

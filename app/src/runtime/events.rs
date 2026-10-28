@@ -59,17 +59,51 @@ pub(super) fn apply(
                     update_images |= stage_collection_draft(ui, &value);
                 }
             }
-            Event::GroupGone(kind, key, secondary)
-                if s.get_view() == kind
+            Event::GroupGone(at, kind, key, secondary)
+                if at == poll_service.latest_query.load(Ordering::Relaxed)
+                    && s.get_view() == kind
                     && s.get_detail_key() == key
                     && s.get_detail_secondary() == secondary =>
             {
                 s.invoke_go_back();
             }
+            Event::PagesSkipped(at, offsets) => {
+                tracks.discard_pages(at, &offsets);
+                if at == poll_service.latest_query.load(Ordering::Relaxed) {
+                    let first = s.get_song_first().max(0) as usize;
+                    let end = s.get_song_end().max(0) as usize;
+                    for offset in offsets {
+                        if s.get_view() == "songs" && s.get_grid() && s.get_detail_key().is_empty()
+                        {
+                            let rows: Vec<_> = {
+                                let visible = grid.visible_rows.borrow();
+                                (offset as usize / columns.max(1)
+                                    ..(offset as usize + 128).div_ceil(columns.max(1)))
+                                    .filter(|row| {
+                                        visible
+                                            .get(row)
+                                            .is_some_and(|model| model.strong_count() > 0)
+                                    })
+                                    .collect()
+                            };
+                            for row in rows {
+                                grid.notify.row_changed(row);
+                            }
+                        } else {
+                            let start = (offset as usize).max(first);
+                            let stop = (offset as usize + 128).min(end);
+                            for index in start..stop {
+                                list.notify.row_changed(index);
+                            }
+                        }
+                    }
+                }
+            }
             Event::Page(at, offset, count, rows)
                 if at == poll_service.latest_query.load(Ordering::Relaxed) =>
             {
-                let reset = tracks.generation.get() != at || tracks.count.get() != count as usize;
+                s.set_catalog_loading(false);
+                let reset = tracks.count.get() != count as usize;
                 let length = rows.len();
                 tracks.apply(at, offset as usize, count as usize, rows);
                 artwork_epoch.set(artwork_epoch.get().wrapping_add(1));
@@ -104,6 +138,9 @@ pub(super) fn apply(
                 }
             }
             Event::Groups(at, rows) if at == poll_service.latest_query.load(Ordering::Relaxed) => {
+                if s.get_detail_key().is_empty() {
+                    s.set_catalog_loading(false);
+                }
                 let rows: Vec<_> = if s.get_view() == "playlists" && !s.get_show_liked_songs() {
                     rows.into_iter()
                         .filter(|group| group.key != "liked")
@@ -123,9 +160,11 @@ pub(super) fn apply(
                     )
                     .into(),
                 );
-                *groups.groups.borrow_mut() = rows;
-                groups.reset();
-                artwork_epoch.set(artwork_epoch.get().wrapping_add(1));
+                if *groups.groups.borrow() != rows {
+                    *groups.groups.borrow_mut() = rows;
+                    groups.reset();
+                    artwork_epoch.set(artwork_epoch.get().wrapping_add(1));
+                }
                 if s.get_catalog_scroll_restore_pending() && s.get_detail_key().is_empty() {
                     s.set_catalog_scroll_restore_pending(false);
                     let weak = ui.as_weak();
@@ -143,6 +182,10 @@ pub(super) fn apply(
                 }
             }
             Event::Statistics(stats) => {
+                s.set_known_artists(stats.artists as i32);
+                s.set_known_albums(stats.albums as i32);
+                s.set_known_genres(stats.genres as i32);
+                s.set_known_playlists(stats.playlists as i32 + i32::from(s.get_show_liked_songs()));
                 s.set_summary(
                     format!(
                         "{} songs | {} artists | {} albums",
@@ -429,6 +472,10 @@ pub(super) fn apply(
                 }
             }
             Event::OperationFailed(request, error) => {
+                if matches!(&request, crate::protocol::OperationRequest::ArtworkBulk(_)) {
+                    s.set_artwork_bulk_running(false);
+                    s.set_artwork_bulk_progress("Paused. Please try again.".into());
+                }
                 eprintln!("Orca: {error}");
                 if let crate::protocol::OperationRequest::CollectionEdit(_) = &request {
                     s.set_collection_saving(false);
@@ -483,11 +530,42 @@ pub(super) fn apply(
             Event::Operation(request, result) => {
                 update_images |= super::operations::apply(ui, models, request, result);
             }
+            Event::CatalogDetail(at, request, result)
+                if at == poll_service.latest_query.load(Ordering::Relaxed) =>
+            {
+                update_images |= super::operations::apply(ui, models, request, result);
+            }
             Event::AutomaticArtworkUpdated => {
                 // Artwork paths are content-hashed. Retain decoded images for
                 // unchanged paths instead of clearing every visible cover.
-                let _ = poll_service.tx.send(Request::Reconcile);
-                s.invoke_browse();
+                let range =
+                    if s.get_view() == "songs" && s.get_grid() && s.get_detail_key().is_empty() {
+                        grid.nearby_range()
+                    } else {
+                        Some((
+                            s.get_song_first().max(0) as usize,
+                            s.get_song_end().max(0) as usize,
+                        ))
+                    };
+                let offsets = range
+                    .map(|(start, end)| {
+                        (start / 128..end.div_ceil(128))
+                            .take(8)
+                            .map(|page| (page * 128) as u32)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let _ = poll_service.tx.send(Request::ArtworkRefresh(
+                    poll_service.latest_query.load(Ordering::Relaxed),
+                    offsets,
+                ));
+            }
+            Event::CatalogError(at, error)
+                if at == poll_service.latest_query.load(Ordering::Relaxed) =>
+            {
+                s.set_catalog_loading(false);
+                eprintln!("Orca catalog: {error}");
+                s.set_error(errors::friendly(&error).into());
             }
             Event::Error(error) => {
                 eprintln!("Orca: {error}");

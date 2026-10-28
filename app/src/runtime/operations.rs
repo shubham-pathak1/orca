@@ -32,6 +32,28 @@ pub(super) fn apply(
     let state = ui.global::<AppState>();
     let mut update_images = false;
     match (&request, result) {
+        (_, OperationResult::ArtworkBulk(progress)) => {
+            state.set_artwork_bulk_started(progress.started);
+            state.set_artwork_bulk_running(progress.running);
+            state.set_artwork_bulk_complete(progress.complete);
+            state.set_artwork_bulk_progress(
+                format!(
+                    "{} · {} collections checked · {} images found",
+                    if progress.complete {
+                        "Finished"
+                    } else if progress.waiting {
+                        "Waiting for provider"
+                    } else if progress.running {
+                        "Fetching"
+                    } else {
+                        "Paused"
+                    },
+                    progress.attempted,
+                    progress.found
+                )
+                .into(),
+            );
+        }
         (OperationRequest::CollectionEdit(edit), OperationResult::CollectionEdited) => {
             state.set_collection_saving(false);
             if matches_detail(&edit.identity, &state) {

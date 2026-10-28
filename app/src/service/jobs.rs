@@ -37,6 +37,9 @@ impl<T> LatestJob<T> {
     }
 }
 impl<T> LatestReceiver<T> {
+    pub(crate) fn try_receive(&self) -> Option<T> {
+        self.pending.lock().unwrap().take()
+    }
     pub(crate) fn receive(&self) -> Option<T> {
         let _ = self.wake.recv_timeout(Duration::from_millis(100));
         self.pending.lock().unwrap().take()

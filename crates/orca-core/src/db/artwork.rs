@@ -1,4 +1,44 @@
+use rusqlite::OptionalExtension;
 use rusqlite::{params, Connection};
+
+/// Read one identity after a durable cursor, without a library-sized job queue.
+pub fn next_artwork_collection(
+    conn: &Connection,
+    artists: bool,
+    key: &str,
+    secondary: &str,
+) -> Result<Option<(String, String)>, String> {
+    let result = if artists {
+        conn.query_row("SELECT DISTINCT pa.name,'' FROM song_primary_artists pa JOIN songs s ON s.id=pa.song_id WHERE s.library_visible=1 AND pa.name COLLATE NOCASE>?1 COLLATE NOCASE ORDER BY pa.name COLLATE NOCASE LIMIT 1", [key], |row| Ok((row.get(0)?, row.get(1)?)))
+    } else {
+        conn.query_row("SELECT album,album_artist FROM active_songs WHERE (album_artist,album)>(?1,?2) GROUP BY album_artist,album ORDER BY album_artist,album LIMIT 1", params![secondary,key], |row| Ok((row.get(0)?, row.get(1)?)))
+    };
+    result.optional().map_err(|error| error.to_string())
+}
+
+/// Existing local images and deliberate removals both suppress automatic lookup.
+pub fn collection_needs_artwork(
+    conn: &Connection,
+    artist: &str,
+    album: Option<&str>,
+) -> Result<bool, String> {
+    let result = if let Some(album) = album {
+        conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM active_songs WHERE album_artist=?1 AND album=?2)
+             AND NOT EXISTS(SELECT 1 FROM album_artworks WHERE album_key=?1 || ':' || ?2 AND NULLIF(artwork_path,'') IS NOT NULL)
+             AND NOT EXISTS(SELECT 1 FROM active_songs WHERE album_artist=?1 AND album=?2 AND
+             (NULLIF(artwork_url,'') IS NOT NULL OR NULLIF(artwork_preview_url,'') IS NOT NULL OR NULLIF(artwork_thumb_url,'') IS NOT NULL))",
+            params![artist, album], |row| row.get(0),
+        )
+    } else {
+        conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM song_primary_artists pa JOIN songs s ON s.id=pa.song_id WHERE pa.name=?1 COLLATE NOCASE AND s.library_visible=1)
+             AND NOT EXISTS(SELECT 1 FROM artist_artworks WHERE artist_name=?1 AND NULLIF(artwork_path,'') IS NOT NULL)",
+            [artist], |row| row.get(0),
+        )
+    };
+    result.map_err(|error| error.to_string())
+}
 
 pub fn update_artist_artwork(
     conn: &Connection,

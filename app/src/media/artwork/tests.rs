@@ -477,3 +477,21 @@ fn invalidation_prevents_old_jobs_from_repopulating_the_cache() {
     assert!(cache.entries.is_empty());
     assert!(cache.pending.is_empty());
 }
+#[test]
+fn nearby_grid_sizes_share_prepared_images_and_prefetch_keys() {
+    let mut cache = ArtworkCache::new(1024 * 1024);
+    cache.stop_worker();
+    let small = cache.grid_key("cover", &[], 177, false);
+    assert_eq!(small, cache.grid_key("cover", &[], 192, false));
+    assert_eq!(small.edge, 192);
+    assert_ne!(small, cache.grid_key("cover", &[], 193, false));
+    cache.prefetch_grid_cover("cover", 180, false);
+    assert_eq!(cache.prefetch.front(), Some(&small));
+    assert_ne!(small, cache.grid_key("cover", &[], 180, true));
+    assert_eq!(
+        cache.cover_key("artist", 177, 88, false),
+        cache.cover_key("artist", 191, 95, false)
+    );
+    assert_eq!(cache.cover_key("artist", 177, 88, false).radius, 96);
+    assert_eq!(cache.cover_key("list", 28, 1, false).edge, 28);
+}

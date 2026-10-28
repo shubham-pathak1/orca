@@ -47,21 +47,16 @@ pub(crate) fn execute(
     events: &Sender<Event>,
     request: OperationRequest,
     stop: &AtomicBool,
-    auto_artwork: &AtomicBool,
-) -> Vec<OperationRequest> {
+) {
     if stop.load(Ordering::Relaxed) {
-        return Vec::new();
+        return;
     }
     let result = backend.execute_cancellable(&request, stop);
     if stop.load(Ordering::Relaxed) {
-        return Vec::new();
+        return;
     }
     match result {
-        Ok(OperationResult::MissingArtwork(jobs)) => {
-            if auto_artwork.load(Ordering::Relaxed) {
-                return jobs.jobs;
-            }
-        }
+        Ok(OperationResult::ArtworkSkipped) => {}
         Ok(result) => {
             let _ = events.send(Event::Operation(request, result));
         }
@@ -69,7 +64,6 @@ pub(crate) fn execute(
             let _ = events.send(Event::OperationFailed(request, error));
         }
     }
-    Vec::new()
 }
 
 #[cfg(test)]
@@ -111,24 +105,12 @@ mod tests {
             key: "song".into(),
             file: directory.join("absent.lrc").to_string_lossy().into_owned(),
         };
-        execute(
-            &backend,
-            &events,
-            request.clone(),
-            &AtomicBool::new(true),
-            &AtomicBool::new(false),
-        );
+        execute(&backend, &events, request.clone(), &AtomicBool::new(true));
         assert!(
             receiver.try_recv().is_err(),
             "cancelled work must not publish a completion"
         );
-        execute(
-            &backend,
-            &events,
-            request.clone(),
-            &AtomicBool::new(false),
-            &AtomicBool::new(false),
-        );
+        execute(&backend, &events, request.clone(), &AtomicBool::new(false));
         assert!(
             matches!(receiver.recv().unwrap(), Event::OperationFailed(actual, OperationError::Failed(_)) if actual == request)
         );

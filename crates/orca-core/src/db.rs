@@ -11,8 +11,9 @@ mod media_artwork;
 mod playlists;
 
 pub use artwork::{
-    get_albums_needing_artwork, get_artists_needing_artwork, remove_album_artwork,
-    remove_artist_artwork, update_album_artwork, update_artist_artwork,
+    collection_needs_artwork, get_albums_needing_artwork, get_artists_needing_artwork,
+    next_artwork_collection, remove_album_artwork, remove_artist_artwork, update_album_artwork,
+    update_artist_artwork,
 };
 
 pub use cache::{

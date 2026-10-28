@@ -130,6 +130,17 @@ component RelatedAlbumsGrid inherits Rectangle {
     }
 }
 
+component SearchEmptyState inherits Rectangle {
+    VerticalLayout {
+        alignment:center;spacing:12px;padding:24px;
+        Text {text:"No results found";color:AppState.ink;font-size:18px*AppState.scale;font-weight:700;horizontal-alignment:center;}
+        Text {text:"Try a different search.";color:AppState.ink.with-alpha(0.65);horizontal-alignment:center;}
+        HorizontalLayout {alignment:center;
+            TextButton {text:"Clear search";clicked=>{AppState.search="";AppState.browse();}}
+        }
+    }
+}
+
 export component CatalogView inherits Rectangle {
     motion:=ScrollMotion {offset<=>list.content-y;minimum:-max(0px,list.content-height - list.height);page:list.height;}
     private property<string> current-view:AppState.view;
@@ -147,6 +158,7 @@ export component CatalogView inherits Rectangle {
     }
     }
     if AppState.view!="folders": AlphabetRail {x:parent.width - 28px;width:24px;height:min(parent.height,672px);}
+    if !AppState.catalog-loading && AppState.search!="" && AppState.group-grid.length==0: SearchEmptyState {}
 }
 
 export component SongsView inherits Rectangle {
@@ -156,8 +168,11 @@ export component SongsView inherits Rectangle {
     private property<length> related-content-height:36px+(AppState.lyrics-open ? self.related-card-height : AppState.related-albums.length*(self.related-card-height+12px)-12px);
     if AppState.grid && AppState.detail-key=="": Rectangle {
         motion:=ScrollMotion {offset<=>grid.content-y;minimum:-max(0px,grid.content-height - grid.height);page:grid.height;}
+        Timer {interval:16ms;running:AppState.library-view-restore;triggered=>{motion.snap(-(floor(AppState.library-scroll-index/max(1,AppState.columns))+AppState.library-scroll-fraction)*grid.row-height);AppState.library-view-restore=false;}}
         grid:=ListView {
             horizontal-scrollbar-policy:always-off;vertical-scrollbar-policy:always-off;
+            private property<length> row-height:AppState.browse-artwork ? (self.width - 44px - 16px*(AppState.columns - 1))/max(1,AppState.columns)+66px : 66px;
+            changed content-y=>{if !AppState.library-view-restore {AppState.library-scroll-index=max(0,floor(-self.content-y/self.row-height))*max(1,AppState.columns);AppState.library-scroll-fraction=max(0,-self.content-y/self.row-height)-floor(max(0,-self.content-y/self.row-height));}}
             function wheel-scroll(delta:length) {
                 motion.nudge(delta);
             }
@@ -183,8 +198,10 @@ export component SongsView inherits Rectangle {
         private property<length> album-width:self.width>=600px && (!self.detail || AppState.view!="albums") ? self.width*0.28 : 0px;
         private property<length> duration-x:self.width - 80px;
         private property<length> title-width:self.duration-x - self.index-width - self.artist-width - self.album-width;
+        Timer {interval:16ms;running:AppState.library-view-restore && AppState.detail-key=="";triggered=>{song-list.content-y=-max(0,(AppState.library-scroll-index+AppState.library-scroll-fraction)*44px);AppState.library-view-restore=false;}}
         song-list:=ListView {
             y:32px;height:parent.height - 32px;horizontal-scrollbar-policy:always-off;vertical-scrollbar-policy:always-off;mouse-drag-pan-enabled:!AppState.playlist-selection-mode;
+            changed content-y=>{if AppState.detail-key=="" && !AppState.library-view-restore {AppState.library-scroll-index=max(0,floor(-self.content-y/44px));AppState.library-scroll-fraction=max(0,-self.content-y/44px)-floor(max(0,-self.content-y/44px));}}
             private property<int> first-row:max(0,floor(-self.content-y/44px)-1);
             private property<int> last-row:ceil((-self.content-y+self.height)/44px)+1;
             init=>{AppState.song-first=self.first-row;AppState.song-end=self.last-row;}
@@ -252,6 +269,7 @@ export component SongsView inherits Rectangle {
     if AppState.detail-key=="" && AppState.sort!="recent": AlphabetRail {
         x:parent.width - 28px;y:0;width:24px;height:min(parent.height,672px);
     }
+    if !AppState.catalog-loading && AppState.search!="" && AppState.songs.length==0: SearchEmptyState {}
 }
 
 export component CatalogDetails inherits Rectangle {

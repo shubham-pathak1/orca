@@ -67,6 +67,9 @@ fn shutdown_volume(requests: &Receiver<Request>, mut volume: f32) -> f32 {
     volume
 }
 pub struct Service {
+    bulk_cancel: Arc<AtomicBool>,
+    pub(crate) artwork_demand:
+        crate::jobs::LatestJob<orca_services::operation_types::ArtworkDemand>,
     pub tx: Sender<Request>,
     pub rx: Receiver<Event>,
     pub latest_query: Arc<AtomicU64>,
@@ -81,6 +84,8 @@ impl Service {
         let (events, rx) = mpsc::channel();
         (
             Self {
+                bulk_cancel: Arc::new(AtomicBool::new(true)),
+                artwork_demand: latest_channel().0,
                 tx,
                 rx,
                 latest_query: Arc::new(AtomicU64::new(0)),
@@ -93,6 +98,8 @@ impl Service {
         )
     }
     pub fn start(directory: PathBuf, audio: bool) -> Self {
+        let bulk_cancel = Arc::new(AtomicBool::new(true));
+        let (artwork_demand, artwork_rx) = latest_channel();
         let (tx, requests) = mpsc::channel();
         let (events, rx) = mpsc::channel();
         let (analysis_jobs, analysis_rx) = latest_channel::<(u64, String, bool)>();
@@ -103,6 +110,8 @@ impl Service {
         let analysis_generation = Arc::new(AtomicU64::new(0));
         let latest_query = Arc::new(AtomicU64::new(0));
         let mut handles = background::spawn(background::BackgroundWorkers {
+            bulk_cancel: bulk_cancel.clone(),
+            artwork_rx,
             directory: directory.clone(),
             stop: stop.clone(),
             events: events.clone(),
@@ -132,6 +141,8 @@ impl Service {
         }));
 
         Self {
+            bulk_cancel,
+            artwork_demand,
             tx,
             rx,
             latest_query,
@@ -140,9 +151,19 @@ impl Service {
             handles,
         }
     }
+    pub(crate) fn artwork_bulk(&self, action: orca_services::operation_types::ArtworkBulkAction) {
+        use orca_services::operation_types::ArtworkBulkAction;
+        if matches!(action, ArtworkBulkAction::Pause) {
+            self.bulk_cancel.store(true, Ordering::Relaxed);
+        }
+        let _ = self
+            .tx
+            .send(Request::Operation(OperationRequest::ArtworkBulk(action)));
+    }
 }
 impl Drop for Service {
     fn drop(&mut self) {
+        self.bulk_cancel.store(true, Ordering::Relaxed);
         self.stop.store(true, Ordering::Relaxed);
         let _ = self.tx.send(Request::Shutdown);
         for handle in self.handles.drain(..) {

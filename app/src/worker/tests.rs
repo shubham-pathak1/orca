@@ -320,7 +320,7 @@ fn watched_library_reconciles_offline_deletions_live_restores_and_source_removal
 }
 
 #[test]
-fn collection_header_is_delivered_before_its_song_page_without_playback() {
+fn collection_page_and_header_are_delivered_without_playback() {
     let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
         "../target/slint/header-service-test-{}",
         std::process::id()
@@ -358,10 +358,12 @@ fn collection_header_is_delivered_before_its_song_page_without_playback() {
         .unwrap();
     let deadline = Instant::now() + Duration::from_secs(8);
     let mut header = false;
+    let mut page = false;
     loop {
         assert!(Instant::now() < deadline, "collection data did not arrive");
         match service.rx.recv_timeout(Duration::from_millis(100)) {
-            Ok(Event::Operation(
+            Ok(Event::CatalogDetail(
+                1,
                 OperationRequest::GroupDetail(_),
                 OperationResult::Detail(result),
             )) => {
@@ -372,11 +374,13 @@ fn collection_header_is_delivered_before_its_song_page_without_playback() {
                 header = true;
             }
             Ok(Event::Page(1, 0, 0, _)) => {
-                assert!(header, "local header must not wait on the operation worker");
-                break;
+                page = true;
             }
             Ok(Event::Error(error)) => panic!("{error}"),
             _ => {}
+        }
+        if header && page {
+            break;
         }
     }
     let started = Instant::now();

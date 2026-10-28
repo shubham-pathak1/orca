@@ -18,6 +18,7 @@ pub(super) struct CatalogState {
     pub query: Query,
     pub generation: u64,
     pub kind: String,
+    pub ids: Vec<i64>,
 }
 impl Default for CatalogState {
     fn default() -> Self {
@@ -25,6 +26,7 @@ impl Default for CatalogState {
             query: Query::default(),
             generation: 0,
             kind: "songs".into(),
+            ids: Vec::new(),
         }
     }
 }

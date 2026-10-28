@@ -1,6 +1,8 @@
 //! Rust-native application service. The frontend owns UI state; this crate owns
 //! database access and joined scan/audio lifecycles; orca-core owns media work.
 mod artwork;
+mod artwork_bulk;
+mod artwork_demand;
 mod bootstrap;
 mod catalog;
 mod folder_rules;
