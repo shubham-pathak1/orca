@@ -90,10 +90,61 @@ pub(super) fn verify(case: &mut UiCase) {
         "long lyrics must wrap onto multiple text lines"
     );
     screenshot(pixels, "wrapped-lyrics-smoke");
+    state.set_lyrics_left_aligned(true);
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    screenshot(pixels, "left-aligned-lyrics-full-player");
+    // Check the width cap in both alignments at compact and desktop widths.
+    for (left_aligned, width, height) in [
+        (false, 1000, 820),
+        (false, 1100, 820),
+        (false, 1920, 1080),
+        (true, 1000, 820),
+        (true, 1100, 820),
+        (true, 1920, 1080),
+    ] {
+        state.set_lyrics_left_aligned(left_aligned);
+        window.set_size(slint::PhysicalSize::new(width, height));
+        let mut frame = vec![slint::Rgb8Pixel::default(); (width * height) as usize];
+        window.draw_if_needed(|renderer| {
+            renderer.render(&mut frame, width as usize);
+        });
+        assert!(state.get_lyrics_width() <= 760.0);
+        assert!(state.get_lyrics_width() > 400.0);
+        let bytes: Vec<u8> = frame.iter().flat_map(|p| [p.r, p.g, p.b]).collect();
+        save_screenshot(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
+                "../target/slint/test-artifacts/ui/lyrics-left-{left_aligned}-{width}.png"
+            )),
+            &bytes,
+            width,
+            height,
+            image::ColorType::Rgb8,
+        )
+        .unwrap();
+    }
+    window.set_size(slint::PhysicalSize::new(1280, 820));
+    let previous_track = state.get_now();
+    let mut preview_track = previous_track.clone();
+    preview_track.path = "test.flac".into();
+    state.set_now(preview_track);
+    state.set_full_player(false);
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    screenshot(pixels, "left-aligned-lyrics-side-panel");
+    state.set_full_player(true);
+    state.set_now(previous_track);
+    state.set_lyrics_left_aligned(false);
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
     let enhanced = crate::lyrics::parse("[00:01.00]Lovely <00:01.50>day\n[00:03.00]Next line");
     let rendered = Rc::new(RefCell::new(lyric_render::Renderer::new()));
     rendered.borrow_mut().configure(
         lyric_render::Config {
+            left_aligned: false,
             width: state.get_lyrics_width().round() as u32,
             size: state.get_lyric_font_size().round() as u32,
             dpr: 1.0,
@@ -206,7 +257,7 @@ pub(super) fn verify(case: &mut UiCase) {
         "following must immediately advance past the oversized lyric row"
     );
     assert!(
-        pixels[420 * 1280 + 1215].b > 150,
+        pixels[420 * 1280 + 1160].b > 150,
         "lyrics viewport must have no scrollbar overlay"
     );
     assert!(

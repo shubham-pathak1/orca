@@ -23,6 +23,7 @@ const MIN_LYRIC_ROW_HEIGHT: f32 = 68.0;
 
 #[derive(Clone, PartialEq)]
 pub struct Config {
+    pub left_aligned: bool,
     pub width: u32,
     pub size: u32,
     pub dpr: f32,

@@ -98,6 +98,7 @@ pub struct Settings {
     pub sort: String,
     pub scale: f32,
     pub quality_info: bool,
+    pub lyrics_left_aligned: bool,
     pub show_liked_songs: bool,
     pub dynamic_accent: bool,
     pub blurred_background: bool,
@@ -122,6 +123,7 @@ impl Default for Settings {
             sort: "artist".into(),
             scale: 1.0,
             quality_info: true,
+            lyrics_left_aligned: false,
             show_liked_songs: true,
             dynamic_accent: true,
             blurred_background: true,
@@ -140,6 +142,16 @@ impl Default for Settings {
 #[cfg(test)]
 mod settings_tests {
     use super::Settings;
+
+    #[test]
+    fn lyrics_alignment_defaults_centered_and_survives_settings_round_trip() {
+        let mut settings: Settings = serde_json::from_str("{}").unwrap();
+        assert!(!settings.lyrics_left_aligned);
+        settings.lyrics_left_aligned = true;
+        let restored: Settings =
+            serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
+        assert!(restored.lyrics_left_aligned);
+    }
 
     #[test]
     fn replaygain_defaults_off_and_survives_settings_round_trip() {

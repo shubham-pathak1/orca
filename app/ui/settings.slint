@@ -116,6 +116,8 @@ export component SettingsView inherits Rectangle {
                         selected(value)=>{AppState.full-player-background=self.current-index==1 ? "color" : self.current-index==2 ? "off" : "artwork";AppState.save-settings();}}}
             }
             if root.tab==1 || AppState.search!="": VerticalLayout {spacing:24px;alignment:start;
+                if AppState.setting-matches("Lyrics alignment left center synced word timed",AppState.search): SettingRow {title:"Lyrics alignment";description:"Align lyrics in the side panel and full player";
+                    ComboBox {enabled:AppState.focus-layer=="browse";model:["Center","Left"];current-index:AppState.lyrics-left-aligned ? 1 : 0;selected(value) => {AppState.lyrics-left-aligned=self.current-index==1;AppState.save-settings();}}}
                 if AppState.setting-matches("Sidebar mode text labels icons",AppState.search): SettingRow {title:"Sidebar mode";description:"Choose whether the sidebar should show text labels or just icons";
                     ComboBox {enabled:AppState.focus-layer=="browse";model:["Icon-only","Labels"];current-index:AppState.icon-sidebar ? 0 : 1;selected(value) => {AppState.icon-sidebar=self.current-index==0;AppState.save-settings();}}}
                 if AppState.setting-matches("Seekbar style classic slider decoded waveform",AppState.search): SettingRow {title:"Seekbar style";description:"Choose between the classic slider and a decoded waveform";

@@ -199,6 +199,7 @@ pub(crate) fn install(
         if lyrics_visible && s.get_lyrics_width() > 0.0 {
             lyric_renderer.borrow_mut().configure(
                 lyric_render::Config {
+                    left_aligned: s.get_lyrics_left_aligned(),
                     width: (s.get_lyrics_width() * dpr).round().clamp(32.0, 2048.0) as u32,
                     size: (s.get_lyric_font_size() * dpr).round().clamp(16.0, 160.0) as u32,
                     dpr,

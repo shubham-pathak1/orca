@@ -1,6 +1,7 @@
 use super::*;
 fn config(width: u32) -> Config {
     Config {
+        left_aligned: false,
         width,
         size: 40,
         dpr: 1.0,
@@ -18,6 +19,46 @@ fn fonts() -> FontContext {
     );
     fonts
 }
+#[test]
+fn left_alignment_keeps_wrapped_highlights_on_their_glyphs() {
+    let text = "Lovely day with enough words to wrap across several lines";
+    let mut settings = config(320);
+    settings.left_aligned = true;
+    let prepared = shape(
+        &mut fonts(),
+        &mut LayoutContext::new(),
+        Line {
+            text: text.into(),
+            words: vec![Word {
+                start: 0,
+                end: text.len(),
+                time: 1000.0,
+                end_time: 3000.0,
+            }],
+        },
+        &settings,
+    );
+    assert!(prepared.spans.len() > 1);
+    let bitmap = raster(
+        &prepared.layout,
+        settings.width,
+        prepared.height,
+        &mut swash::scale::ScaleContext::new(),
+    );
+    for span in &prepared.spans {
+        assert!(span.x.abs() < 0.5, "wrapped rows should start at the left");
+        let has_ink = (span.y.max(0.0) as usize
+            ..(span.y + span.height).ceil().min(prepared.height as f32) as usize)
+            .any(|y| {
+                (0..span.width.ceil().min(settings.width as f32) as usize)
+                    .any(|x| bitmap.bytes[(y * settings.width as usize + x) * 4 + 3] > 0)
+            });
+        assert!(has_ink, "highlight must cover the corresponding glyphs");
+    }
+    assert_eq!(prepared.spans.first().unwrap().time, 1000.0);
+    assert_eq!(prepared.spans.last().unwrap().end_time, 3000.0);
+}
+
 #[test]
 fn cached_glyphs_and_highlight_rectangles_share_the_same_coordinates() {
     let line = Line {

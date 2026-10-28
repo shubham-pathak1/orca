@@ -17,7 +17,14 @@ pub(super) fn shape(
     }
     let mut layout = builder.build(&line.text);
     layout.break_all_lines(Some(config.width as f32));
-    layout.align(Alignment::Center, AlignmentOptions::default());
+    layout.align(
+        if config.left_aligned {
+            Alignment::Left
+        } else {
+            Alignment::Center
+        },
+        AlignmentOptions::default(),
+    );
     let height = (layout.height() + 12.0 * config.dpr)
         .ceil()
         .max(MIN_LYRIC_ROW_HEIGHT * config.dpr) as u32;

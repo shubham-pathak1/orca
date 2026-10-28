@@ -153,7 +153,7 @@ component LyricsViewport inherits Rectangle {
             private property<LyricRender> rendered:self.in-view ? AppState.lyric-render(index,AppState.lyric-render-revision) : AppState.lyric-render(-1,AppState.lyric-render-revision);
             private property<float> line-opacity:line.time<0 ? 0.84 : AppState.active-line==index ? 1 : abs(AppState.active-line - index)==1 ? 0.56 : 0.34;
             if in-view && rendered.bitmap.width==0: Text {x:0px;y:0px;width:parent.width;height:parent.height;text:line.text;color:root.ink;font-size:AppState.lyric-font-size*1px;font-weight:900;
-                wrap:word-wrap;horizontal-alignment:center;vertical-alignment:center;
+                wrap:word-wrap;horizontal-alignment:AppState.lyrics-left-aligned ? left : center;vertical-alignment:center;
                 opacity:parent.line-opacity;
                 }
             if in-view && rendered.bitmap.width>0: karaoke := Rectangle {
@@ -215,7 +215,7 @@ export component InlineLyricsPanel inherits Rectangle {
     Text {x:20px;y:16px;width:parent.width - 76px;height:32px;text:"LYRICS";color:AppState.ink.with-alpha(0.65);font-size:12px;font-weight:700;vertical-alignment:center;}
     IconButton {label:"Refresh lyrics";x:parent.width - 96px;y:12px;width:32px;height:32px;icon:Icons.refresh;enabled:AppState.now.path!="" && !AppState.lyrics-refreshing;clicked=>{AppState.lyrics-refreshing=true;AppState.refresh-lyrics();}}
     IconButton {label:"Close lyrics";x:parent.width - 56px;y:12px;width:32px;height:32px;icon:Icons.close;clicked=>{AppState.lyrics-open=false;}}
-    LyricsViewport {x:20px;y:60px;width:parent.width - 40px;height:parent.height - 76px;font-size:clamp(root.width*0.065,23px,30px)*AppState.scale;}
+    LyricsViewport {x:24px;y:60px;width:parent.width - 48px;height:parent.height - 76px;font-size:clamp(root.width*0.065,23px,30px)*AppState.scale;}
 }
 
 export component PlaylistPicker inherits Rectangle {
@@ -257,6 +257,10 @@ export component FullPlayer inherits Rectangle {
     private property<color> ink:AppState.full-player-dark ? white : AppState.ink;
     private property<bool> compact-lyrics:AppState.lyrics-open && root.width<1100px;
     private property<bool> spacious-lyrics:AppState.lyrics-open && root.width>=1600px && root.height>=900px;
+    private property<length> lyric-gap:AppState.lyrics-left-aligned ? clamp(root.width*0.065,64px,128px) : 48px;
+    private property<length> lyric-start:content.x+content.width+root.lyric-gap;
+    private property<length> lyric-space:max(0px,root.width - root.lyric-start - 104px);
+    private property<length> lyric-column:min(760px,root.lyric-space);
     background:AppState.full-player-dark ? #090a0c : AppState.base;
     if AppState.full-player-background=="artwork": AmbientBackground {source:AppState.full-backdrop;strength:0.78;subtle:false;animate:false;}
     if AppState.full-player-background=="color": Rectangle {
@@ -320,8 +324,8 @@ export component FullPlayer inherits Rectangle {
         }
     }
     if AppState.lyrics-open && !root.compact-lyrics: LyricsViewport {
-        x:content.x+content.width+32px;y:104px;width:root.width - self.x - 56px;height:root.height - 136px;
-        font-size:clamp(root.width*0.0265,30.4px,50.4px)*AppState.scale;dark:AppState.full-player-dark;
+        x:root.lyric-start+(AppState.lyrics-left-aligned ? 0px : (root.lyric-space - root.lyric-column)/2);y:104px;width:root.lyric-column;height:root.height - 136px;
+        font-size:clamp(root.width*0.0244,28px,46.4px)*AppState.scale;dark:AppState.full-player-dark;
     }
     if root.compact-lyrics: Rectangle {
         x:56px;y:108px;width:root.width - 112px;height:230px;
@@ -344,8 +348,8 @@ export component FullPlayer inherits Rectangle {
         SeekBar {x:0px;y:177px;width:parent.width;height:53px;dark:AppState.full-player-dark;stacked:true;}
     }
     if root.compact-lyrics: LyricsViewport {
-        x:56px;y:352px;width:root.width - 112px;height:root.height - 384px;
-        font-size:clamp(root.width*0.035,28px,38px)*AppState.scale;dark:AppState.full-player-dark;
+        x:(root.width - self.width)/2;y:352px;width:min(760px,root.width - 112px);height:root.height - 384px;
+        font-size:clamp(root.width*0.0322,25.8px,35px)*AppState.scale;dark:AppState.full-player-dark;
     }
     VolumeControl {layer:"full";dark:AppState.full-player-dark;x:parent.width - 72px;y:parent.height - 72px;}
 }

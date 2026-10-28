@@ -10,6 +10,11 @@ pub(super) fn verify(case: &mut UiCase) {
     state.set_font_path("".into());
     state.set_font_family("".into());
     state.set_view("settings".into());
+    state.set_search("Lyrics alignment".into());
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    screenshot(pixels, "lyrics-alignment-setting");
     let bulk_actions = Rc::new(RefCell::new(Vec::new()));
     let observed_bulk = bulk_actions.clone();
     state.on_artwork_bulk(move |action| observed_bulk.borrow_mut().push(action.to_string()));
@@ -110,6 +115,7 @@ pub(super) fn verify(case: &mut UiCase) {
     let older = serde_json::from_str(r#"{"blurred_background":false}"#).unwrap();
     controllers::preferences::apply_settings(ui, older);
     assert_eq!(state.get_full_player_background(), "off");
+    assert!(!state.get_lyrics_left_aligned());
     assert!(
         !state.get_replaygain(),
         "older settings should keep ReplayGain off"
@@ -117,6 +123,12 @@ pub(super) fn verify(case: &mut UiCase) {
     controllers::preferences::apply_settings(ui, current.clone());
     state.set_replaygain(true);
     assert!(controllers::preferences::settings(ui).replaygain);
+    state.set_lyrics_left_aligned(true);
+    let saved = controllers::preferences::settings(ui);
+    assert!(saved.lyrics_left_aligned);
+    state.set_lyrics_left_aligned(false);
+    controllers::preferences::apply_settings(ui, saved);
+    assert!(state.get_lyrics_left_aligned());
     controllers::preferences::apply_settings(ui, current);
     state.set_light_theme(false);
     state.set_view("settings".into());
