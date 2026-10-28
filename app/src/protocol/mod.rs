@@ -99,6 +99,7 @@ pub struct Settings {
     pub scale: f32,
     pub quality_info: bool,
     pub lyrics_left_aligned: bool,
+    pub show_tooltips: bool,
     pub show_liked_songs: bool,
     pub dynamic_accent: bool,
     pub blurred_background: bool,
@@ -124,6 +125,7 @@ impl Default for Settings {
             scale: 1.0,
             quality_info: true,
             lyrics_left_aligned: false,
+            show_tooltips: true,
             show_liked_songs: true,
             dynamic_accent: true,
             blurred_background: true,
@@ -142,6 +144,16 @@ impl Default for Settings {
 #[cfg(test)]
 mod settings_tests {
     use super::Settings;
+
+    #[test]
+    fn tooltips_default_on_for_existing_profiles_and_persist_when_disabled() {
+        let mut settings: Settings = serde_json::from_str("{}").unwrap();
+        assert!(settings.show_tooltips);
+        settings.show_tooltips = false;
+        let restored: Settings =
+            serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
+        assert!(!restored.show_tooltips);
+    }
 
     #[test]
     fn lyrics_alignment_defaults_centered_and_survives_settings_round_trip() {

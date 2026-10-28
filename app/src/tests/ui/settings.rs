@@ -10,6 +10,24 @@ pub(super) fn verify(case: &mut UiCase) {
     state.set_font_path("".into());
     state.set_font_family("".into());
     state.set_view("settings".into());
+    state.set_search("tooltips".into());
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    assert!(state.get_show_tooltips());
+    screenshot(pixels, "tooltips-setting");
+    click(window, 875.0, 192.0);
+    assert!(!state.get_show_tooltips());
+    let saved_tooltips = controllers::preferences::settings(ui);
+    assert!(!saved_tooltips.show_tooltips);
+    state.set_show_tooltips(true);
+    controllers::preferences::apply_settings(ui, saved_tooltips);
+    assert!(!state.get_show_tooltips());
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    click(window, 875.0, 192.0);
+    assert!(state.get_show_tooltips());
     state.set_search("Lyrics alignment".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);

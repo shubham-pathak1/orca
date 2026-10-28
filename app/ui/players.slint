@@ -294,7 +294,7 @@ export component FullPlayer inherits Rectangle {
             if AppState.lyrics-open: Text {text:AppState.now.title;color:root.ink;font-size:(root.height<720px ? 28px : 30px)*AppState.scale;font-weight:900;horizontal-alignment:center;overflow:elide;}
             if !AppState.lyrics-open: Rectangle {height:root.height<720px ? 36px : 48px;
                 Text {x:(parent.width - self.width)/2;width:root.width - 112px;height:parent.height;text:AppState.now.title;color:root.ink;font-size:(root.height<720px ? 28px : 36px)*AppState.scale;font-weight:900;horizontal-alignment:center;vertical-alignment:center;overflow:elide;
-                    Tooltip {text:@markdown("\{AppState.now.title}");}
+                    if AppState.show-tooltips: Tooltip {text:@markdown("\{AppState.now.title}");}
                 }
             }
             Rectangle {height:root.height<720px ? 4px : 8px;}
@@ -303,7 +303,7 @@ export component FullPlayer inherits Rectangle {
                     TouchArea {enabled:AppState.now.artist!="";clicked=>{AppState.unfocus();AppState.full-player=false;AppState.view="artists";AppState.open-group(AppState.now.artist,"",AppState.now.artist);}}}
                 if AppState.now.album!="": Text {text:"-";color:root.ink.with-alpha(0.8);font-size:(root.height<720px ? 14px : AppState.lyrics-open ? 16px : 18px)*AppState.scale;vertical-alignment:center;}
                 if AppState.now.album!="": Text {width:min(self.preferred-width,max(0px,parent.width - artist-label.width - 24px*AppState.scale));text:AppState.now.album;color:root.ink.with-alpha(0.7529);font-size:(root.height<720px ? 14px : AppState.lyrics-open ? 16px : 18px)*AppState.scale;vertical-alignment:center;overflow:elide;
-                    Tooltip {text:@markdown("\{AppState.now.album}");}
+                    if AppState.show-tooltips: Tooltip {text:@markdown("\{AppState.now.album}");}
                     TouchArea {clicked=>{AppState.unfocus();AppState.full-player=false;AppState.view="albums";AppState.open-group(AppState.now.album,AppState.now.album-artist,AppState.now.album);}}}
             }
             Rectangle {height:root.height<720px ? 8px : 16px;}

@@ -7,7 +7,7 @@ component SettingRow inherits Rectangle {
     in property <string> title;
     in property <string> description;
     in property <string> hint;
-    if root.hint!="": Tooltip {text:@markdown("\{root.hint}");}
+    if AppState.show-tooltips && root.hint!="": Tooltip {text:@markdown("\{root.hint}");}
     private property<bool> compact:root.width<620px;
     height:root.compact ? 128px : 78px;
     Text {x:0px;y:4px;height:24px;width:root.compact ? parent.width : parent.width - 260px;text:root.title;color:AppState.ink;font-weight:600;font-size:14px*AppState.scale;}
@@ -116,6 +116,8 @@ export component SettingsView inherits Rectangle {
                         selected(value)=>{AppState.full-player-background=self.current-index==1 ? "color" : self.current-index==2 ? "off" : "artwork";AppState.save-settings();}}}
             }
             if root.tab==1 || AppState.search!="": VerticalLayout {spacing:24px;alignment:start;
+                if AppState.setting-matches("Show tooltips hover hints controls",AppState.search): SettingRow {title:"Show tooltips";description:"Show hover hints for controls and track details";
+                    ToggleSwitch {label:"Show tooltips";x:178px;y:12px;checked <=> AppState.show-tooltips;toggled=>{AppState.save-settings();}}}
                 if AppState.setting-matches("Lyrics alignment left center synced word timed",AppState.search): SettingRow {title:"Lyrics alignment";description:"Align lyrics in the side panel and full player";
                     ComboBox {enabled:AppState.focus-layer=="browse";model:["Center","Left"];current-index:AppState.lyrics-left-aligned ? 1 : 0;selected(value) => {AppState.lyrics-left-aligned=self.current-index==1;AppState.save-settings();}}}
                 if AppState.setting-matches("Sidebar mode text labels icons",AppState.search): SettingRow {title:"Sidebar mode";description:"Choose whether the sidebar should show text labels or just icons";

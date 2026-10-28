@@ -32,6 +32,7 @@ pub(crate) fn settings(ui: &OrcaWindow) -> Settings {
         scale: s.get_scale(),
         quality_info: s.get_quality_info(),
         lyrics_left_aligned: s.get_lyrics_left_aligned(),
+        show_tooltips: s.get_show_tooltips(),
         show_liked_songs: s.get_show_liked_songs(),
         dynamic_accent: s.get_dynamic_accent(),
         blurred_background: s.get_blurred_background(),
@@ -57,6 +58,7 @@ pub(crate) fn apply_settings(ui: &OrcaWindow, s: Settings) {
     a.set_scale(s.scale);
     a.set_quality_info(s.quality_info);
     a.set_lyrics_left_aligned(s.lyrics_left_aligned);
+    a.set_show_tooltips(s.show_tooltips);
     a.set_show_liked_songs(s.show_liked_songs);
     a.set_dynamic_accent(s.dynamic_accent);
     a.set_blurred_background(s.blurred_background);

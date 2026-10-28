@@ -153,7 +153,7 @@ export component OrcaWindow inherits Window {
 export component OrcaTray inherits SystemTrayIcon {
     in property<bool> playing;
     icon: SidebarLogos.logo-32;
-    tooltip:"Orca";
+    tooltip:AppState.show-tooltips ? "Orca" : "";
     callback action(string);
     clicked=>{root.action("restore");}
     Menu {

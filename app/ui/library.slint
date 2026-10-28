@@ -32,10 +32,10 @@ component SongTile inherits Rectangle {
         if root.selected: Rectangle {border-radius:3px;border-width:2px;border-color:AppState.accent;}
     }
     Text {x:0px;y:(AppState.browse-artwork ? root.width : 0px)+8px;width:parent.width - (root.song.explicit ? 22px : 0px);height:20px;text:root.song.title;color:AppState.ink;font-weight:700;font-size:14px*AppState.scale;overflow:elide;
-    }
+        if AppState.show-tooltips && root.song.title!="": Tooltip {text:@markdown("\{root.song.title}");}}
     if root.song.explicit: Rectangle {x:parent.width - 18px;y:(AppState.browse-artwork ? root.width : 0px)+10px;width:16px;height:16px;border-radius:2px;background:AppState.ink.with-alpha(0.18);Text {text:"E";color:AppState.ink;font-size:10px;font-weight:700;horizontal-alignment:center;vertical-alignment:center;}}
     Text {x:0px;y:(AppState.browse-artwork ? root.width : 0px)+28px;width:parent.width;height:20px;text:root.song.artist;color:root.selected ? AppState.ink : AppState.secondary-ink;font-weight:600;font-size:14px*AppState.scale;overflow:elide;
-    }
+        if AppState.show-tooltips && root.song.artist!="": Tooltip {text:@markdown("\{root.song.artist}");}}
     area := TouchArea {
         enabled:root.song.path!="";
         scroll-event(event)=>{root.wheel-scroll(event.delta-y);return accept;}
@@ -76,11 +76,11 @@ component CatalogTile inherits Rectangle {
     Text {y:root.compact ? 14px : AppState.view=="genres" ? root.height - 64px : root.width+8px;
         x:root.compact ? (AppState.browse-artwork ? 64px : 8px) : AppState.view=="genres" ? 12px : 0px;width:parent.width - self.x;height:24px;
         text:root.group.title;color:AppState.ink;font-weight:700;font-size:AppState.view=="genres" ? 18px*AppState.scale : 14px*AppState.scale;overflow:elide;
-    }
+        if AppState.show-tooltips && root.group.title!="": Tooltip {text:@markdown("\{root.group.title}");}}
     Text {y:root.compact ? 38px : AppState.view=="genres" ? root.height - 41px : root.width+28px;
         x:root.compact ? (AppState.browse-artwork ? 64px : 8px) : AppState.view=="genres" ? 12px : 0px;width:parent.width - self.x;height:20px;
         text:root.group.subtitle;color:AppState.secondary-ink;font-size:14px*AppState.scale;font-weight:600;overflow:elide;
-    }
+        if AppState.show-tooltips && root.group.subtitle!="": Tooltip {text:@markdown("\{root.group.subtitle}");}}
     area:=TouchArea { scroll-event(event)=>{root.wheel-scroll(event.delta-y);return accept;} enabled:root.group.key!="";clicked => {AppState.unfocus();AppState.open-group(root.group.key,root.group.secondary,root.group.title);}
         pointer-event(event)=>{if (AppState.view!="playlists" || root.group.key!="liked") && event.button==PointerEventButton.right && event.kind==PointerEventKind.down {AppState.keyboard-navigation=false;AppState.unfocus();AppState.collection-menu(root.group,(self.absolute-position.x+self.mouse-x)/1px,(self.absolute-position.y+self.mouse-y)/1px);}}
     }
@@ -98,7 +98,7 @@ component RelatedAlbumCard inherits Rectangle {
     Rectangle {height:parent.height - 8px;border-radius:6px;background:root.album.key!="" ? AppState.ink.with-alpha(0.0353) : transparent;}
     if AppState.browse-artwork && root.album.key!="": Rectangle {x:8px;y:8px;width:parent.width - 16px;height:self.width;border-radius:3px;clip:true;CoverImage {x:0px;y:0px;width:parent.width;height:parent.height;artwork:root.album.cover;missing:root.album.cover-missing;image-fit:cover;}}
     Text {x:8px;y:AppState.browse-artwork ? parent.width : 8px;height:20px;width:parent.width - 16px;text:root.album.title;color:AppState.ink;font-size:12px;font-weight:700;overflow:elide;
-    }
+        if AppState.show-tooltips && root.album.title!="": Tooltip {text:@markdown("\{root.album.title}");}}
     Text {x:8px;y:(AppState.browse-artwork ? parent.width : 8px)+20px;height:20px;width:parent.width - 16px;text:root.album.key!="" ? root.album.count+(root.album.count==1 ? " song" : " songs") : "";color:AppState.secondary-ink;font-size:14px*AppState.scale;font-weight:600;overflow:elide;}
     TouchArea {scroll-event(event)=>{root.wheel-scroll(event.delta-x!=0px ? event.delta-x : event.delta-y);return accept;}clicked=>{if root.album.key!="" {AppState.view="albums";AppState.open-group(root.album.key,root.album.secondary,root.album.title);}}}
 }
@@ -232,13 +232,13 @@ export component SongsView inherits Rectangle {
                 if AppState.browse-artwork: Rectangle {x:table.index-width;y:8px;width:28px;height:28px;border-radius:3px;clip:true;CoverImage {x:0px;y:0px;width:parent.width;height:parent.height;artwork:song.cover;missing:song.cover-missing;image-fit:cover;}}
                 private property<bool> show-quality:table.detail && AppState.quality-info && song.quality!="";
                 Text {x:table.index-width+(AppState.browse-artwork ? 40px : 0px);y:parent.show-quality ? 3px : 0px;height:parent.show-quality ? 22px : parent.height;width:table.title-width - (AppState.browse-artwork ? 60px : 20px) - (song.explicit ? 22px : 0px);text:song.title;color:AppState.ink;font-weight:600;font-size:14px*AppState.scale;overflow:elide;vertical-alignment:center;
-    }
+                    if AppState.show-tooltips && song.title!="": Tooltip {text:@markdown("\{song.title}");}}
                 if song.explicit: Rectangle {x:table.index-width+table.title-width - (AppState.browse-artwork ? 38px : 18px);y:parent.show-quality ? 6px : 14px;width:16px;height:16px;border-radius:2px;background:AppState.ink.with-alpha(0.18);Text {text:"E";color:AppState.ink;font-size:10px;font-weight:700;horizontal-alignment:center;vertical-alignment:center;}}
                 if table.detail && AppState.quality-info && song.quality!="": Text {x:table.index-width+(AppState.browse-artwork ? 40px : 0px);y:25px;height:16px;width:table.title-width - (AppState.browse-artwork ? 60px : 20px);text:song.quality;color:AppState.secondary-ink;font-size:11px*AppState.scale;font-weight:600;overflow:elide;vertical-alignment:center;}
                 if table.artist-width>0px: Text {x:table.index-width+table.title-width;width:table.artist-width - 12px;text:song.artist;color:AppState.secondary-ink;font-size:14px*AppState.scale;font-weight:600;overflow:elide;vertical-alignment:center;
-    }
+                    if AppState.show-tooltips && song.artist!="": Tooltip {text:@markdown("\{song.artist}");}}
                 if table.album-width>0px: Text {x:table.duration-x - table.album-width;width:table.album-width - 12px;text:song.album;color:AppState.secondary-ink;font-size:14px*AppState.scale;font-weight:600;overflow:elide;vertical-alignment:center;
-    }
+                    if AppState.show-tooltips && song.album!="": Tooltip {text:@markdown("\{song.album}");}}
                 Text {x:table.duration-x;width:72px;text:song.duration;color:AppState.secondary-ink;font-size:14px*AppState.scale;font-weight:600;horizontal-alignment:right;vertical-alignment:center;}
                 area := TouchArea {
                     private property<bool> shift-pressed:false;

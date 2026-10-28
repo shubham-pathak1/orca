@@ -55,7 +55,7 @@ export component IconButton inherits Rectangle {
     in property<bool> dialog-control:false;
     in property<string> layer:"browse";
     in property<string> label;
-    Tooltip {text:@markdown("\{root.label}");}
+    if AppState.show-tooltips && root.label!="": Tooltip {text:@markdown("\{root.label}");}
     forward-focus:focus;
     accessible-role:button;
     accessible-label:root.label;
