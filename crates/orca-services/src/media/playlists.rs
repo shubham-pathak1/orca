@@ -9,9 +9,9 @@ impl Backend {
             return Ok(None);
         };
         let thumbnail: Option<String> = self.conn.query_row(
-            "SELECT NULLIF(NULLIF(artwork_thumb_url,''),'DELETED') AS thumb FROM active_songs WHERE ?1 IN (artwork_url,artwork_preview_url,artwork_thumb_url) AND NULLIF(NULLIF(artwork_thumb_url,''),'DELETED') IS NOT NULL
-             UNION ALL SELECT NULLIF(NULLIF(artwork_thumb_path,''),'DELETED') FROM artist_artworks WHERE artwork_path=?1 AND NULLIF(NULLIF(artwork_thumb_path,''),'DELETED') IS NOT NULL
-             UNION ALL SELECT NULLIF(NULLIF(artwork_thumb_path,''),'DELETED') FROM album_artworks WHERE artwork_path=?1 AND NULLIF(NULLIF(artwork_thumb_path,''),'DELETED') IS NOT NULL LIMIT 1",
+            "SELECT NULLIF(NULLIF(artwork_thumb_path,''),'DELETED') FROM artist_artworks WHERE artwork_path=?1 AND NULLIF(NULLIF(artwork_thumb_path,''),'DELETED') IS NOT NULL
+             UNION ALL SELECT NULLIF(NULLIF(artwork_thumb_path,''),'DELETED') FROM album_artworks WHERE artwork_path=?1 AND NULLIF(NULLIF(artwork_thumb_path,''),'DELETED') IS NOT NULL
+             UNION ALL SELECT NULLIF(NULLIF(artwork_thumb_url,''),'DELETED') FROM active_songs WHERE ?1 IN (artwork_url,artwork_preview_url,artwork_thumb_url) AND NULLIF(NULLIF(artwork_thumb_url,''),'DELETED') IS NOT NULL LIMIT 1",
             [path], |row| row.get(0),
         ).optional().map_err(|e| e.to_string())?;
         Ok(Some(thumbnail.unwrap_or_else(|| path.to_string())))

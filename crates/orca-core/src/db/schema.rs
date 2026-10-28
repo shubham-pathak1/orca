@@ -3,8 +3,8 @@ use rusqlite::functions::FunctionFlags;
 use rusqlite::{Connection, TransactionBehavior};
 use std::{collections::HashSet, path::PathBuf, time::Duration};
 
-// user_version is the minimum reader schema: the released v2 app can ignore
-// additive tables. Numbered migrations record which additions have run.
+// user_version records the minimum reader schema, not the app version.
+// Numbered migrations track data changes; repeatable DDL ensures additive tables.
 const MIN_READER_VERSION: i64 = 2;
 const LIKES_MIGRATION: i64 = 3;
 const FOLDER_RULES_MIGRATION: i64 = 4;
@@ -33,6 +33,18 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection, String> {
     )
     .map_err(|e| e.to_string())?;
     migrate(&mut conn).map_err(|e| format!("Library migration failed: {e}"))?;
+    conn.create_scalar_function(
+        "primary_artist_names",
+        2,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        |ctx| {
+            let artist: String = ctx.get(0)?;
+            let title: String = ctx.get(1)?;
+            serde_json::to_string(&crate::artist_credits::primary_artists(&artist, &title))
+                .map_err(|error| rusqlite::Error::UserFunctionError(Box::new(error)))
+        },
+    )
+    .map_err(|error| error.to_string())?;
     conn.create_scalar_function(
         "artist_credit_contains",
         3,
@@ -168,6 +180,99 @@ fn migrate(conn: &mut Connection) -> rusqlite::Result<()> {
     tx.execute_batch(
         "CREATE VIEW IF NOT EXISTS active_songs AS SELECT * FROM songs WHERE library_visible=1;",
     )?;
+    let artist_index_exists: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='song_primary_artists')", [], |row| row.get(0))?;
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS song_primary_artists (
+            song_id INTEGER NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            PRIMARY KEY(song_id,name)
+         ) WITHOUT ROWID;
+         CREATE INDEX IF NOT EXISTS idx_primary_artist_name ON song_primary_artists(name COLLATE NOCASE,song_id);
+         CREATE TABLE IF NOT EXISTS artist_index_pending (song_id INTEGER PRIMARY KEY REFERENCES songs(id) ON DELETE CASCADE);
+         CREATE TRIGGER IF NOT EXISTS artist_index_insert AFTER INSERT ON songs BEGIN
+            INSERT INTO artist_index_pending SELECT NEW.id WHERE NOT EXISTS(SELECT 1 FROM artist_index_pending WHERE song_id=NEW.id);
+         END;
+         CREATE TRIGGER IF NOT EXISTS artist_index_update AFTER UPDATE OF artist,title ON songs
+         WHEN OLD.artist IS NOT NEW.artist OR OLD.title IS NOT NEW.title BEGIN
+            INSERT INTO artist_index_pending SELECT NEW.id WHERE NOT EXISTS(SELECT 1 FROM artist_index_pending WHERE song_id=NEW.id);
+         END;",
+    )?;
+    if !artist_index_exists {
+        tx.execute(
+            "INSERT OR IGNORE INTO artist_index_pending SELECT id FROM songs",
+            [],
+        )?;
+    }
+    // Cover the active catalog order so browsing IDs does not fetch every
+    // wide song row merely to check visibility. Hidden folder rules remain
+    // enforced by the partial index predicate.
+    // Some legacy databases reported v2 before all tag columns were present.
+    ensure_column(
+        &tx,
+        "songs",
+        "album",
+        "TEXT NOT NULL DEFAULT 'Unknown Album'",
+    )?;
+    tx.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_active_title ON songs(title COLLATE NOCASE,id) WHERE library_visible=1;
+         CREATE INDEX IF NOT EXISTS idx_active_artist ON songs(artist COLLATE NOCASE,title COLLATE NOCASE,id) WHERE library_visible=1;
+         CREATE INDEX IF NOT EXISTS idx_active_album ON songs(album COLLATE NOCASE,title COLLATE NOCASE,id) WHERE library_visible=1;",
+    )?;
+    ensure_column(
+        &tx,
+        "songs",
+        "album_artist",
+        "TEXT NOT NULL DEFAULT 'Unknown Artist'",
+    )?;
+    tx.execute_batch("CREATE INDEX IF NOT EXISTS idx_active_id ON songs(id) WHERE library_visible=1;
+        CREATE INDEX IF NOT EXISTS idx_active_album_summary ON songs(album_artist,album,duration) WHERE library_visible=1;")?;
+    // Reconciliation reads this narrow index instead of every wide metadata row.
+    ensure_column(&tx, "songs", "modified_at", "INTEGER")?;
+    ensure_column(&tx, "songs", "file_size", "INTEGER")?;
+    tx.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_scan_file_state ON songs(path,modified_at,file_size)",
+    )?;
+    ensure_column(&tx, "songs", "genre", "TEXT")?;
+    tx.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_active_genre ON songs(genre) WHERE library_visible=1",
+    )?;
+    if cfg!(windows) {
+        tx.execute_batch("CREATE INDEX IF NOT EXISTS idx_active_folder_path ON songs(replace(path,char(92),'/') COLLATE NOCASE,id) WHERE library_visible=1;")?;
+    } else {
+        tx.execute_batch("CREATE INDEX IF NOT EXISTS idx_active_folder_path ON songs(path COLLATE BINARY,id) WHERE library_visible=1;")?;
+    }
+    for column in ["artwork_url", "artwork_thumb_url", "artwork_preview_url"] {
+        ensure_column(&tx, "songs", column, "TEXT")?;
+    }
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS folder_cache_state(id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER NOT NULL);
+         INSERT OR IGNORE INTO folder_cache_state VALUES(1,0);
+         CREATE TABLE IF NOT EXISTS folder_cache(key TEXT UNIQUE NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL);
+         CREATE TRIGGER IF NOT EXISTS folder_cache_song_insert AFTER INSERT ON songs BEGIN
+            UPDATE folder_cache_state SET revision=revision+1 WHERE id=1; END;
+         CREATE TRIGGER IF NOT EXISTS folder_cache_song_delete AFTER DELETE ON songs BEGIN
+            UPDATE folder_cache_state SET revision=revision+1 WHERE id=1; END;
+         CREATE TRIGGER IF NOT EXISTS folder_cache_song_update AFTER UPDATE ON songs
+         WHEN OLD.path IS NOT NEW.path OR OLD.duration IS NOT NEW.duration
+           OR OLD.library_visible IS NOT NEW.library_visible OR OLD.album IS NOT NEW.album
+           OR OLD.album_artist IS NOT NEW.album_artist OR OLD.artwork_url IS NOT NEW.artwork_url
+           OR OLD.artwork_thumb_url IS NOT NEW.artwork_thumb_url OR OLD.artwork_preview_url IS NOT NEW.artwork_preview_url
+         BEGIN UPDATE folder_cache_state SET revision=revision+1 WHERE id=1; END;",
+    )?;
+    for table in ["album_artworks", "settings"] {
+        for event in ["INSERT", "UPDATE", "DELETE"] {
+            let when = if table == "settings" {
+                let row = if event == "DELETE" { "OLD" } else { "NEW" };
+                format!("WHEN {row}.key IN ('library_scan_roots','qt_scan_roots','collection_overrides')")
+            } else {
+                String::new()
+            };
+            tx.execute_batch(&format!(
+                "CREATE TRIGGER IF NOT EXISTS folder_cache_{table}_{event} AFTER {event} ON {table} {when}
+                 BEGIN UPDATE folder_cache_state SET revision=revision+1 WHERE id=1; END;"
+            ))?;
+        }
+    }
     if version != MIN_READER_VERSION {
         tx.pragma_update(None, "user_version", MIN_READER_VERSION)?;
     }

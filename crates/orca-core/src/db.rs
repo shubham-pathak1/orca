@@ -1,6 +1,10 @@
 //! Database facade; domain modules own schema, songs, artwork, cache and playlists.
+mod artist_index;
 mod artwork;
+pub use artist_index::refresh_artist_index;
 mod cache;
+mod folder_cache;
+pub use folder_cache::{folder_cache_revision, load_folder_cache, save_folder_cache};
 mod catalog;
 mod likes;
 mod media_artwork;
@@ -16,7 +20,9 @@ pub use cache::{
     set_lyrics_with_suppression, set_setting,
 };
 
-pub use catalog::{get_albums, get_artists, get_genres, AlbumEntry, ArtistEntry, GenreEntry};
+pub use catalog::{
+    get_album_collection, get_albums, get_artists, get_genres, AlbumEntry, ArtistEntry, GenreEntry,
+};
 
 pub use likes::{
     is_song_liked, liked_songs_summary, remove_many_likes, set_song_liked, LikedSongsSummary,

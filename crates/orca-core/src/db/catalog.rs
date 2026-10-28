@@ -31,21 +31,27 @@ pub struct GenreEntry {
 }
 
 pub fn get_artists(conn: &Connection) -> Result<Vec<ArtistEntry>, String> {
+    super::refresh_artist_index(conn)?;
     let mut statement = conn
         .prepare(
-            "SELECT s.artist, s.title,
-                    COALESCE(NULLIF(NULLIF(s.artwork_url,'DELETED'),''), NULLIF(NULLIF(s.artwork_preview_url,'DELETED'),''), NULLIF(NULLIF(s.artwork_thumb_url,'DELETED'),''), NULLIF(NULLIF(awa.artwork_path,'DELETED'),'')),
-                    COALESCE(NULLIF(NULLIF(s.artwork_thumb_url,'DELETED'),''), NULLIF(NULLIF(s.artwork_preview_url,'DELETED'),''), NULLIF(NULLIF(s.artwork_url,'DELETED'),''), NULLIF(NULLIF(awa.artwork_thumb_path,'DELETED'),''))
-             FROM active_songs s
-             LEFT JOIN album_artworks awa ON awa.album_key = s.album_artist || ':' || s.album
-             ORDER BY s.id",
+            "SELECT pa.name,COUNT(*),
+                (SELECT COALESCE(NULLIF(NULLIF(s.artwork_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_preview_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_thumb_url,'DELETED'),''),NULLIF(NULLIF(awa.artwork_path,'DELETED'),'')) AS cover
+                 FROM song_primary_artists p CROSS JOIN active_songs s ON s.id=p.song_id
+                 LEFT JOIN album_artworks awa ON awa.album_key=s.album_artist || ':' || s.album
+                 WHERE p.name=pa.name COLLATE NOCASE AND p.name=pa.name AND cover IS NOT NULL ORDER BY p.song_id LIMIT 1),
+                (SELECT COALESCE(NULLIF(NULLIF(s.artwork_thumb_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_preview_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_url,'DELETED'),''),NULLIF(NULLIF(awa.artwork_thumb_path,'DELETED'),'')) AS cover
+                 FROM song_primary_artists p CROSS JOIN active_songs s ON s.id=p.song_id
+                 LEFT JOIN album_artworks awa ON awa.album_key=s.album_artist || ':' || s.album
+                 WHERE p.name=pa.name COLLATE NOCASE AND p.name=pa.name AND cover IS NOT NULL ORDER BY p.song_id LIMIT 1)
+             FROM song_primary_artists pa CROSS JOIN active_songs s ON s.id=pa.song_id
+             GROUP BY pa.name",
         )
         .map_err(|error| error.to_string())?;
     let rows = statement
         .query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
+                row.get::<_, i64>(1)?,
                 row.get::<_, Option<String>>(2)?,
                 row.get::<_, Option<String>>(3)?,
             ))
@@ -53,24 +59,18 @@ pub fn get_artists(conn: &Connection) -> Result<Vec<ArtistEntry>, String> {
         .map_err(|error| error.to_string())?;
     let mut artists = BTreeMap::new();
     for row in rows {
-        let (credit, title, cover, thumb) = row.map_err(|error| error.to_string())?;
-        for name in crate::artist_credits::primary_artists(&credit, &title) {
-            let entry = artists.entry(name.clone()).or_insert_with(|| ArtistEntry {
+        let (name, count, cover, thumb) = row.map_err(|error| error.to_string())?;
+        artists.insert(
+            name.clone(),
+            ArtistEntry {
                 name,
-                song_count: 0,
+                song_count: count,
                 artwork: None,
                 artwork_thumb: None,
-                song_artwork: None,
-                song_artwork_thumb: None,
-            });
-            entry.song_count += 1;
-            if entry.song_artwork.is_none() {
-                entry.song_artwork = cover.clone();
-            }
-            if entry.song_artwork_thumb.is_none() {
-                entry.song_artwork_thumb = thumb.clone();
-            }
-        }
+                song_artwork: cover,
+                song_artwork_thumb: thumb,
+            },
+        );
     }
     let mut artwork = conn
         .prepare("SELECT artist_name, NULLIF(NULLIF(artwork_path,'DELETED'),''), NULLIF(NULLIF(artwork_thumb_path,'DELETED'),'') FROM artist_artworks")
@@ -97,19 +97,50 @@ pub fn get_artists(conn: &Connection) -> Result<Vec<ArtistEntry>, String> {
 }
 
 pub fn get_albums(conn: &Connection) -> Result<Vec<AlbumEntry>, String> {
+    query_albums(conn, "", &[])
+}
+
+/// Read a single album or related albums without aggregating the whole library.
+pub fn get_album_collection(
+    conn: &Connection,
+    title: Option<&str>,
+    artist: &str,
+) -> Result<Vec<AlbumEntry>, String> {
+    if let Some(title) = title {
+        query_albums(
+            conn,
+            "WHERE s.album=?1 AND s.album_artist=?2",
+            &[&title, &artist],
+        )
+    } else {
+        query_albums(conn, "WHERE s.album_artist=?1", &[&artist])
+    }
+}
+
+fn query_albums(
+    conn: &Connection,
+    filter: &str,
+    parameters: &[&dyn rusqlite::ToSql],
+) -> Result<Vec<AlbumEntry>, String> {
+    let cover = |column: &str| {
+        format!("(SELECT c.{column} FROM active_songs c WHERE c.album=s.album AND c.album_artist=s.album_artist AND NULLIF(NULLIF(c.{column},'DELETED'),'') IS NOT NULL ORDER BY c.disc_number,c.track_number,c.id LIMIT 1)")
+    };
+    let preview = cover("artwork_preview_url");
+    let original = cover("artwork_url");
+    let thumb = cover("artwork_thumb_url");
     let mut statement = conn
         .prepare(
-            "SELECT album_artist || ':' || album AS key, album, album_artist, COUNT(*), SUM(duration),
-                    COALESCE(NULLIF(NULLIF(awa.artwork_path, 'DELETED'), ''), MAX(NULLIF(NULLIF(s.artwork_preview_url, 'DELETED'), '')), MAX(NULLIF(NULLIF(s.artwork_url, 'DELETED'), '')), MAX(NULLIF(NULLIF(s.artwork_thumb_url, 'DELETED'), ''))),
-                    COALESCE(NULLIF(NULLIF(awa.artwork_thumb_path, 'DELETED'), ''), MAX(NULLIF(NULLIF(s.artwork_thumb_url, 'DELETED'), '')), MAX(NULLIF(NULLIF(s.artwork_preview_url, 'DELETED'), '')), MAX(NULLIF(NULLIF(s.artwork_url, 'DELETED'), '')))
-             FROM active_songs s
+            &format!("SELECT s.album_artist || ':' || s.album AS key, s.album, s.album_artist, s.song_count, s.duration,
+                    COALESCE(NULLIF(NULLIF(awa.artwork_path,'DELETED'),''),{preview},{original},{thumb}),
+                    COALESCE(NULLIF(NULLIF(awa.artwork_thumb_path,'DELETED'),''),{thumb},{preview},{original})
+             FROM (SELECT album_artist,album,COUNT(*) AS song_count,SUM(duration) AS duration FROM active_songs s
+                   {filter} GROUP BY album_artist,album) s
              LEFT JOIN album_artworks awa ON (s.album_artist || ':' || s.album) = awa.album_key
-             GROUP BY album_artist, album
-             ORDER BY album COLLATE NOCASE ASC",
+             ORDER BY s.album COLLATE NOCASE ASC"),
         )
         .map_err(|error| error.to_string())?;
     let rows = statement
-        .query_map([], |row| {
+        .query_map(parameters, |row| {
             Ok(AlbumEntry {
                 key: row.get(0)?,
                 title: row.get(1)?,

@@ -22,6 +22,8 @@ mod tests;
 use orca_core::audio_engine::{AudioCommand, PlaybackState};
 use rusqlite::Connection;
 use std::{
+    cell::RefCell,
+    collections::HashMap,
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, AtomicU64},
@@ -49,6 +51,7 @@ pub struct Backend {
     ended: Arc<AtomicU64>,
     transitioned: Arc<AtomicU64>,
     session_lyrics: Mutex<media::lyrics::SessionLyrics>,
+    group_cache: RefCell<HashMap<String, catalog::GroupCacheEntry>>,
 }
 
 impl Backend {

@@ -4,7 +4,7 @@ use orca_core::db;
 use std::collections::BTreeMap;
 
 impl Backend {
-    pub(crate) fn library_roots(&self) -> Result<Vec<String>, String> {
+    pub fn library_roots(&self) -> Result<Vec<String>, String> {
         serde_json::from_str(
             &db::get_setting(&self.conn, "library_scan_roots")
                 .or_else(|| db::get_setting(&self.conn, "qt_scan_roots"))
@@ -14,6 +14,18 @@ impl Backend {
     }
 
     pub fn folder_groups(&self, parent: &str, search: &str) -> Result<Vec<Group>, String> {
+        let revision = db::folder_cache_revision(&self.conn)?;
+        let cache_key = format!("folders:{parent}");
+        if let Some(groups) = db::load_folder_cache(&self.conn, &cache_key, revision)?
+            .and_then(|payload| serde_json::from_str(&payload).ok())
+        {
+            return Ok(filter_folders(groups, search));
+        }
+        if let Some(entry) = self.group_cache.borrow().get(&cache_key) {
+            if entry.revision == (revision, 0) {
+                return Ok(filter_folders(entry.groups.clone(), search));
+            }
+        }
         let mut folders = BTreeMap::<String, (u32, String)>::new();
         if parent.is_empty() {
             for root in self.library_roots()? {
@@ -31,44 +43,52 @@ impl Backend {
         }
         let parent = parent.replace('\\', "/");
         let filter = super::catalog::predicate("folders").replace("?2", "?1");
-        let mut statement = self
+        if parent.is_empty() {
+            // Root cards need only indexed counts and a representative cover.
+            // Do not materialize every descendant path just to show one card.
+            let mut counts = self
+                .conn
+                .prepare(&format!(
+                    "SELECT COUNT(*) FROM active_songs s WHERE {filter}"
+                ))
+                .map_err(|error| error.to_string())?;
+            for (folder, (count, _)) in &mut folders {
+                *count = counts
+                    .query_row([folder], |row| row.get(0))
+                    .map_err(|error| error.to_string())?;
+            }
+        } else {
+            let (path_column, collation) = if cfg!(windows) {
+                ("replace(s.path,char(92),'/')", "NOCASE")
+            } else {
+                ("s.path", "BINARY")
+            };
+            let prefix = format!("{}/", parent.trim_end_matches('/'));
+            let mut statement = self
             .conn
             .prepare(&format!(
-                "SELECT s.path,COALESCE(NULLIF(NULLIF(s.artwork_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_preview_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_thumb_url,'DELETED'),''),(SELECT NULLIF(artwork_path,'DELETED') FROM album_artworks WHERE album_key=s.album_artist || ':' || s.album),'') FROM active_songs s WHERE ?1='' OR ({filter}) ORDER BY s.path COLLATE NOCASE,s.id"
+                "WITH descendants AS (SELECT substr({path_column},length(?2)+1) AS relative FROM active_songs s WHERE {filter})
+                 SELECT substr(relative,1,instr(relative,'/')-1) AS child,COUNT(*) FROM descendants
+                 WHERE instr(relative,'/')>0 GROUP BY child COLLATE {collation}"
             ))
             .map_err(|e| e.to_string())?;
-        let paths = statement
-            .query_map([&parent], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })
-            .map_err(|e| e.to_string())?;
-        let prefix = format!("{}/", parent.trim_end_matches('/'));
-        for path in paths {
-            let (path, artwork) = path.map_err(|e| e.to_string())?;
-            let path = path.replace('\\', "/");
-            if parent.is_empty() {
-                for (folder, (count, cover)) in &mut folders {
-                    if in_folder(&path, folder) {
-                        *count += 1;
-                        if cover.is_empty() {
-                            *cover = artwork.clone();
-                        }
-                    }
-                }
-            } else if in_folder(&path, &parent) {
-                let relative = &path[prefix.len()..];
-                if let Some((child, _)) = relative.split_once('/') {
-                    let (count, cover) = folders.entry(format!("{prefix}{child}")).or_default();
-                    *count += 1;
-                    if cover.is_empty() {
-                        *cover = artwork;
-                    }
-                }
+            let children = statement
+                .query_map(rusqlite::params![&parent, &prefix], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
+                })
+                .map_err(|e| e.to_string())?;
+            for child in children {
+                let (child, count) = child.map_err(|e| e.to_string())?;
+                folders.insert(format!("{prefix}{child}"), (count, String::new()));
             }
         }
-        let search = search.to_lowercase();
+        // Resolve one available cover per directory, rather than materializing
+        // artwork metadata for every descendant song during folder counting.
+        for (folder, (_, cover)) in &mut folders {
+            *cover = self.folder_group(folder)?.artwork;
+        }
         let overrides = self.collection_overrides()?;
-        Ok(folders
+        let groups: Vec<_> = folders
             .into_iter()
             .map(|(key, (count, artwork))| {
                 let entry = overrides.get(&serde_json::json!(["folders", key, ""]).to_string());
@@ -93,11 +113,32 @@ impl Backend {
                     ..Default::default()
                 }
             })
-            .filter(|group| {
-                group.title.to_lowercase().contains(&search)
-                    || group.key.to_lowercase().contains(&search)
-            })
-            .collect())
+            .collect();
+        let _ = db::save_folder_cache(
+            &self.conn,
+            &cache_key,
+            revision,
+            &serde_json::to_string(&groups).map_err(|e| e.to_string())?,
+        );
+        if db::folder_cache_revision(&self.conn)? == revision {
+            let mut cache = self.group_cache.borrow_mut();
+            if cache
+                .keys()
+                .filter(|key| key.starts_with("folders:"))
+                .count()
+                >= 16
+            {
+                cache.retain(|key, _| !key.starts_with("folders:"));
+            }
+            cache.insert(
+                cache_key,
+                super::catalog::GroupCacheEntry {
+                    revision: (revision, 0),
+                    groups: groups.clone(),
+                },
+            );
+        }
+        Ok(filter_folders(groups, search))
     }
 
     pub fn folder_exists(&self, key: &str) -> Result<bool, String> {
@@ -127,15 +168,27 @@ impl Backend {
     }
     pub(crate) fn folder_group(&self, key: &str) -> Result<Group, String> {
         use rusqlite::OptionalExtension;
+        let revision = db::folder_cache_revision(&self.conn)?;
+        let cache_key = format!("folder-header:{key}");
+        if let Some(group) = db::load_folder_cache(&self.conn, &cache_key, revision)?
+            .and_then(|payload| serde_json::from_str(&payload).ok())
+        {
+            return Ok(group);
+        }
         if !self.folder_exists(key)? {
             return Err("Folder no longer exists in the library".into());
         }
         let key = key.replace('\\', "/");
         let filter = super::catalog::predicate("folders").replace("?2", "?1");
-        let artwork: Option<String> = self.conn.query_row(&format!("SELECT COALESCE(NULLIF(NULLIF(s.artwork_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_preview_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_thumb_url,'DELETED'),''),(SELECT NULLIF(artwork_path,'DELETED') FROM album_artworks WHERE album_key=s.album_artist || ':' || s.album)) AS cover FROM active_songs s WHERE ({filter}) AND cover IS NOT NULL ORDER BY s.path COLLATE NOCASE,s.id LIMIT 1"), [&key], |row|row.get(0)).optional().map_err(|e|e.to_string())?;
+        let order = if cfg!(windows) {
+            "replace(s.path,char(92),'/') COLLATE NOCASE,s.id"
+        } else {
+            "s.path COLLATE BINARY,s.id"
+        };
+        let artwork: Option<String> = self.conn.query_row(&format!("SELECT COALESCE(NULLIF(NULLIF(s.artwork_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_preview_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_thumb_url,'DELETED'),''),(SELECT NULLIF(artwork_path,'DELETED') FROM album_artworks WHERE album_key=s.album_artist || ':' || s.album)) AS cover FROM active_songs s WHERE ({filter}) AND cover IS NOT NULL ORDER BY {order} LIMIT 1"), [&key], |row|row.get(0)).optional().map_err(|e|e.to_string())?;
         let overrides = self.collection_overrides()?;
         let entry = overrides.get(&serde_json::json!(["folders", key, ""]).to_string());
-        Ok(Group {
+        let group = Group {
             title: key
                 .rsplit('/')
                 .find(|part| !part.is_empty())
@@ -149,8 +202,45 @@ impl Backend {
                 .into(),
             key,
             ..Default::default()
-        })
+        };
+        let _ = db::save_folder_cache(
+            &self.conn,
+            &cache_key,
+            revision,
+            &serde_json::to_string(&group).map_err(|e| e.to_string())?,
+        );
+        Ok(group)
     }
+
+    pub(crate) fn folder_totals(&self, key: &str) -> Result<(i64, i64), String> {
+        let revision = db::folder_cache_revision(&self.conn)?;
+        let cache_key = format!("folder-totals:{key}");
+        if let Some(totals) = db::load_folder_cache(&self.conn, &cache_key, revision)?
+            .and_then(|payload| serde_json::from_str(&payload).ok())
+        {
+            return Ok(totals);
+        }
+        let filter = super::catalog::predicate("folders").replace("?2", "?1");
+        let totals = self.conn.query_row(
+            &format!("SELECT COUNT(*),COALESCE(SUM(s.duration),0) FROM active_songs s WHERE {filter}"),
+            [key], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+        ).map_err(|e| e.to_string())?;
+        let _ = db::save_folder_cache(
+            &self.conn,
+            &cache_key,
+            revision,
+            &serde_json::to_string(&totals).map_err(|e| e.to_string())?,
+        );
+        Ok(totals)
+    }
+}
+
+fn filter_folders(mut groups: Vec<Group>, search: &str) -> Vec<Group> {
+    let search = search.to_lowercase();
+    groups.retain(|group| {
+        group.title.to_lowercase().contains(&search) || group.key.to_lowercase().contains(&search)
+    });
+    groups
 }
 
 fn in_folder(path: &str, folder: &str) -> bool {

@@ -1,6 +1,81 @@
 use super::*;
 
 #[test]
+fn playback_ids_follow_the_visible_collection_order() {
+    let fixture = Fixture::new();
+    let backend = fixture.backend();
+    backend
+        .conn
+        .execute_batch(
+            "INSERT INTO songs(path,title,artist,album_artist,album,duration) VALUES
+        ('b.flac','B','Artist','Artist','Album',1000),
+        ('a.flac','A','Artist','Artist','Album',1000),
+        ('x.flac','X','Other','Other','Other',1000);",
+        )
+        .unwrap();
+    let query = types::Query {
+        kind: "albums".into(),
+        key: "Album".into(),
+        secondary: "Artist".into(),
+        ..Default::default()
+    };
+    let ids = backend.context_ids(&query).unwrap();
+    let tracks = backend.tracks_by_ids(&[ids[1], -1, ids[0]]).unwrap();
+    assert_eq!(
+        tracks
+            .iter()
+            .map(|track| track.path.as_str())
+            .collect::<Vec<_>>(),
+        ["b.flac", "", "a.flac"]
+    );
+    let paths: Vec<_> = ids
+        .into_iter()
+        .map(|id| backend.path_for_id(id).unwrap().unwrap())
+        .collect();
+    assert_eq!(paths, ["a.flac", "b.flac"]);
+    assert_eq!(
+        backend.context_paths_limited(&query, 1).unwrap(),
+        ["a.flac"]
+    );
+    assert_eq!(backend.id_for_path("missing.flac").unwrap(), None);
+}
+
+#[test]
+fn indexed_artist_membership_tracks_edits_visibility_and_deletion() {
+    let fixture = Fixture::new();
+    let backend = fixture.backend();
+    backend.conn.execute("INSERT INTO songs(path,title,artist,album_artist,album,duration) VALUES('a.flac','Track','Primary; Guest','Primary','Album',1000)", []).unwrap();
+    let query = types::Query {
+        kind: "artists".into(),
+        key: "Guest".into(),
+        ..Default::default()
+    };
+    assert_eq!(backend.context_ids(&query).unwrap().len(), 1);
+    backend
+        .conn
+        .execute("UPDATE songs SET title='Track (feat. Guest)'", [])
+        .unwrap();
+    assert!(backend.context_ids(&query).unwrap().is_empty());
+    backend
+        .conn
+        .execute("UPDATE songs SET title='Track'", [])
+        .unwrap();
+    assert_eq!(backend.context_ids(&query).unwrap().len(), 1);
+    backend
+        .conn
+        .execute("UPDATE songs SET library_visible=0", [])
+        .unwrap();
+    assert!(backend.context_ids(&query).unwrap().is_empty());
+    backend
+        .conn
+        .execute("UPDATE songs SET library_visible=1", [])
+        .unwrap();
+    assert_eq!(backend.context_ids(&query).unwrap().len(), 1);
+    backend.conn.execute("DELETE FROM songs", []).unwrap();
+    assert!(backend.context_ids(&query).unwrap().is_empty());
+}
+
+#[test]
 fn collaborations_have_individual_artist_pages_while_featured_guests_do_not() {
     let fixture = Fixture::new();
     let backend = fixture.backend();
@@ -102,42 +177,19 @@ fn oversized_waveform_requests_reuse_the_decoder_sized_cache_without_opening_aud
 }
 
 #[test]
-#[ignore = "benchmark with 100000 synthetic tracks in a disposable library"]
-fn large_library_catalog_benchmark() {
-    let f = Fixture::new();
-    let b = f.backend();
-    let started = std::time::Instant::now();
-    b.conn.execute_batch("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<100000)
-        INSERT INTO songs(path,title,artist,album,album_artist,genre,duration)
-        SELECT 'song-'||i||'.flac',printf('Track %06d',i),'Artist '||(i%1000),'Album '||(i%10000),'Artist '||(i%1000),'Rock',180000 FROM n;").unwrap();
-    eprintln!("100k synthetic inserts: {:?}", started.elapsed());
-    for offset in [0, 50000, 99900] {
-        let started = std::time::Instant::now();
-        let page = b
-            .page(
-                &types::Query {
-                    sort: "title".into(),
-                    ..Default::default()
-                },
-                offset,
-                128,
-            )
-            .unwrap();
-        assert_eq!(page.total, 100000);
-        assert_eq!(page.tracks.len(), if offset == 99900 { 100 } else { 128 });
-        eprintln!("128-row page at {offset}: {:?}", started.elapsed());
-    }
-    let started = std::time::Instant::now();
-    assert_eq!(b.groups("artists", "").unwrap().len(), 1000);
-    assert_eq!(b.groups("albums", "").unwrap().len(), 10000);
-    assert_eq!(
-        b.context_paths(&types::Query::default()).unwrap().len(),
-        100000
-    );
-    eprintln!(
-        "artist/album catalogs + full playback context: {:?}",
-        started.elapsed()
-    );
+fn collection_lookup_binds_genre_and_album_identity() {
+    let fixture = Fixture::new();
+    let backend = fixture.backend();
+    backend.conn.execute(
+        "INSERT INTO songs(path,title,artist,album_artist,album,genre,duration) VALUES('one.flac','One','A','A','Shared','Alternative & Indie',1000)",
+        [],
+    ).unwrap();
+    assert!(backend
+        .group_exists("genres", "Alternative & Indie", "")
+        .unwrap());
+    assert!(!backend.group_exists("genres", "Missing", "").unwrap());
+    assert!(backend.group_exists("albums", "Shared", "A").unwrap());
+    assert!(!backend.group_exists("albums", "Shared", "B").unwrap());
 }
 
 #[test]

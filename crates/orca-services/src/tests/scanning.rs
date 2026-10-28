@@ -19,11 +19,14 @@ fn scan_persists_tracks_and_shutdown_joins_cancelled_worker() {
     }
     assert_eq!(b.statistics().unwrap().songs, 100);
     assert_eq!(b.statistics().unwrap().roots.len(), 1);
+    let folder_revision = db::folder_cache_revision(&b.conn).unwrap();
     b.start_scan(folder.to_str().unwrap()).unwrap();
+    assert_eq!(db::folder_cache_revision(&b.conn).unwrap(), folder_revision);
     while b.snapshot().unwrap().scanning {
         thread::sleep(Duration::from_millis(5));
     }
     assert_eq!(b.statistics().unwrap().songs, 100);
+    assert_eq!(db::folder_cache_revision(&b.conn).unwrap(), folder_revision);
     assert!(b.start_scan("does-not-exist").is_err());
 }
 

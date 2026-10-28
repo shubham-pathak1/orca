@@ -23,7 +23,7 @@ pub struct Track {
     pub track_number: u32,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Query {
     pub search: String,
     pub sort: String,
@@ -39,7 +39,7 @@ pub struct Page {
     pub tracks: Vec<Track>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Group {
     pub key: String,
     pub secondary: String,

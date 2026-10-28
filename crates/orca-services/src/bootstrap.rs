@@ -3,6 +3,7 @@ use super::{Backend, ScanState};
 use orca_core::{audio_engine, audio_engine::PlaybackState, db};
 use rusqlite::Connection;
 use std::{
+    cell::RefCell,
     fs,
     path::{Path, PathBuf},
     sync::{
@@ -97,5 +98,6 @@ pub fn new_backend(data_dir: &str, audio: bool) -> Result<Box<Backend>, String> 
         ended,
         transitioned,
         session_lyrics: Mutex::new(super::media::lyrics::SessionLyrics::default()),
+        group_cache: RefCell::new(std::collections::HashMap::new()),
     }))
 }

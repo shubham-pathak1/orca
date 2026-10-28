@@ -2,7 +2,7 @@
 use super::{Backend, ScanState};
 use crate::folder_rules::FolderPolicy;
 use orca_core::{db, library, scanner};
-use rusqlite::params;
+use rusqlite::OptionalExtension;
 use std::{
     path::{Path, PathBuf},
     sync::atomic::Ordering,
@@ -28,16 +28,16 @@ impl Backend {
         if let Some(handle) = self.scan_thread.take() {
             handle.join().map_err(|_| "Scanner thread panicked")?;
         }
-        let mut roots = self.statistics()?.roots;
+        let mut roots = self.library_roots()?;
         let root = folder.to_string_lossy().to_string();
         if !roots.contains(&root) {
             roots.push(root);
+            db::set_setting(
+                &self.conn,
+                "library_scan_roots",
+                &serde_json::to_string(&roots).map_err(|e| e.to_string())?,
+            )?;
         }
-        db::set_setting(
-            &self.conn,
-            "library_scan_roots",
-            &serde_json::to_string(&roots).map_err(|e| e.to_string())?,
-        )?;
         self.scan.cancel.store(false, Ordering::Release);
         self.scan.active.store(true, Ordering::Release);
         self.scan.count.store(0, Ordering::Relaxed);
@@ -83,7 +83,17 @@ fn scan_folder(data_dir: &Path, folder: &Path, state: &ScanState) -> Result<(), 
     const BATCH_SIZE: usize = 256;
     let mut batch = Vec::with_capacity(BATCH_SIZE);
     let mut last_commit = Instant::now();
-    let mut seen = std::collections::HashSet::new();
+    // New rows inserted during this scan have IDs above this boundary. That
+    // lets deletion reconciliation retain them without storing every new path.
+    let initial_max_id: i64 = conn
+        .query_row("SELECT COALESCE(MAX(id),0) FROM songs", [], |row| {
+            row.get(0)
+        })
+        .map_err(|error| error.to_string())?;
+    let mut seen_ids = std::collections::HashSet::<i64>::new();
+    let mut existing_song = conn
+        .prepare_cached("SELECT id,modified_at,file_size FROM songs INDEXED BY idx_scan_file_state WHERE path=?1")
+        .map_err(|error| error.to_string())?;
     for entry in walkdir::WalkDir::new(folder)
         .follow_links(false)
         .into_iter()
@@ -104,7 +114,6 @@ fn scan_folder(data_dir: &Path, folder: &Path, state: &ScanState) -> Result<(), 
             continue;
         }
         let path = entry.path().to_string_lossy().to_string();
-        seen.insert(path.clone());
         let metadata = entry.metadata().map_err(|e| e.to_string())?;
         let modified = metadata
             .modified()
@@ -112,14 +121,22 @@ fn scan_folder(data_dir: &Path, folder: &Path, state: &ScanState) -> Result<(), 
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|t| t.as_secs() as i64)
             .unwrap_or(0);
-        let unchanged = conn
-            .query_row(
-                "SELECT COUNT(*) FROM songs WHERE path=?1 AND modified_at=?2 AND file_size=?3",
-                params![path, modified, metadata.len()],
-                |r| r.get::<_, i64>(0),
-            )
-            .map_err(|e| e.to_string())?
-            > 0;
+        let existing = existing_song
+            .query_row([&path], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, Option<i64>>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                ))
+            })
+            .optional()
+            .map_err(|e| e.to_string())?;
+        if let Some((id, _, _)) = existing {
+            seen_ids.insert(id);
+        }
+        let unchanged = existing.is_some_and(|(_, old_modified, old_size)| {
+            old_modified == Some(modified) && old_size == Some(metadata.len() as i64)
+        });
         if !unchanged {
             match library::scan_music_file(entry.path(), &artwork) {
                 Ok(song) => batch.push(song),
@@ -145,15 +162,32 @@ fn scan_folder(data_dir: &Path, folder: &Path, state: &ScanState) -> Result<(), 
     }
     if !state.cancel.load(Ordering::Acquire) {
         let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-        for (path, id) in db::get_song_path_index(&tx)? {
-            if Path::new(&path).starts_with(folder)
-                && policy.included(Path::new(&path))
-                && !seen.contains(&path)
-            {
-                tx.execute("DELETE FROM playlist_songs WHERE song_id=?1", [id])
-                    .map_err(|e| e.to_string())?;
-                db::delete_song_by_path(&tx, &path)?;
+        let missing = {
+            let mut statement = tx
+                .prepare("SELECT path,id FROM songs")
+                .map_err(|error| error.to_string())?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                })
+                .map_err(|error| error.to_string())?;
+            let mut missing = Vec::new();
+            for row in rows {
+                let (path, id) = row.map_err(|error| error.to_string())?;
+                if id <= initial_max_id
+                    && !seen_ids.contains(&id)
+                    && Path::new(&path).starts_with(folder)
+                    && policy.included(Path::new(&path))
+                {
+                    missing.push((path, id));
+                }
             }
+            missing
+        };
+        for (path, id) in missing {
+            tx.execute("DELETE FROM playlist_songs WHERE song_id=?1", [id])
+                .map_err(|e| e.to_string())?;
+            db::delete_song_by_path(&tx, &path)?;
         }
         tx.commit().map_err(|e| e.to_string())?;
     }

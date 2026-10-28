@@ -9,6 +9,20 @@ const TRACK_COLUMNS: &str = "s.id,s.path,s.title,s.artist,s.album,s.album_artist
     CASE WHEN s.artwork_url='DELETED' THEN '' ELSE COALESCE(NULLIF(s.artwork_url,''),NULLIF(s.artwork_preview_url,''),(SELECT NULLIF(artwork_path,'DELETED') FROM album_artworks WHERE album_key=s.album_artist || ':' || s.album),'') END,
     COALESCE(s.explicit_advisory,0)";
 
+pub(super) struct GroupCacheEntry {
+    pub(super) revision: (i64, i64),
+    pub(super) groups: Vec<ffi::Group>,
+}
+
+pub(super) fn filter_groups(mut groups: Vec<ffi::Group>, search: &str) -> Vec<ffi::Group> {
+    let search = search.to_lowercase();
+    groups.retain(|group| {
+        group.title.to_lowercase().contains(&search)
+            || group.subtitle.to_lowercase().contains(&search)
+    });
+    groups
+}
+
 fn read_track(row: &rusqlite::Row<'_>) -> rusqlite::Result<ffi::Track> {
     let format: String = row.get(10)?;
     let rate: u32 = row.get(11)?;
@@ -41,11 +55,11 @@ fn read_track(row: &rusqlite::Row<'_>) -> rusqlite::Result<ffi::Track> {
 // User input is always bound. Only allowlisted SQL identifiers are interpolated.
 pub(super) fn predicate(kind: &str) -> &'static str {
     match kind {
-        "artists" => "artist_credit_contains(s.artist,s.title,?2)",
+        "artists" => "s.id IN (SELECT song_id FROM song_primary_artists WHERE name=?2 COLLATE NOCASE)",
         "albums" => "s.album = ?2 AND s.album_artist = ?3",
-        "genres" => "COALESCE(s.genre,'Unknown') = ?2",
-        "folders" if cfg!(windows) => "substr(replace(s.path,char(92),'/'),1,length(rtrim(replace(?2,char(92),'/'),'/'))+1) = (rtrim(replace(?2,char(92),'/'),'/') || '/') COLLATE NOCASE",
-        "folders" => "substr(s.path,1,length(rtrim(?2,'/'))+1) = (rtrim(?2,'/') || '/') COLLATE BINARY",
+        "genres" => "(s.genre = ?2 OR (?2='Unknown' AND s.genre IS NULL))",
+        "folders" if cfg!(windows) => "replace(s.path,char(92),'/') >= (rtrim(replace(?2,char(92),'/'),'/') || '/') COLLATE NOCASE AND replace(s.path,char(92),'/') < (rtrim(replace(?2,char(92),'/'),'/') || '0') COLLATE NOCASE",
+        "folders" => "s.path >= (rtrim(?2,'/') || '/') COLLATE BINARY AND s.path < (rtrim(?2,'/') || '0') COLLATE BINARY",
         "playlists" => {
             "((?2='liked' AND s.id IN (SELECT song_id FROM liked_songs)) OR (?2!='liked' AND s.id IN (SELECT song_id FROM playlist_songs WHERE playlist_id = CAST(?2 AS INTEGER))))"
         }
@@ -75,7 +89,44 @@ fn query_filter(query: &ffi::Query) -> String {
 }
 
 impl Backend {
+    pub fn group_exists(&self, kind: &str, key: &str, secondary: &str) -> Result<bool, String> {
+        if kind == "artists" {
+            db::refresh_artist_index(&self.conn)?;
+        }
+        if kind == "folders" {
+            return self.folder_exists(key);
+        }
+        if kind == "playlists" {
+            if key == "liked" {
+                return Ok(true);
+            }
+            let Ok(id) = key.parse::<i64>() else {
+                return Ok(false);
+            };
+            return self
+                .conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM playlists WHERE id=?1)",
+                    [id],
+                    |row| row.get(0),
+                )
+                .map_err(|error| error.to_string());
+        }
+        if !matches!(kind, "artists" | "albums" | "genres") {
+            return Ok(false);
+        }
+        let sql = format!(
+            "SELECT EXISTS(SELECT 1 FROM active_songs s WHERE {} AND (?3 IS NOT NULL) LIMIT 1)",
+            predicate(kind)
+        );
+        self.conn
+            .query_row(&sql, params!["", key, secondary], |row| row.get(0))
+            .map_err(|error| error.to_string())
+    }
     pub fn locate(&self, query: &ffi::Query, letter: &str) -> Result<u32, String> {
+        if query.kind == "artists" {
+            db::refresh_artist_index(&self.conn)?;
+        }
         if letter == "#" {
             return Ok(0);
         }
@@ -99,6 +150,9 @@ impl Backend {
             .map_err(|e| e.to_string())
     }
     pub fn context_paths(&self, query: &ffi::Query) -> Result<Vec<String>, String> {
+        if query.kind == "artists" {
+            db::refresh_artist_index(&self.conn)?;
+        }
         let filter = query_filter(query);
         let sql = format!(
             "SELECT s.path FROM active_songs s WHERE {filter} ORDER BY {}",
@@ -119,7 +173,126 @@ impl Backend {
             .map_err(|e| e.to_string())
     }
 
+    pub fn context_paths_limited(
+        &self,
+        query: &ffi::Query,
+        limit: u32,
+    ) -> Result<Vec<String>, String> {
+        if query.kind == "artists" {
+            db::refresh_artist_index(&self.conn)?;
+        }
+        let sql = format!(
+            "SELECT s.path FROM active_songs s WHERE {} ORDER BY {} LIMIT ?4",
+            query_filter(query),
+            query_order(query)
+        );
+        let mut stmt = self.conn.prepare(&sql).map_err(|error| error.to_string())?;
+        let rows = stmt
+            .query_map(
+                params![
+                    search_pattern(query.search.trim()),
+                    query.key,
+                    query.secondary,
+                    limit
+                ],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    }
+
+    /// Playback order uses compact database IDs. The UI never needs to hold
+    /// or serialize every file path in a large collection.
+    pub fn context_ids(&self, query: &ffi::Query) -> Result<Vec<i64>, String> {
+        if query.kind == "artists" {
+            db::refresh_artist_index(&self.conn)?;
+        }
+        let sql = format!(
+            "SELECT s.id FROM active_songs s WHERE {} ORDER BY {}",
+            query_filter(query),
+            query_order(query)
+        );
+        let mut stmt = self.conn.prepare(&sql).map_err(|e| e.to_string())?;
+        let ids = stmt
+            .query_map(
+                params![
+                    search_pattern(query.search.trim()),
+                    query.key,
+                    query.secondary
+                ],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        Ok(ids)
+    }
+
+    /// Resolve one visible page from a previously ordered ID snapshot. Missing
+    /// rows retain their slots until the next library revision refreshes it.
+    pub fn tracks_by_ids(&self, ids: &[i64]) -> Result<Vec<ffi::Track>, String> {
+        use rusqlite::OptionalExtension;
+        let mut statement = self
+            .conn
+            .prepare_cached(&format!(
+                "SELECT {TRACK_COLUMNS} FROM active_songs s WHERE s.id=?1"
+            ))
+            .map_err(|error| error.to_string())?;
+        ids.iter()
+            .map(|id| {
+                statement
+                    .query_row([id], read_track)
+                    .optional()
+                    .map(|track| track.unwrap_or_default())
+                    .map_err(|error| error.to_string())
+            })
+            .collect()
+    }
+
+    pub fn path_for_id(&self, id: i64) -> Result<Option<String>, String> {
+        use rusqlite::OptionalExtension;
+        self.conn
+            .query_row("SELECT path FROM active_songs WHERE id=?1", [id], |row| {
+                row.get(0)
+            })
+            .optional()
+            .map_err(|e| e.to_string())
+    }
+
+    pub fn id_for_path(&self, path: &str) -> Result<Option<i64>, String> {
+        use rusqlite::OptionalExtension;
+        self.conn
+            .query_row("SELECT id FROM active_songs WHERE path=?1", [path], |row| {
+                row.get(0)
+            })
+            .optional()
+            .map_err(|e| e.to_string())
+    }
+
+    pub fn ids_for_paths(&self, paths: &[String]) -> Result<Vec<i64>, String> {
+        use rusqlite::OptionalExtension;
+        let mut lookup = self
+            .conn
+            .prepare_cached("SELECT id FROM active_songs WHERE path=?1")
+            .map_err(|error| error.to_string())?;
+        let mut ids = Vec::with_capacity(paths.len());
+        for path in paths {
+            if let Some(id) = lookup
+                .query_row([path], |row| row.get(0))
+                .optional()
+                .map_err(|error| error.to_string())?
+            {
+                ids.push(id);
+            }
+        }
+        Ok(ids)
+    }
+
     pub fn page(&self, query: &ffi::Query, offset: u32, limit: u32) -> Result<ffi::Page, String> {
+        if query.kind == "artists" {
+            db::refresh_artist_index(&self.conn)?;
+        }
         let filter = query_filter(query);
         let search = search_pattern(query.search.trim());
         let total = self
@@ -130,6 +303,26 @@ impl Backend {
                 |r| r.get(0),
             )
             .map_err(|e| e.to_string())?;
+        let tracks = self.page_tracks(query, offset, limit)?;
+        Ok(ffi::Page {
+            total,
+            offset,
+            tracks,
+        })
+    }
+
+    /// Fetch visible rows without waiting for collection counts or navigation IDs.
+    pub fn page_tracks(
+        &self,
+        query: &ffi::Query,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<ffi::Track>, String> {
+        if query.kind == "artists" {
+            db::refresh_artist_index(&self.conn)?;
+        }
+        let filter = query_filter(query);
+        let search = search_pattern(query.search.trim());
         let order = query_order(query);
         // Select page IDs before resolving artwork fallback subqueries. Deep
         // offsets must not assemble every skipped track's media presentation.
@@ -149,11 +342,7 @@ impl Backend {
             .map_err(|e| e.to_string())?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?;
-        Ok(ffi::Page {
-            total,
-            offset,
-            tracks,
-        })
+        Ok(tracks)
     }
 
     pub fn track(&self, path: &str) -> Result<ffi::Track, String> {
@@ -167,10 +356,20 @@ impl Backend {
     }
 
     pub fn statistics(&self) -> Result<ffi::Statistics, String> {
-        let (songs, albums, genres) = self.conn.query_row(
-            "SELECT COUNT(*),COUNT(DISTINCT album_artist || char(0) || album),COUNT(DISTINCT COALESCE(genre,'Unknown')) FROM active_songs", [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).map_err(|e| e.to_string())?;
-        let artists = u32::try_from(db::get_artists(&self.conn)?.len()).unwrap_or(u32::MAX);
+        // Separate counts can use their covering indexes instead of scanning
+        // wide song rows for a combined metadata aggregate.
+        let songs = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM songs INDEXED BY idx_active_id WHERE library_visible=1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        let albums = self.conn.query_row("SELECT COUNT(*) FROM (SELECT 1 FROM songs INDEXED BY idx_active_album_summary WHERE library_visible=1 GROUP BY album_artist,album)", [], |row| row.get(0)).map_err(|error| error.to_string())?;
+        let genres = self.conn.query_row("SELECT COUNT(DISTINCT COALESCE(genre,'Unknown')) FROM songs INDEXED BY idx_active_genre WHERE library_visible=1", [], |row| row.get(0)).map_err(|error| error.to_string())?;
+        db::refresh_artist_index(&self.conn)?;
+        let artists = self.conn.query_row("SELECT COUNT(DISTINCT pa.name) FROM song_primary_artists pa JOIN songs s INDEXED BY idx_active_id ON s.id=pa.song_id WHERE s.library_visible=1", [], |row| row.get(0)).map_err(|error| error.to_string())?;
         let playlists = self
             .conn
             .query_row("SELECT COUNT(*) FROM playlists", [], |r| r.get(0))
@@ -190,6 +389,12 @@ impl Backend {
         if kind == "folders" {
             return self.folder_groups("", search);
         }
+        let revision = self.group_revision()?;
+        if let Some(cached) = self.group_cache.borrow().get(kind) {
+            if cached.revision == revision {
+                return Ok(filter_groups(cached.groups.clone(), search));
+            }
+        }
         let mut groups = self.raw_groups(kind, "")?;
         let overrides = self.collection_overrides()?;
         for group in &mut groups {
@@ -208,17 +413,33 @@ impl Backend {
                 }
             }
         }
-        let search = search.to_lowercase();
-        groups.retain(|g| {
-            g.title.to_lowercase().contains(&search) || g.subtitle.to_lowercase().contains(&search)
-        });
         groups.sort_by_key(|g| {
             (
                 kind == "playlists" && g.key != "liked",
                 g.title.to_lowercase(),
             )
         });
-        Ok(groups)
+        if self.group_revision()? == revision {
+            self.group_cache.borrow_mut().insert(
+                kind.into(),
+                GroupCacheEntry {
+                    revision,
+                    groups: groups.clone(),
+                },
+            );
+        }
+        Ok(filter_groups(groups, search))
+    }
+    pub(super) fn group_revision(&self) -> Result<(i64, i64), String> {
+        let local = self
+            .conn
+            .query_row("SELECT total_changes()", [], |row| row.get(0))
+            .map_err(|error| error.to_string())?;
+        let external = self
+            .conn
+            .query_row("PRAGMA data_version", [], |row| row.get(0))
+            .map_err(|error| error.to_string())?;
+        Ok((local, external))
     }
     pub(super) fn collection_overrides(
         &self,
@@ -250,7 +471,7 @@ impl Backend {
     }
     pub(super) fn raw_groups(&self, kind: &str, search: &str) -> Result<Vec<ffi::Group>, String> {
         let search_lower = search.to_lowercase();
-        // Preserve production cover overrides and DELETED markers.
+        // Honor saved cover overrides and explicit artwork removals.
         if kind == "artists" {
             return Ok(db::get_artists(&self.conn)?
                 .into_iter()
@@ -390,7 +611,12 @@ impl Backend {
 
 fn query_order(query: &ffi::Query) -> String {
     if query.kind == "folders" {
-        return "s.path COLLATE NOCASE,s.id".into();
+        return if cfg!(windows) {
+            "replace(s.path,char(92),'/') COLLATE NOCASE,s.id"
+        } else {
+            "s.path COLLATE BINARY,s.id"
+        }
+        .into();
     }
     // Songs have no insertion timestamp; IDs retain their insertion order.
     if query.sort == "recent" && query.kind.is_empty() {

@@ -1,6 +1,64 @@
 use super::*;
 
 #[test]
+fn folder_summaries_survive_restart_and_invalidate_on_library_changes() {
+    let f = Fixture::new();
+    let b = f.backend();
+    db::set_setting(&b.conn, "library_scan_roots", r#"["C:/Music"]"#).unwrap();
+    b.conn.execute("INSERT INTO songs(path,title,artist,album_artist,album,duration) VALUES('C:/Music/子/track.flac','Song','A','A','Album',1234)", []).unwrap();
+    assert_eq!(b.folder_totals("C:/Music").unwrap(), (1, 1234));
+    assert_eq!(b.folder_groups("C:/Music", "").unwrap()[0].title, "子");
+    let revision = db::folder_cache_revision(&b.conn).unwrap();
+    db::set_setting(&b.conn, "volume", "0.5").unwrap();
+    assert_eq!(db::folder_cache_revision(&b.conn).unwrap(), revision);
+    drop(b);
+    let b = f.backend();
+    assert!(
+        db::load_folder_cache(&b.conn, "folder-totals:C:/Music", revision)
+            .unwrap()
+            .is_some()
+    );
+    assert_eq!(b.folder_totals("C:/Music").unwrap(), (1, 1234));
+    let external = db::init_db(f.0.clone()).unwrap();
+    external
+        .execute(
+            "UPDATE songs SET duration=5000,path='C:/Music/New/track.flac'",
+            [],
+        )
+        .unwrap();
+    assert_eq!(b.folder_totals("C:/Music").unwrap(), (1, 5000));
+    assert_eq!(b.folder_groups("C:/Music", "").unwrap()[0].title, "New");
+    assert!(
+        db::load_folder_cache(&b.conn, "folder-totals:C:/Music", revision)
+            .unwrap()
+            .is_none()
+    );
+    db::save_folder_cache(&b.conn, "stale", revision, "obsolete").unwrap();
+    assert!(db::load_folder_cache(&b.conn, "stale", revision)
+        .unwrap()
+        .is_none());
+    external
+        .execute("UPDATE songs SET library_visible=0", [])
+        .unwrap();
+    assert_eq!(b.folder_totals("C:/Music").unwrap(), (0, 0));
+    assert!(b.folder_groups("C:/Music", "").unwrap().is_empty());
+    external.execute("DELETE FROM songs", []).unwrap();
+    assert_eq!(b.folder_totals("C:/Music").unwrap(), (0, 0));
+    db::set_setting(&b.conn, "library_scan_roots", "[]").unwrap();
+    assert!(b.folder_groups("", "").unwrap().is_empty());
+    external.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let started = std::time::Instant::now();
+    assert_eq!(b.folder_totals("C:/Music/Uncached").unwrap(), (0, 0));
+    assert!(started.elapsed() < Duration::from_secs(1));
+    let timeout: u64 = b
+        .conn
+        .query_row("PRAGMA busy_timeout", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(timeout, 5000);
+    external.execute_batch("ROLLBACK").unwrap();
+}
+
+#[test]
 fn folder_cover_falls_back_to_first_available_song_and_edits_preserve_paths() {
     let f = Fixture::new();
     let b = f.backend();

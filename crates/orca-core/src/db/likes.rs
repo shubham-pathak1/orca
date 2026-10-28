@@ -65,15 +65,21 @@ pub fn remove_many_likes(conn: &Connection, song_ids: &[i64]) -> Result<(), Stri
 pub fn liked_songs_summary(conn: &Connection) -> Result<LikedSongsSummary, String> {
     let count = conn
         .query_row(
-            "SELECT COUNT(*) FROM liked_songs l JOIN active_songs s ON s.id=l.song_id",
+            "SELECT COUNT(*) FROM liked_songs l CROSS JOIN active_songs s ON s.id=l.song_id",
             [],
             |row| row.get(0),
         )
         .map_err(|error| error.to_string())?;
+    if count == 0 {
+        return Ok(LikedSongsSummary {
+            count,
+            artwork: String::new(),
+        });
+    }
     let artwork = conn
         .query_row(
             "SELECT COALESCE(NULLIF(NULLIF(s.artwork_preview_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_thumb_url,'DELETED'),''),(SELECT NULLIF(NULLIF(a.artwork_path,'DELETED'),'') FROM album_artworks a WHERE a.album_key=s.album_artist || ':' || s.album),'')
-             FROM liked_songs l JOIN active_songs s ON s.id=l.song_id
+             FROM liked_songs l CROSS JOIN active_songs s ON s.id=l.song_id
              WHERE COALESCE(NULLIF(NULLIF(s.artwork_preview_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_thumb_url,'DELETED'),''),(SELECT NULLIF(NULLIF(a.artwork_path,'DELETED'),'') FROM album_artworks a WHERE a.album_key=s.album_artist || ':' || s.album),'')!=''
              ORDER BY l.liked_at DESC,l.song_id DESC LIMIT 1",
             [],

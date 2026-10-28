@@ -6,6 +6,7 @@ use crate::{
     Backend,
 };
 use orca_core::db;
+use rusqlite::OptionalExtension;
 use serde_json::json;
 
 pub(super) fn run(
@@ -19,40 +20,66 @@ pub(super) fn run(
     let mut response;
     match operation {
         OperationRequest::ArtistDetail { key, .. } => {
+            db::refresh_artist_index(&backend.conn)?;
             let key = key.as_str();
-            let artist = db::get_artists(&backend.conn)?
-                .into_iter()
-                .find(|a| a.name == key)
-                .ok_or_else(|| "Artist not found".to_string())?;
-            let (count, duration): (i64, i64) = backend
-                .conn
-                .query_row(
-                    "SELECT COUNT(*), COALESCE(SUM(duration),0) FROM active_songs WHERE artist_credit_contains(artist,title,?1)",
-                    [key],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
-                )
-                .map_err(|e| e.to_string())?;
             let mut statement = backend
                 .conn
-                .prepare("SELECT DISTINCT album_artist,album FROM active_songs WHERE artist_credit_contains(artist,title,?1)")
+                .prepare("SELECT s.duration,s.album_artist,s.album,
+                    COALESCE(NULLIF(NULLIF(s.artwork_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_preview_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_thumb_url,'DELETED'),''),NULLIF(NULLIF(awa.artwork_path,'DELETED'),'')),
+                    COALESCE(NULLIF(NULLIF(s.artwork_thumb_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_preview_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_url,'DELETED'),''),NULLIF(NULLIF(awa.artwork_thumb_path,'DELETED'),''))
+                    FROM active_songs s LEFT JOIN album_artworks awa ON awa.album_key=s.album_artist || ':' || s.album
+                    WHERE s.id IN (SELECT song_id FROM song_primary_artists WHERE name=?1 COLLATE NOCASE) ORDER BY s.id")
                 .map_err(|e| e.to_string())?;
-            let memberships = statement
+            let rows = statement
                 .query_map([key], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                    ))
                 })
-                .map_err(|e| e.to_string())?
-                .collect::<Result<std::collections::HashSet<_>, _>>()
                 .map_err(|e| e.to_string())?;
-            let albums: Vec<_> = db::get_albums(&backend.conn)?
-                .into_iter()
-                .filter(|a| memberships.contains(&(a.artist.clone(), a.title.clone())))
-                .collect();
-            let artwork = artist
-                .artwork
-                .filter(|cover| !cover.is_empty())
-                .or(artist.artwork_thumb.filter(|cover| !cover.is_empty()))
-                .or(artist.song_artwork.filter(|cover| !cover.is_empty()))
-                .or(artist.song_artwork_thumb.filter(|cover| !cover.is_empty()));
+            let mut count = 0_i64;
+            let mut duration = 0_i64;
+            let mut memberships = std::collections::HashSet::new();
+            let mut song_artwork = None;
+            let mut song_thumb = None;
+            for row in rows {
+                let (song_duration, album_artist, album, cover, thumb) =
+                    row.map_err(|e| e.to_string())?;
+                count += 1;
+                duration += song_duration;
+                memberships.insert((album_artist, album));
+                if song_artwork.is_none() {
+                    song_artwork = cover;
+                }
+                if song_thumb.is_none() {
+                    song_thumb = thumb;
+                }
+            }
+            if count == 0 {
+                return Err("Artist not found".into());
+            }
+            let mut albums = Vec::new();
+            for (artist, title) in memberships {
+                albums.extend(db::get_album_collection(
+                    &backend.conn,
+                    Some(&title),
+                    &artist,
+                )?);
+            }
+            albums.sort_by_key(|album| album.title.to_lowercase());
+            let portrait = backend.conn.query_row(
+                "SELECT NULLIF(NULLIF(artwork_path,'DELETED'),''),NULLIF(NULLIF(artwork_thumb_path,'DELETED'),'') FROM artist_artworks WHERE artist_name=?1",
+                [key], |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<String>>(1)?))
+            ).optional().map_err(|error| error.to_string())?;
+            let (portrait_full, portrait_thumb) = portrait.unwrap_or_default();
+            let artwork = portrait_full
+                .or(portrait_thumb)
+                .or(song_artwork)
+                .or(song_thumb);
             let backdrop = backend.small_artwork(artwork.as_deref())?;
             response = OperationResult::Detail(CollectionDetail {
                 identity: CollectionIdentity {
@@ -116,7 +143,7 @@ pub(super) fn run(
                     )
                 }
                 "albums" => {
-                    let all = db::get_albums(&backend.conn)?;
+                    let all = db::get_album_collection(&backend.conn, None, secondary)?;
                     let selected = all
                         .iter()
                         .find(|a| a.title == key && a.artist == secondary)
@@ -157,12 +184,16 @@ pub(super) fn run(
                 _ => return Err("Unknown detail type".into()),
             };
             let sql = format!("SELECT COUNT(*),COALESCE(SUM(s.duration),0) FROM active_songs s WHERE ({}) AND (?3 IS NOT NULL)", crate::catalog::predicate(kind));
-            let (count, duration): (i64, i64) = backend
-                .conn
-                .query_row(&sql, rusqlite::params!["", key, secondary], |row| {
-                    Ok((row.get(0)?, row.get(1)?))
-                })
-                .map_err(|e| e.to_string())?;
+            let (count, duration): (i64, i64) = if kind == "folders" {
+                backend.folder_totals(key)?
+            } else {
+                backend
+                    .conn
+                    .query_row(&sql, rusqlite::params!["", key, secondary], |row| {
+                        Ok((row.get(0)?, row.get(1)?))
+                    })
+                    .map_err(|e| e.to_string())?
+            };
             let backdrop = backend.small_artwork(artwork.as_deref())?;
             response = OperationResult::Detail(CollectionDetail {
                 identity: identity.clone(),
@@ -235,26 +266,18 @@ pub(super) fn run(
         &mut response,
         detail_identity.filter(|(kind, _, _)| *kind != "folders"),
     ) {
-        if let Some(group) = backend
-            .groups(kind, "")?
-            .into_iter()
-            .find(|g| g.key == key && g.secondary == secondary)
-        {
-            detail.title = group.title;
-            let overrides = backend.collection_overrides()?;
-            if let Some(cover) = overrides
-                .get(&json!([kind, key, secondary]).to_string())
-                .and_then(|v| v["cover"].as_str())
-                .filter(|cover| {
-                    !(matches!(kind, "albums" | "artists" | "folders")
-                        || kind == "playlists" && key == "liked")
-                        || !cover.is_empty()
-                })
-            {
+        let overrides = backend.collection_overrides()?;
+        if let Some(entry) = overrides.get(&json!([kind, key, secondary]).to_string()) {
+            if let Some(name) = entry["name"].as_str() {
+                detail.title = name.into();
+            }
+            if let Some(cover) = entry["cover"].as_str().filter(|cover| {
+                !(matches!(kind, "albums" | "artists" | "folders")
+                    || kind == "playlists" && key == "liked")
+                    || !cover.is_empty()
+            }) {
                 detail.artwork = Some(cover.into());
-                detail.backdrop = overrides[&json!([kind, key, secondary]).to_string()]["thumb"]
-                    .as_str()
-                    .map(str::to_owned);
+                detail.backdrop = entry["thumb"].as_str().map(str::to_owned);
             }
         }
     }
