@@ -8,6 +8,7 @@ base64 = "0.22"
 biquad = "0.5"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 log = "0.4"
+httpdate = "1.0"
 lofty = "0.21"
 md5 = "0.7"
 rodio = "0.21.1"

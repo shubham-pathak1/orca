@@ -1884,6 +1884,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48ce8546b993eaf241d69ded33b1be6d205dd9857ec879d9d18bd05d3676e144"
 
 [[package]]
+name = "httpdate"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
+
+[[package]]
 name = "i-slint-backend-linuxkms"
 version = "1.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3577,24 +3583,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "orca-services"
-version = "0.1.8-alpha"
-dependencies = [
- "image",
- "orca-core",
- "rusqlite",
- "serde",
- "serde_json",
- "ureq",
- "walkdir",
-]
-
-[[package]]
 name = "orca-core"
 version = "0.1.8-alpha"
 dependencies = [
  "base64 0.22.1",
  "biquad",
+ "httpdate",
  "image",
  "lofty",
  "log",
@@ -3608,6 +3602,19 @@ dependencies = [
  "walkdir",
  "wasapi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "orca-services"
+version = "0.1.8-alpha"
+dependencies = [
+ "image",
+ "orca-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "ureq",
+ "walkdir",
 ]
 
 [[package]]

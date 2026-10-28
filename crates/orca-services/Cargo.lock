@@ -364,6 +364,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "httpdate"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
+
+[[package]]
 name = "icu_collections"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -878,24 +884,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
-name = "orca-services"
-version = "0.1.8-alpha"
-dependencies = [
- "image",
- "orca-core",
- "rusqlite",
- "serde",
- "serde_json",
- "ureq",
- "walkdir",
-]
-
-[[package]]
 name = "orca-core"
 version = "0.1.8-alpha"
 dependencies = [
  "base64",
  "biquad",
+ "httpdate",
  "image",
  "lofty",
  "log",
@@ -909,6 +903,19 @@ dependencies = [
  "walkdir",
  "wasapi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "orca-services"
+version = "0.1.8-alpha"
+dependencies = [
+ "image",
+ "orca-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "ureq",
+ "walkdir",
 ]
 
 [[package]]

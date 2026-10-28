@@ -11,6 +11,10 @@ use crate::artwork_cache::ArtworkPaths;
 use serde::{Deserialize, Serialize};
 use std::{fmt, path::Path, time::Duration};
 use transport::{Http, Transport};
+/// Shared provider cooldown after throttling, for resumable bulk scheduling.
+pub fn retry_after() -> Duration {
+    transport::retry_after()
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ArtworkKind {
@@ -238,7 +242,7 @@ fn lookup<T: Transport>(
         }
     }
     // Completed searches without a safe match are cacheable misses. Timeouts, rate limits,
-    // invalid images and connection errors must remain immediately retryable.
+    // invalid images and connection errors must not be cached as misses.
     if matches!(
         failure,
         None | Some(LookupError::AmbiguousArtist | LookupError::PortraitNotFound)
