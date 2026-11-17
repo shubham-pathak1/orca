@@ -93,7 +93,7 @@ fn amplitude(samples: &[f32], rate: u32, channel: usize, frequency: f64) -> f64 
     let mut sin = 0.0;
     let mut cos = 0.0;
     let frames = samples.len() / 2;
-    for (frame, value) in samples.chunks_exact(2).enumerate() {
+    for (frame, value) in samples.as_chunks::<2>().0.iter().enumerate() {
         let phase = std::f64::consts::TAU * frequency * frame as f64 / rate as f64;
         sin += *value.get(channel).unwrap() as f64 * phase.sin();
         cos += *value.get(channel).unwrap() as f64 * phase.cos();
@@ -226,7 +226,7 @@ fn resumed_positions_never_swap_channels() {
         for millis in [1, 7, 17, 53, 137, 501] {
             let output = capture(&wav, rate, 1.0, 512, Duration::from_millis(millis));
             assert!(
-                output.chunks_exact(2).all(|v| v == [0.5, 0.0]),
+                output.as_chunks::<2>().0.iter().all(|v| *v == [0.5, 0.0]),
                 "channel alignment changed at {millis}ms / {rate}Hz; first frame {:?}",
                 &output[..2]
             );
@@ -278,11 +278,17 @@ fn queued_rate_changes_keep_channel_order_without_initializing_next_track_early(
     sink.play();
     let before: Vec<_> = output.by_ref().take(9600).collect();
     assert!(!started.load(Ordering::Relaxed));
-    assert!(before.chunks_exact(2).all(|v| v == [0.25, -0.25]));
+    assert!(before
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .all(|v| *v == [0.25, -0.25]));
     let after: Vec<_> = output.by_ref().take(9600).collect();
     assert!(started.load(Ordering::Relaxed));
     assert!(after[1024..8192]
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .all(|v| (v[0] + 0.25).abs() < 0.0001 && (v[1] - 0.25).abs() < 0.0001));
 }
 
@@ -341,13 +347,17 @@ fn mono_mapping_and_in_place_resampler_seek_clear_old_samples() {
         .unwrap();
         let before: Vec<_> = source.by_ref().take(4096).collect();
         assert!(before[1024..]
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .all(|v| (v[0] - 0.25).abs() < 0.0001 && v[0] == v[1]));
         source.try_seek(Duration::from_millis(700)).unwrap();
         let after: Vec<_> = source.by_ref().take(4096).collect();
         assert!(
             after[1024..]
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .all(|v| (v[0] + 0.25).abs() < 0.0001 && v[0] == v[1]),
             "old samples survived seek at {rate}Hz"
         );
@@ -430,15 +440,17 @@ fn float_pipeline_documents_32_bit_integer_precision_without_claiming_bit_perfec
     let wav = Wav::new(48_000, 2, 32, &input);
     let output = capture(&wav, 48_000, 1.0, input.len(), Duration::ZERO);
     let bytes = pcm(&output, 32, 4);
-    for (encoded, original) in bytes.chunks_exact(4).zip(&input) {
-        let result = i32::from_le_bytes(encoded.try_into().unwrap());
+    for (encoded, original) in bytes.as_chunks::<4>().0.iter().zip(&input) {
+        let result = i32::from_le_bytes(*encoded);
         assert!(
             (result as i64 - *original as i64).abs() <= 128,
             "unexpected f32 conversion error: {original} -> {result}"
         );
     }
     assert!(bytes
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .zip(&input)
-        .any(|(v, original)| i32::from_le_bytes(v.try_into().unwrap()) != *original));
+        .any(|(v, original)| i32::from_le_bytes(*v) != *original));
 }

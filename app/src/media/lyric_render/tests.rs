@@ -67,7 +67,9 @@ fn romanization_sits_below_original_and_inherits_its_sweep_timing() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         let pixels: Vec<u8> = bitmap
             .bytes
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .flat_map(|pixel| [pixel[3]; 3])
             .collect();
         image::save_buffer(
@@ -291,12 +293,17 @@ fn lyrics_blur_strength_softens_alpha_without_changing_sharp_source_or_ink_color
     assert_eq!(source, before);
     assert!(light[center + 3] < 255);
     assert!(strong[center + 3] < light[center + 3]);
-    assert!(light.chunks_exact(4).filter(|p| p[3] > 0).count() > 1);
+    assert!(light.as_chunks::<4>().0.iter().filter(|p| p[3] > 0).count() > 1);
     assert!(
-        strong.chunks_exact(4).filter(|p| p[3] > 0).count()
-            > light.chunks_exact(4).filter(|p| p[3] > 0).count()
+        strong
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|p| p[3] > 0)
+            .count()
+            > light.as_chunks::<4>().0.iter().filter(|p| p[3] > 0).count()
     );
-    assert!(strong.chunks_exact(4).all(|p| p[..3] == [255; 3]));
+    assert!(strong.as_chunks::<4>().0.iter().all(|p| p[..3] == [255; 3]));
     assert_eq!(raster::blur_alpha(&source, 31, 31, 0.0), source);
 }
 
@@ -363,7 +370,9 @@ fn lyrics_blur_padding_preserves_glyph_positions_and_keeps_soft_edges_in_the_can
     assert!(
         padded
             .bytes
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .all(|pixel| { pixel[3] == 0 || pixel[..3] == [255, 255, 255] }),
         "glyph masks must remain white so explicit tinting preserves their pixels"
     );

@@ -97,7 +97,12 @@ impl Ready {
         let opaque = !decoded.cancelled
             && !decoded.bytes.is_empty()
             && decoded.bytes.len() / 4 * 3 <= limit
-            && decoded.bytes.chunks_exact(4).all(|pixel| pixel[3] == 255);
+            && decoded
+                .bytes
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|pixel| pixel[3] == 255);
         let bytes = if opaque {
             decoded.bytes.len() / 4 * 3
         } else {
@@ -108,8 +113,10 @@ impl Ready {
                 let mut pixels = SharedPixelBuffer::<Rgb8Pixel>::new(decoded.width, decoded.height);
                 for (source, target) in decoded
                     .bytes
-                    .chunks_exact(4)
-                    .zip(pixels.make_mut_bytes().chunks_exact_mut(3))
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .zip(pixels.make_mut_bytes().as_chunks_mut::<3>().0.iter_mut())
                 {
                     target.copy_from_slice(&source[..3]);
                 }

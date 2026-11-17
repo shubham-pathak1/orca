@@ -34,7 +34,9 @@ fn prepared_library_background_matches_translucent_software_layers() {
     for light in [false, true] {
         let blend = BackgroundBlend::library(light);
         let prepared: Vec<u8> = source
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .flat_map(|pixel| blend.apply([pixel[0], pixel[1], pixel[2]]))
             .collect();
         ui.set_base(slint::Color::from_rgb_u8(
@@ -50,7 +52,7 @@ fn prepared_library_background_matches_translucent_software_layers() {
         window.draw_if_needed(|renderer| {
             renderer.render(&mut pixels, 96);
         });
-        for row in pixels.chunks_exact(96) {
+        for row in pixels.as_chunks::<96>().0.iter() {
             for (before, after) in row[..48].iter().zip(&row[48..]) {
                 assert_eq!(before, after, "background changed in light={light}");
             }
