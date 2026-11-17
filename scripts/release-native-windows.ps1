@@ -61,6 +61,9 @@ try {
     Copy-Item -LiteralPath $executable -Destination (Join-Path $package 'Orca.exe')
     Copy-Item -LiteralPath $runtimePath -Destination (Join-Path $package 'vcruntime140.dll')
     Copy-Item -LiteralPath (Join-Path $repoRoot 'LICENSE') -Destination $package
+    $notices = @('Orca dependency notices', 'Source: https://github.com/shubham-pathak1/orca', '', 'Slint: Slint Royalty-free Desktop, Mobile, and Web Applications License 2.0', (Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'vendor/i-slint-renderer-software/LICENSES/LicenseRef-Slint-Royalty-free-2.0.md')), 'Symphonia FLAC decoder: MPL-2.0', (Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'vendor/symphonia-bundle-flac/LICENSE')), (Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'vendor/symphonia-bundle-flac/ORCA-PATCH.md')), 'Plus Jakarta Sans: SIL Open Font License 1.1', (Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'app/ui/assets/fonts/OFL.txt')))
+    $notices -join "`r`n`r`n" | Set-Content -LiteralPath (Join-Path $package 'THIRD_PARTY_NOTICES.txt') -Encoding UTF8
+
     @'
 Extract the ZIP and open Orca.exe. Add music folders in Settings.
 Song metadata and cover edits write your audio files. Collection name edits
