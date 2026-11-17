@@ -9,6 +9,7 @@ pub mod library;
 pub mod lyrics;
 mod media_identity;
 pub mod online_artwork;
+pub mod romanization;
 pub mod scanner;
 
 pub(crate) const USER_AGENT: &str = concat!(

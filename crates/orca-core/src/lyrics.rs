@@ -59,38 +59,106 @@ pub fn fetch_lyrics_with_album_cancellable(
     duration_ms: u64,
     stop: Option<&std::sync::atomic::AtomicBool>,
 ) -> Result<String, String> {
-    lookup_with_providers(
-        title,
-        artist,
-        album,
-        duration_ms,
-        stop,
-        |url| match ureq::get(url)
-            .set(
-                "User-Agent",
-                "Orca/0.1.7 (https://github.com/shubham-pathak1/orca)",
-            )
-            .timeout(Duration::from_secs(5))
-            .call()
-        {
-            Ok(response) => read_response(response),
-            Err(ureq::Error::Status(404, _)) => Err("Lyrics not found".into()),
-            Err(error) => Err(error.to_string()),
+    check_stop(stop)?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(6);
+    let finished = std::sync::atomic::AtomicBool::new(false);
+    let agent = ureq::AgentBuilder::new().build();
+    let request = |url: &str| -> Result<ureq::Response, String> {
+        for attempt in 0..2 {
+            check_stop(stop)?;
+            if finished.load(std::sync::atomic::Ordering::Relaxed) {
+                return Err("Lyrics search cancelled".into());
+            }
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if remaining.is_zero() {
+                return Err("Lyrics search timed out".into());
+            }
+            let response = agent
+                .get(url)
+                .set(
+                    "User-Agent",
+                    concat!(
+                        "Orca/",
+                        env!("CARGO_PKG_VERSION"),
+                        " (https://github.com/shubham-pathak1/orca)"
+                    ),
+                )
+                .timeout(remaining.min(Duration::from_secs(2)))
+                .call();
+            match response {
+                Ok(value) => return Ok(value),
+                Err(ureq::Error::Status(404, _)) => return Err("Lyrics not found".into()),
+                Err(error) => {
+                    let transient = matches!(
+                        &error,
+                        ureq::Error::Transport(_) | ureq::Error::Status(500..=504, _)
+                    );
+                    if attempt == 1 || !transient {
+                        return Err(error.to_string());
+                    }
+                }
+            }
+        }
+        unreachable!()
+    };
+    // Only two provider workers exist per lookup. Scoped threads always join,
+    // and share the same deadline and cancellation boundary.
+    let (red, lib) = provider_pair(
+        || {
+            let result = lookup_lrc_red(
+                title,
+                artist,
+                album,
+                duration_ms,
+                stop,
+                |url| read_response(request(url)?),
+                |url| read_text_response(request(url)?),
+            );
+            if matches!(&result, Ok(Some(_))) {
+                finished.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            result
         },
-        |url| match ureq::get(url)
-            .set(
-                "User-Agent",
-                "Orca/0.1.7 (https://github.com/shubham-pathak1/orca)",
-            )
-            .timeout(Duration::from_secs(5))
-            .call()
-        {
-            Ok(response) => read_text_response(response),
-            Err(ureq::Error::Status(404, _)) => Err("Lyrics not found".into()),
-            Err(error) => Err(error.to_string()),
+        || {
+            lookup(title, artist, album, duration_ms, stop, |url| {
+                read_response(request(url)?)
+            })
         },
-    )
+    );
+    check_stop(stop)?;
+    choose_result(red, lib)
 }
+fn provider_pair(
+    red: impl FnOnce() -> Result<Option<String>, String> + Send,
+    lib: impl FnOnce() -> Result<String, String> + Send,
+) -> (Result<Option<String>, String>, Result<String, String>) {
+    std::thread::scope(|scope| {
+        let red = scope.spawn(red);
+        let lib = scope.spawn(lib);
+        (
+            red.join()
+                .unwrap_or_else(|_| Err("Lyrics provider failed".into())),
+            lib.join()
+                .unwrap_or_else(|_| Err("Lyrics provider failed".into())),
+        )
+    })
+}
+fn choose_result(
+    red: Result<Option<String>, String>,
+    lib: Result<String, String>,
+) -> Result<String, String> {
+    if let Ok(Some(lyrics)) = red {
+        return Ok(lyrics);
+    }
+    lib.map_err(|error| {
+        if error == "No lyrics found for a matching recording" {
+            red.err().unwrap_or(error)
+        } else {
+            error
+        }
+    })
+}
+#[cfg(test)]
 fn lookup_with_providers(
     title: &str,
     artist: &str,
@@ -131,7 +199,7 @@ fn lookup_lrc_red(
     mut request_json: impl FnMut(&str) -> Result<serde_json::Value, String>,
     mut request_text: impl FnMut(&str) -> Result<String, String>,
 ) -> Result<Option<String>, String> {
-    let album = if album.trim().eq_ignore_ascii_case("Unknown Album") {
+    let album = if placeholder_album(album) {
         ""
     } else {
         album.trim()
@@ -214,7 +282,7 @@ fn has_timed_lines(value: &str) -> bool {
             && bytes[1..3].iter().all(u8::is_ascii_digit)
             && bytes[3] == b':'
             && bytes[4..6].iter().all(u8::is_ascii_digit)
-            && bytes[6] == b'.'
+            && matches!(bytes[6], b'.' | b']')
     })
 }
 fn lookup(
@@ -226,7 +294,7 @@ fn lookup(
     mut request: impl FnMut(&str) -> Result<serde_json::Value, String>,
 ) -> Result<String, String> {
     check_stop(stop)?;
-    let album = if album.trim().eq_ignore_ascii_case("Unknown Album") {
+    let album = if placeholder_album(album) {
         ""
     } else {
         album.trim()
@@ -307,6 +375,30 @@ fn lookup(
 fn nonempty(value: Option<String>) -> Option<String> {
     value.filter(|s| !s.trim().is_empty())
 }
+fn placeholder_album(album: &str) -> bool {
+    matches!(
+        album.trim().to_ascii_lowercase().as_str(),
+        "" | "unknown album" | "single" | "ep"
+    )
+}
+fn provider_artist(artist: &str) -> &str {
+    let Some((name, roles)) = artist.trim().rsplit_once(" (") else {
+        return artist;
+    };
+    let Some(roles) = roles.strip_suffix(')') else {
+        return artist;
+    };
+    if roles.split(',').all(|role| {
+        matches!(
+            role.trim().to_ascii_lowercase().as_str(),
+            "composer" | "lyricist" | "performer" | "vocalist"
+        )
+    }) {
+        name
+    } else {
+        artist
+    }
+}
 fn title_without_feature(title: &str) -> Option<&str> {
     let lower = title.to_ascii_lowercase();
     if !lower.ends_with(')') {
@@ -342,14 +434,30 @@ fn matches_identity(
 }
 fn matches_identity_fields(result: RecordingIdentity<'_>, request: RequestedIdentity<'_>) -> bool {
     use crate::media_identity::{album_matches, names_match};
+    let result_artist = provider_artist(result.artist);
+    let same_album = !request.album.is_empty() && album_matches(request.album, result.album);
+    let soundtrack_title = |value: &str| {
+        let lower = value.to_ascii_lowercase();
+        if !lower.ends_with(')') {
+            return None;
+        }
+        [" (uta from ", " (from "]
+            .iter()
+            .find_map(|suffix| lower.rfind(suffix).map(|at| value[..at].trim().to_owned()))
+    };
     (names_match(request.title, result.title)
+        || same_album
+            && (soundtrack_title(result.title)
+                .is_some_and(|base| names_match(request.title, &base))
+                || soundtrack_title(request.title)
+                    .is_some_and(|base| names_match(&base, result.title)))
         || title_without_feature(request.title).is_some_and(|base| names_match(base, result.title))
         || title_without_feature(result.title).is_some_and(|base| names_match(request.title, base)))
-        && (names_match(request.artist, result.artist)
+        && (names_match(request.artist, result_artist)
             || request
                 .artist
                 .split(';')
-                .any(|a| names_match(a, result.artist)))
+                .any(|a| names_match(a, result_artist)))
         && (request.album.is_empty()
             || album_matches(request.album, result.album)
             || title_without_feature(request.album)
@@ -394,6 +502,131 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     fn result(title: &str, duration: f64, synced: Option<&str>) -> serde_json::Value {
         json!({"trackName":title,"artistName":"Artist","albumName":"Album","duration":duration,"syncedLyrics":synced,"plainLyrics":"Plain text"})
+    }
+    #[test]
+    #[ignore = "contacts public providers; no user files or audio devices"]
+    fn live_lrc_lookup_budget_and_short_soundtrack_title() {
+        for (title, artist, album, duration) in [
+            ("Backlight", "Ado", "UTA'S SONGS ONE PIECE FILM RED", 237667),
+            ("Lovely Day", "Bill Withers", "", 257000),
+        ] {
+            let start = std::time::Instant::now();
+            let lyrics =
+                fetch_lyrics_with_album_cancellable(title, artist, album, duration, None).unwrap();
+            eprintln!("{title}: {:?}", start.elapsed());
+            assert!(has_timed_lines(&lyrics));
+            assert!(!lyrics.contains("<tt "));
+            assert!(start.elapsed() < Duration::from_secs(9));
+        }
+    }
+    #[test]
+    fn providers_start_together_and_validated_red_result_keeps_priority() {
+        let (red_ready, red_rx) = std::sync::mpsc::channel();
+        let (lib_ready, lib_rx) = std::sync::mpsc::channel();
+        let (red, lib) = provider_pair(
+            move || {
+                red_ready.send(()).unwrap();
+                lib_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+                Ok(Some("Red lyrics".into()))
+            },
+            move || {
+                lib_ready.send(()).unwrap();
+                red_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+                Ok("LRCLIB lyrics".into())
+            },
+        );
+        assert_eq!(choose_result(red, lib).unwrap(), "Red lyrics");
+        assert_eq!(
+            choose_result(Err("offline".into()), Ok("Fallback".into())).unwrap(),
+            "Fallback"
+        );
+        let stop = AtomicBool::new(true);
+        assert!(
+            fetch_lyrics_cancellable("Song", "Artist", 1000, Some(&stop))
+                .unwrap_err()
+                .contains("cancelled")
+        );
+    }
+    #[test]
+    fn soundtrack_descriptors_match_only_with_same_album_artist_and_duration() {
+        let mut value = LrclibResponse {
+            track_name: "Backlight (UTA from ONE PIECE FILM RED)".into(),
+            artist_name: "Ado".into(),
+            album_name: "UTA'S SONGS ONE PIECE FILM RED".into(),
+            duration: Some(237.667),
+            synced_lyrics: None,
+            plain_lyrics: None,
+        };
+        assert!(matches_identity(
+            &value,
+            "Backlight",
+            "Ado",
+            "UTA'S SONGS ONE PIECE FILM RED",
+            237667
+        ));
+        assert!(!matches_identity(
+            &value,
+            "Backlight",
+            "Ado",
+            "Other album",
+            237667
+        ));
+        assert!(!matches_identity(
+            &value,
+            "Backlight",
+            "Ado",
+            "UTA'S SONGS ONE PIECE FILM RED",
+            250000
+        ));
+        value.track_name = "Backlight (Live)".into();
+        assert!(!matches_identity(
+            &value,
+            "Backlight",
+            "Ado",
+            "UTA'S SONGS ONE PIECE FILM RED",
+            237667
+        ));
+        assert!(has_timed_lines("[00:01]Lyrics"));
+    }
+    #[test]
+    fn placeholder_album_and_provider_roles_keep_recording_checks_strict() {
+        assert!(placeholder_album("Single"));
+        assert!(placeholder_album("Unknown Album"));
+        assert!(!placeholder_album("The Singles"));
+        let value = LrclibResponse {
+            track_name: "Song".into(),
+            artist_name: "Artist (Composer, Lyricist)".into(),
+            album_name: "Album".into(),
+            duration: Some(120.0),
+            synced_lyrics: None,
+            plain_lyrics: None,
+        };
+        assert!(matches_identity(&value, "Song", "Artist", "Album", 120000));
+        assert!(!matches_identity(
+            &value,
+            "Song (Live)",
+            "Artist",
+            "Album",
+            120000
+        ));
+        assert!(!matches_identity(
+            &value,
+            "Song",
+            "Other artist",
+            "Album",
+            120000
+        ));
+        assert!(!matches_identity(
+            &value,
+            "Song",
+            "Artist",
+            "Other album",
+            120000
+        ));
+        assert_eq!(
+            provider_artist("Artist (feat. Guest)"),
+            "Artist (feat. Guest)"
+        );
     }
     #[test]
     fn plain_get_searches_all_recordings_and_prefers_matching_synced_lyrics() {
@@ -574,9 +807,9 @@ mod tests {
                     {"isrc":"USAT22401699","title":"Song","artist":"Artist","album":"Album","duration":121}
                 ]}))
             },
-            |_| {
+            |url| {
                 downloads += 1;
-                if downloads == 1 {
+                if url.contains("USAT22401698") {
                     Err("Lyrics not found".into())
                 } else {
                     Ok("[00:01.00]Matched".into())
