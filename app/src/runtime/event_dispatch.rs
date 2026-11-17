@@ -528,12 +528,12 @@ pub(super) fn apply(
                 }
             }
             Event::Operation(request, result) => {
-                update_images |= super::operations::apply(ui, models, request, result);
+                update_images |= super::operation_results::apply(ui, models, request, result);
             }
             Event::CatalogDetail(at, request, result)
                 if at == poll_service.latest_query.load(Ordering::Relaxed) =>
             {
-                update_images |= super::operations::apply(ui, models, request, result);
+                update_images |= super::operation_results::apply(ui, models, request, result);
             }
             Event::AutomaticArtworkUpdated => {
                 // Artwork paths are content-hashed. Retain decoded images for

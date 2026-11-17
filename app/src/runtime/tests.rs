@@ -59,7 +59,7 @@ pub(crate) fn verify_completions(ui: &OrcaWindow) {
             crate::protocol::PlaylistChange::Membership,
         ))
         .unwrap();
-    events::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
+    event_dispatch::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
     assert_eq!(
         browses.get(),
         0,
@@ -71,7 +71,7 @@ pub(crate) fn verify_completions(ui: &OrcaWindow) {
             crate::protocol::PlaylistChange::Membership,
         ))
         .unwrap();
-    events::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
+    event_dispatch::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
     assert_eq!(browses.get(), 1, "liked playlists must still update");
     state.set_view("songs".into());
     // Test completion ownership, without timing a large asset decode in debug.
@@ -81,13 +81,13 @@ pub(crate) fn verify_completions(ui: &OrcaWindow) {
     events
         .send(Event::CatalogError(1, "Stale search".into()))
         .unwrap();
-    events::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
+    event_dispatch::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
     assert!(
         state.get_catalog_loading(),
         "stale searches must not finish the current search"
     );
     events.send(Event::Page(2, 0, 0, vec![])).unwrap();
-    events::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
+    event_dispatch::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
     assert!(
         !state.get_catalog_loading(),
         "empty current results must finish the search"
@@ -109,7 +109,7 @@ pub(crate) fn verify_completions(ui: &OrcaWindow) {
     }
     let before = cache.borrow_mut().cached_cover(&[&path]).size();
     events.send(Event::AutomaticArtworkUpdated).unwrap();
-    events::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
+    event_dispatch::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
     assert_eq!(
         cache.borrow_mut().cached_cover(&[&path]).size(),
         before,
@@ -143,7 +143,7 @@ pub(crate) fn verify_completions(ui: &OrcaWindow) {
     let mut refreshed = playing;
     refreshed.album = "New album".into();
     events.send(Event::Now(refreshed.clone())).unwrap();
-    assert!(events::apply(
+    assert!(event_dispatch::apply(
         ui,
         &models,
         &None,
@@ -158,7 +158,7 @@ pub(crate) fn verify_completions(ui: &OrcaWindow) {
     assert_eq!(cache.borrow_mut().cached_cover(&[&path]).size(), before);
     events.send(Event::Now(refreshed)).unwrap();
     assert!(
-        !events::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0)),
+        !event_dispatch::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0)),
         "unchanged track metadata must not request another image update"
     );
     events
@@ -167,7 +167,7 @@ pub(crate) fn verify_completions(ui: &OrcaWindow) {
             ..Default::default()
         }))
         .unwrap();
-    events::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
+    event_dispatch::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
     assert!(models.lines.borrow().is_empty());
     assert_eq!(state.get_lyrics().row_count(), 0);
 
@@ -200,7 +200,7 @@ pub(crate) fn verify_completions(ui: &OrcaWindow) {
             OperationError::Failed("Old fetch failure".into()),
         ))
         .unwrap();
-    events::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
+    event_dispatch::apply(ui, &models, &None, &Cell::new(0), &Cell::new(0));
     assert_eq!(state.get_draft().lyrics, "Current lyrics");
     assert!(
         state.get_metadata_open() && state.get_editor_busy(),

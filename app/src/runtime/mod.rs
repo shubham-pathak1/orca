@@ -1,9 +1,9 @@
 //! UI runtime: drain service events and update visible models/render assets.
 //! Owns the timer's retained state; shutdown stops/drops this timer before Service.
-mod events;
+mod event_dispatch;
 mod layout;
-mod operations;
-mod scheduling;
+mod operation_results;
+mod artwork_scheduler;
 #[cfg(test)]
 pub(crate) mod tests;
 use crate::presentation::{player_background_tone, theme_accent};
@@ -47,7 +47,7 @@ pub(crate) fn install(
     poll_tray: Option<slint::Weak<OrcaTray>>,
     models: RuntimeModels,
 ) -> Timer {
-    let schedule = scheduling::ArtworkSchedule::default();
+    let schedule = artwork_scheduler::ArtworkSchedule::default();
     let neighbor_revision = Cell::new(0u64);
     let artwork_epoch = Cell::new(0u64);
     let visual_settings = Cell::new(None);
@@ -187,7 +187,7 @@ pub(crate) fn install(
             groups.reset();
         }
         update_images |=
-            events::apply(&ui, &models, &poll_tray, &neighbor_revision, &artwork_epoch);
+            event_dispatch::apply(&ui, &models, &poll_tray, &neighbor_revision, &artwork_epoch);
         let lyrics_visible = s.get_lyrics_open()
             && !s.get_window_hidden()
             && (s.get_full_player() || (!s.get_queue_open() && !s.get_now().path.is_empty()));
@@ -212,11 +212,11 @@ pub(crate) fn install(
         if lyric_renderer.borrow_mut().drain() {
             s.set_lyric_render_revision(s.get_lyric_render_revision().wrapping_add(1));
         }
-        let collection_draft = scheduling::tick(
+        let collection_draft = artwork_scheduler::tick(
             &ui,
             &models,
             &schedule,
-            scheduling::Viewport {
+            artwork_scheduler::Viewport {
                 browsing,
                 dpr,
                 cover_size,

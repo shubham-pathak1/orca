@@ -7,7 +7,7 @@ mod platform;
 mod playback;
 mod protocol;
 mod runtime;
-mod service;
+mod infrastructure;
 #[cfg(test)]
 mod tests;
 mod views;
@@ -16,7 +16,7 @@ mod worker;
 use media::{artwork, lyric_render, lyrics, metadata};
 use platform::{hotkey, media_session, platform_integration, render_mode};
 use playback::{navigation, playback_clock, playback_flow};
-use service::{errors, jobs, operation_dispatch, persistence, watcher};
+use infrastructure::{errors, jobs, operation_dispatch, persistence, watcher};
 use views::{models, presentation};
 
 use controllers::{
