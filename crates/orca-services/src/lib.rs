@@ -12,6 +12,7 @@ mod media;
 pub mod operation_types;
 mod operations;
 mod playback;
+pub use playback::available_outputs;
 mod scanning;
 pub mod types;
 pub use media::lyrics::original_lyrics;

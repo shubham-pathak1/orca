@@ -1,11 +1,25 @@
 //! Playback commands and snapshots. Audio decoding/output remain in orca-core.
-use super::{ffi, Backend};
+use super::{types, Backend};
 use orca_core::audio_engine::{self, AudioCommand};
 use std::{path::Path, sync::atomic::Ordering, time::Duration};
+
+/// Enumerate on a caller-owned background worker, never the UI thread.
+pub fn available_outputs() -> Result<Vec<types::OutputDevice>, String> {
+    audio_engine::output_devices().map(|devices| {
+        devices
+            .into_iter()
+            .map(|device| types::OutputDevice {
+                id: device.id,
+                name: device.name,
+                is_default: device.is_default,
+            })
+            .collect()
+    })
+}
 impl Backend {
-    pub fn snapshot(&self) -> Result<ffi::Snapshot, String> {
+    pub fn snapshot(&self) -> Result<types::Snapshot, String> {
         let state = self.playback.lock().map_err(|e| e.to_string())?;
-        Ok(ffi::Snapshot {
+        Ok(types::Snapshot {
             path: state.current_path.clone().unwrap_or_default(),
             position_ms: state.position_ms,
             duration_ms: state.duration_ms,
@@ -19,6 +33,18 @@ impl Backend {
             error: self.scan.error.lock().map_err(|e| e.to_string())?.clone(),
             output_status: serde_json::to_string(&state.output).map_err(|e| e.to_string())?,
             output_revision: state.output.revision,
+            output: crate::types::OutputStatus {
+                unprocessed: state.output.config.unprocessed,
+                device_name: state.output.device_name.clone(),
+                exclusive: state.output.config.exclusive,
+                sample_rate: state.output.sample_rate,
+                source_sample_rate: state.output.source_sample_rate,
+                notice: state.output.notice.clone(),
+                channels: state.output.channels,
+                sample_format: state.output.sample_format.clone(),
+                switching: state.output.switching,
+                error: state.output.error.clone(),
+            },
             playback_error: state.error.clone(),
             playback_error_revision: state.error_revision,
         })
@@ -29,6 +55,18 @@ impl Backend {
     }
 
     pub fn set_output(&self, device_id: &str, exclusive: bool) -> Result<(), String> {
+        self.set_output_preference(&crate::types::OutputPreference {
+            device_id: device_id.into(),
+            exclusive,
+            unprocessed: false,
+        })
+    }
+
+    pub fn set_output_preference(
+        &self,
+        preference: &crate::types::OutputPreference,
+    ) -> Result<(), String> {
+        let device_id = &preference.device_id;
         if device_id.len() > 8192 || device_id.contains('\0') {
             return Err("Invalid output device ID".into());
         }
@@ -39,8 +77,8 @@ impl Backend {
         tx.send(AudioCommand::SetOutput(
             orca_core::audio_output::OutputConfig {
                 device_id: device_id.into(),
-                exclusive,
-                unprocessed: false,
+                exclusive: preference.exclusive || preference.unprocessed,
+                unprocessed: preference.unprocessed,
             },
         ))
         .map_err(|_| "Audio device unavailable".into())

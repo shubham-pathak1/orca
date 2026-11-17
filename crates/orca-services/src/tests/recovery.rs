@@ -308,10 +308,7 @@ fn shared_database_preserves_roots_covers_and_wal_backup() {
     )
     .unwrap();
     assert_eq!(b.statistics().unwrap().roots, vec!["original-music"]);
-    assert_eq!(
-        b.groups("artists", "A").unwrap()[0].artwork,
-        "artist-thumb.webp"
-    );
+    assert_eq!(b.groups("artists", "A").unwrap()[0].artwork, "artist.webp");
     assert_eq!(
         b.groups("albums", "A")
             .unwrap()

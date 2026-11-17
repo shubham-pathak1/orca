@@ -6,6 +6,7 @@ pub use romanization::{romanization_language_code, RomanizationMode, Romanizatio
 pub use metadata::{
     AdvancedMetadata, MetadataAssetKind, MetadataDocument, MetadataEdit, MetadataFields, MetadataRequest,
 };
+pub use playback::{OutputDevice, OutputPreference, OutputStatus};
 pub use playback::{PlaybackCommand, PlaylistChange, PlaylistEdit};
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Track {
@@ -70,6 +71,7 @@ pub struct Snapshot {
     pub transitioned: u64,
     pub error: String,
     pub output_status: String,
+    pub output: OutputStatus,
     pub output_revision: u64,
     pub playback_error: String,
     pub playback_error_revision: u64,
