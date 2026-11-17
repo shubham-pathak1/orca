@@ -15,6 +15,9 @@ use std::{
     thread,
     time::Duration,
 };
+// Whole-library fetching is disabled pending provider cooldown and retry rework.
+const BULK_ARTWORK_ENABLED: bool = false;
+
 pub(super) struct BackgroundWorkers {
     pub romanization_generation: Arc<AtomicU64>,
     pub romanization_rx:
@@ -140,7 +143,8 @@ pub(super) fn spawn_background_workers(workers: BackgroundWorkers) -> Vec<thread
                         (automatic_jobs.pop_front().unwrap(), true)
                     }
                     Err(_)
-                        if bulk_running
+                        if BULK_ARTWORK_ENABLED
+                            && bulk_running
                             && bulk_retry_at.is_none_or(|at| at <= std::time::Instant::now()) =>
                     {
                         let backend = backend.as_ref().unwrap();
@@ -182,6 +186,15 @@ pub(super) fn spawn_background_workers(workers: BackgroundWorkers) -> Vec<thread
                         Err(_) => continue,
                     },
                 };
+                if !BULK_ARTWORK_ENABLED && matches!(&request, OperationRequest::ArtworkBulk(_)) {
+                    let _ = events.send(Event::OperationFailed(
+                        request,
+                        OperationError::Unavailable(
+                            "Whole-library artwork fetching is disabled.".into(),
+                        ),
+                    ));
+                    continue;
+                }
                 if backend.is_none() {
                     match new_backend(&directory.to_string_lossy(), false) {
                         Ok(value) => backend = Some(value),

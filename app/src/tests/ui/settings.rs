@@ -171,22 +171,13 @@ pub(super) fn verify(case: &mut UiCase) {
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
-    screenshot(pixels, "bulk-artwork-setting");
     click(window, 800.0, 188.0);
-    assert_eq!(
-        bulk_actions.borrow().last().map(String::as_str),
-        Some("pause")
-    );
-    ui.library().set_artwork_bulk_running(false);
-    window.draw_if_needed(|renderer| {
-        renderer.render(pixels, 1280);
-    });
-    click(window, 800.0, 188.0);
-    assert_eq!(
-        bulk_actions.borrow().last().map(String::as_str),
-        Some("resume")
+    assert!(
+        bulk_actions.borrow().is_empty(),
+        "whole-library artwork controls must remain hidden"
     );
     ui.library().set_artwork_bulk_started(false);
+    ui.library().set_artwork_bulk_running(false);
     ui.library().set_search("Font preset".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);

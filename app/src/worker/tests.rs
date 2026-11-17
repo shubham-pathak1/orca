@@ -805,3 +805,43 @@ fn startup_failure_preserves_its_diagnostic_and_shuts_down_without_audio() {
     drop(worker);
     fs::remove_file(file).unwrap();
 }
+
+#[test]
+fn disabled_bulk_artwork_requests_do_not_start_or_persist_a_job() {
+    use orca_services::operation_types::ArtworkBulkAction;
+    let directory = std::env::temp_dir().join(format!(
+        "orca-disabled-bulk-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let worker = AppWorker::start(directory.clone(), false);
+    for action in [ArtworkBulkAction::Start, ArtworkBulkAction::Resume] {
+        let request = OperationRequest::ArtworkBulk(action);
+        worker.tx.send(Request::Operation(request.clone())).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            assert!(
+                Instant::now() < deadline,
+                "disabled bulk request was not rejected"
+            );
+            match worker.rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(Event::OperationFailed(actual, error)) if actual == request => {
+                    assert!(error.to_string().contains("disabled"));
+                    break;
+                }
+                Ok(Event::Operation(actual, _)) if actual == request => {
+                    panic!("disabled bulk request must not start a job")
+                }
+                _ => {}
+            }
+        }
+    }
+    drop(worker);
+    let backend = orca_services::new_backend(&directory.to_string_lossy(), false).unwrap();
+    assert!(!backend.artwork_bulk_progress().unwrap().started);
+    drop(backend);
+    fs::remove_dir_all(directory).unwrap();
+}

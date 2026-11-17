@@ -964,16 +964,7 @@ export component SettingsView inherits Rectangle {
                         }
                     }
                 }
-                if PreferencesState.setting-matches("Fetch missing artwork whole library bulk download pause resume",LibraryState.search): SettingRow {
-                    title: "Fetch artwork for the whole library";
-                    description: LibraryState.artwork-bulk-started ? LibraryState.artwork-bulk-progress : "Look for missing album covers and artist images. You can pause and resume.";
-                    TextButton {
-                        text: LibraryState.artwork-bulk-running ? "Pause" : LibraryState.artwork-bulk-started && !LibraryState.artwork-bulk-complete ? "Resume" : LibraryState.artwork-bulk-complete ? "Fetch again" : "Fetch missing artwork";
-                        clicked=>{
-                            LibraryState.artwork-bulk(LibraryState.artwork-bulk-running ? "pause" : LibraryState.artwork-bulk-started && !LibraryState.artwork-bulk-complete ? "resume" : "start");
-                        }
-                    }
-                }
+
             }
             if (root.tab==5 || root.tab==2) || LibraryState.search!="": VerticalLayout {
                 spacing: 16px;

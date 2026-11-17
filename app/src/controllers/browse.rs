@@ -93,7 +93,6 @@ pub(crate) fn install(
                     || old.secondary != query.secondary
             });
             if detail_changed && view == "settings" {
-                service.artwork_bulk(orca_services::operation_types::ArtworkBulkAction::Status);
                 let _ = service.tx.send(Request::OutputDevices);
             }
             *last_browse.borrow_mut() = Some((query.clone(), view.clone()));
