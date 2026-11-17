@@ -1,175 +1,874 @@
-import { LineEdit, TextEdit, ScrollView, ListView } from "std-widgets.slint";
-import { AppState } from "state.slint";
+import { LineEdit, TextEdit, ScrollView, ListView, ComboBox } from "std-widgets.slint";
+import { AppState, LibraryState, PlayerState, LyricsState, PreferencesState, DialogState } from "state.slint";
 import { Icons } from "icons.slint";
 import { TextButton, IconButton, CoverImage, ActionFocus } from "controls.slint";
-
 component MenuItem inherits Rectangle {
-    forward-focus:focus;
-    accessible-role:button;accessible-label:root.text;
-    public function take-focus() {focus.focus();}
-    focus:=ActionFocus {layer:"menu";activated=>{AppState.menu-open=false;root.triggered();}}
-    border-width:focus.has-focus && AppState.keyboard-navigation ? 2px : 0px;border-color:AppState.ink;
-
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.text;
+    public function take-focus() {
+        focus.focus();
+    }
+    focus:=ActionFocus {
+        layer: "menu";
+        activated=>{
+            DialogState.menu-open=false;
+            root.triggered();
+        }
+    }
+    border-width: focus.has-focus && AppState.keyboard-navigation ? 2px : 0px;
+    border-color: PreferencesState.ink;
     in property<string> text;
+    in property<image> icon;
+    in property<image> artwork;
+    in property<bool> artwork-missing: true;
     callback triggered();
-    height:36px;background:pointer.has-hover ? AppState.ink.with-alpha(0.0706) : transparent;
-    Text {x:12px;text:root.text;color:AppState.ink;font-size:13px;font-weight:600;vertical-alignment:center;}
-    pointer:=TouchArea {clicked=>{AppState.keyboard-navigation=false;AppState.menu-open=false;root.triggered();}}
+    height: 36px;
+    background: pointer.has-hover ? PreferencesState.ink.with-alpha(0.0706) : transparent;
+    if root.artwork.width==0 || root.artwork-missing: Image {
+        x: 12px;
+        y: (parent.height - 16px)/2;
+        width: 16px;
+        height: 16px;
+        source: root.icon;
+        colorize: PreferencesState.ink.with-alpha(0.85);
+    }
+    if root.artwork.width>0 && !root.artwork-missing: Rectangle {
+        x: 10px;
+        y: (parent.height - 22px)/2;
+        width: 22px;
+        height: 22px;
+        clip: true;
+        border-radius: 3px;
+        CoverImage {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            artwork: root.artwork;
+            missing: false;
+            image-fit: cover;
+        }
+    }
+    Text {
+        x: 40px;
+        y: 0px;
+        width: parent.width - 52px;
+        height: parent.height;
+        text: root.text;
+        color: PreferencesState.ink;
+        font-size: 13px*PreferencesState.scale;
+        font-weight: 600;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    pointer:=TouchArea {
+        clicked=>{
+            AppState.keyboard-navigation=false;
+            DialogState.menu-open=false;
+            root.triggered();
+        }
+    }
 }
+
 export component TrackMenu inherits Rectangle {
-    init=>{first.take-focus();}
-    private property<bool> in-playlist:AppState.view=="playlists" && AppState.detail-key!="";
-    private property<bool> can-refresh-lyrics:AppState.menu-song.path!="" && AppState.menu-song.path==AppState.now.path && !AppState.lyrics-refreshing;
-    private property<length> main-height:174px+(root.can-refresh-lyrics ? 36px : 0px)+(root.in-playlist ? 36px : 0px);
-    width:244px;height:root.main-height+(AppState.playlists.length>0 ? 28px+min(192px,AppState.playlists.length*32px) : 0px);background:AppState.panel;border-color:AppState.ink.with-alpha(0.1020);border-width:1px;border-radius:6px;clip:true;
-    VerticalLayout {x:0px;y:0px;height:root.main-height;padding-top:10px;padding-bottom:6px;spacing:0;
-        Rectangle {height:48px;
-            Text {x:12px;y:0px;width:parent.width - 24px;height:22px;text:AppState.menu-song.title;color:AppState.ink;font-size:13px;font-weight:700;overflow:elide;}
-            Text {x:12px;y:22px;width:parent.width - 24px;height:18px;text:AppState.menu-song.artist;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.6275) : 0.6275);font-size:12px;overflow:elide;}}
-        Rectangle {height:1px;background:AppState.ink.with-alpha(0.0706);}
-        first:=MenuItem {text:"Add to queue";triggered=>{AppState.queue-action("add",AppState.menu-song.path,"");}}
-        MenuItem {text:"Edit metadata";triggered=>{AppState.metadata-action("load",AppState.menu-song.path);}}
-        MenuItem {text:"Find cover online";triggered=>{AppState.metadata-action("load-fetch-cover",AppState.menu-song.path);}}
-        if root.can-refresh-lyrics: MenuItem {text:"Refresh lyrics";triggered=>{AppState.lyrics-refreshing=true;AppState.refresh-lyrics();}}
-        if root.in-playlist: MenuItem {text:AppState.detail-key=="liked" ? "Remove from Liked Songs" : "Remove from playlist";triggered=>{AppState.playlist-action("remove-menu","");}}
+    init=>{
+        first.take-focus();
     }
-    if AppState.playlists.length>0: Text {x:12px;y:root.main-height;height:28px;text:"ADD TO PLAYLIST";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.6275) : 0.6275);font-size:11px;font-weight:700;vertical-alignment:center;}
-    if AppState.playlists.length>0: ListView {x:0px;y:root.main-height+28px;height:parent.height - self.y;horizontal-scrollbar-policy:always-off;
-        for playlist in AppState.playlists: MenuItem {height:32px;text:playlist.title;triggered=>{AppState.playlist-action("add",playlist.key);}}
+    private property<bool> in-playlist: AppState.view=="playlists" && LibraryState.detail-key!="";
+    private property<bool> can-refresh-lyrics: DialogState.menu-song.path!="" && DialogState.menu-song.path==PlayerState.now.path && !LyricsState.lyrics-refreshing;
+    private property<length> main-height: 174px+(root.can-refresh-lyrics ? 36px : 0px)+(root.in-playlist ? 36px : 0px);
+    width: 244px;
+    height: root.main-height+(LibraryState.playlists.length>0 ? 28px+min(192px,LibraryState.playlists.length*32px) : 0px);
+    background: PreferencesState.panel;
+    border-color: PreferencesState.ink.with-alpha(0.1020);
+    border-width: 1px;
+    border-radius: 6px;
+    clip: true;
+    VerticalLayout {
+        x: 0px;
+        y: 0px;
+        height: root.main-height;
+        padding-top: 10px;
+        padding-bottom: 6px;
+        spacing: 0;
+        Rectangle {
+            height: 48px;
+            Text {
+                x: 12px;
+                y: 0px;
+                width: parent.width - 24px;
+                height: 22px;
+                text: DialogState.menu-song.title;
+                color: PreferencesState.ink;
+                font-size: 13px;
+                font-weight: 700;
+                overflow: elide;
+            }
+            Text {
+                x: 12px;
+                y: 22px;
+                width: parent.width - 24px;
+                height: 18px;
+                text: DialogState.menu-song.artist;
+                color: PreferencesState.ink.with-alpha(PreferencesState.light-theme ? max(0.65,0.6275) : 0.6275);
+                font-size: 12px;
+                overflow: elide;
+            }
+        }
+        Rectangle {
+            height: 1px;
+            background: PreferencesState.ink.with-alpha(0.0706);
+        }
+        first:=MenuItem {
+            icon: Icons.addQueue;
+            text: "Add to queue";
+            triggered=>{
+                PlayerState.queue-action("add",DialogState.menu-song.path,"");
+            }
+        }
+        MenuItem {
+            icon: Icons.edit;
+            text: "Edit metadata";
+            triggered=>{
+                DialogState.metadata-action("load",DialogState.menu-song.path);
+            }
+        }
+        MenuItem {
+            icon: Icons.image;
+            text: "Find cover online";
+            triggered=>{
+                DialogState.metadata-action("load-fetch-cover",DialogState.menu-song.path);
+            }
+        }
+        if root.can-refresh-lyrics: MenuItem {
+            icon: Icons.lyrics;
+            text: "Refresh lyrics";
+            triggered=>{
+                LyricsState.lyrics-refreshing=true;
+                LyricsState.refresh-lyrics();
+            }
+        }
+        if root.in-playlist: MenuItem {
+            icon: Icons.trash;
+            text: LibraryState.detail-key=="liked" ? "Remove from Liked Songs" : "Remove from playlist";
+            triggered=>{
+                DialogState.playlist-action("remove-menu","");
+            }
+        }
+    }
+    if LibraryState.playlists.length>0: Text {
+        x: 12px;
+        y: root.main-height;
+        height: 28px;
+        text: "Add to playlist";
+        color: PreferencesState.ink.with-alpha(PreferencesState.light-theme ? max(0.65,0.6275) : 0.6275);
+        font-size: 11px;
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+    if LibraryState.playlists.length>0: ListView {
+        x: 0px;
+        y: root.main-height+28px;
+        height: parent.height - self.y;
+        horizontal-scrollbar-policy: always-off;
+        for playlist in LibraryState.playlists: MenuItem {
+            height: 32px;
+            icon: Icons.list;
+            artwork: playlist.cover;
+            artwork-missing: playlist.cover-missing;
+            text: playlist.title;
+            triggered=>{
+                DialogState.playlist-action("add",playlist.key);
+            }
+        }
     }
 }
+
 export component PlaylistDialog inherits Rectangle {
-    init=>{name-input.focus();}
-    width:400px;height:190px;background:AppState.panel;border-color:AppState.ink.with-alpha(0.1255);border-width:1px;border-radius:8px;
-    VerticalLayout {padding:20px;spacing:14px;
-        Text {text:AppState.playlist-edit-action=="create" ? "Create playlist" : "Rename playlist";color:AppState.ink;font-size:22px;font-weight:700;}
-        name-input:=LineEdit {accessible-label:"Playlist name";changed has-focus=>{AppState.text-input-focused=self.has-focus;}text<=>AppState.playlist-name;placeholder-text:"Playlist name";height:40px;}
-        HorizontalLayout {spacing:8px;alignment:end;
-            TextButton {dialog-control:true;text:"Cancel";clicked=>{AppState.playlist-dialog=false;}}
-            TextButton {dialog-control:true;text:"Save";primary:true;clicked=>{AppState.playlist-action(AppState.playlist-edit-action,AppState.playlist-name);}}
+    init=>{
+        name-input.focus();
+    }
+    width: 400px;
+    height: 190px;
+    background: PreferencesState.panel;
+    border-color: PreferencesState.ink.with-alpha(0.1255);
+    border-width: 1px;
+    border-radius: 8px;
+    VerticalLayout {
+        padding: 20px;
+        spacing: 14px;
+        Text {
+            text: DialogState.playlist-edit-action=="create" ? "Create playlist" : "Rename playlist";
+            color: PreferencesState.ink;
+            font-size: 22px;
+            font-weight: 700;
+        }
+        name-input:=LineEdit {
+            accessible-label: "Playlist name";
+            changed has-focus=>{
+                AppState.text-input-focused=self.has-focus;
+            }
+            text<=>DialogState.playlist-name;
+            placeholder-text: "Playlist name";
+            height: 40px;
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            TextButton {
+                dialog-control: true;
+                text: "Cancel";
+                clicked=>{
+                    DialogState.playlist-dialog=false;
+                }
+            }
+            TextButton {
+                dialog-control: true;
+                text: "Save";
+                primary: true;
+                clicked=>{
+                    DialogState.playlist-action(DialogState.playlist-edit-action,DialogState.playlist-name);
+                }
+            }
         }
     }
 }
+
 export component RemoveFolderDialog inherits Rectangle {
-    init=>{cancel.focus();}
-    width:440px;height:244px;background:AppState.panel;border-color:AppState.ink.with-alpha(0.1255);border-width:1px;border-radius:8px;
-    VerticalLayout {padding:20px;spacing:14px;
-        Text {text:"Remove music folder?";color:AppState.ink;font-size:22px;font-weight:700;}
-        Text {text:AppState.display-path(AppState.folder-remove-path);color:AppState.ink.with-alpha(0.7);font-size:13px;overflow:elide;}
-        Text {text:"Songs found only in this folder will leave Orca's library and playlists, including Liked Songs. Your audio files will stay on disk.";color:AppState.ink;font-size:13px;wrap:word-wrap;}
-        HorizontalLayout {spacing:8px;alignment:end;
-            cancel:=TextButton {dialog-control:true;text:"Cancel";clicked=>{AppState.folder-remove-open=false;AppState.folder-remove-path="";}}
-            TextButton {dialog-control:true;text:"Remove folder";clicked=>{let folder=AppState.folder-remove-path;AppState.folder-remove-open=false;AppState.folder-remove-path="";AppState.folder-action("remove",folder);}}
+    init=>{
+        cancel.focus();
+    }
+    width: 440px;
+    height: 244px;
+    background: PreferencesState.panel;
+    border-color: PreferencesState.ink.with-alpha(0.1255);
+    border-width: 1px;
+    border-radius: 8px;
+    VerticalLayout {
+        padding: 20px;
+        spacing: 14px;
+        Text {
+            text: "Remove music folder?";
+            color: PreferencesState.ink;
+            font-size: 22px;
+            font-weight: 700;
+        }
+        Text {
+            text: AppState.display-path(DialogState.folder-remove-path);
+            color: PreferencesState.ink.with-alpha(0.7);
+            font-size: 13px;
+            overflow: elide;
+        }
+        Text {
+            text: "Songs found only in this folder will leave Orca's library and playlists, including Liked Songs. Your audio files will stay on disk.";
+            color: PreferencesState.ink;
+            font-size: 13px;
+            wrap: word-wrap;
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            cancel:=TextButton {
+                dialog-control: true;
+                text: "Cancel";
+                clicked=>{
+                    DialogState.folder-remove-open=false;
+                    DialogState.folder-remove-path="";
+                }
+            }
+            TextButton {
+                dialog-control: true;
+                text: "Remove folder";
+                clicked=>{
+                    let folder=DialogState.folder-remove-path;
+                    DialogState.folder-remove-open=false;
+                    DialogState.folder-remove-path="";
+                    LibraryState.folder-action("remove",folder);
+                }
+            }
         }
     }
 }
+
 component Field inherits VerticalLayout {
-    public function focus-input() {input.focus();}
+    public function focus-input() {
+        input.focus();
+    }
     in property<string> label;
     in-out property<string> value;
-    spacing:4px;
-    Text {text:root.label;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.6275) : 0.6275);font-size:12px;}
-    input:=LineEdit {accessible-label:root.label;changed has-focus=>{AppState.text-input-focused=self.has-focus;}height:36px;text<=>root.value;}
+    callback edited();
+    spacing: 4px;
+    Text {
+        text: root.label;
+        color: PreferencesState.ink.with-alpha(PreferencesState.light-theme ? max(0.65,0.6275) : 0.6275);
+        font-size: 12px;
+    }
+    input:=LineEdit {
+        accessible-label: root.label;
+        changed has-focus=>{
+            AppState.text-input-focused=self.has-focus;
+        }
+        height: 36px;
+        text<=>root.value;
+        edited=>{
+            root.edited();
+        }
+    }
 }
+
 component EditableCover inherits Rectangle {
     in property<image> artwork;
     in property<bool> missing;
     in property<bool> round;
-    in property<bool> enabled:true;
-    in property<bool> can-remove:true;
+    in property<bool> enabled: true;
+    in property<bool> can-remove: true;
     callback replace;
     callback remove;
-    border-radius:root.round ? root.width/2 : 6px;
-    clip:true;
-    CoverImage {width:parent.width;height:parent.height;artwork:root.artwork;missing:root.missing;image-fit:cover;}
-    hover:=TouchArea {}
-    private property<bool> editing:hover.has-hover || change.has-hover || discard.has-hover || AppState.keyboard-navigation;
-    Rectangle {visible:root.editing;background:#00000066;}
-    HorizontalLayout {x:parent.width - 76px;y:parent.height - 40px;width:72px;height:32px;spacing:8px;
-        change:=IconButton {dialog-control:true;label:"Replace cover";visible:root.editing;enabled:root.enabled;width:32px;height:32px;icon-size:16px;round:true;icon:Icons.edit;primary:true;clicked=>{root.replace();}}
-        discard:=IconButton {dialog-control:true;label:"Remove cover";visible:root.editing;enabled:root.enabled && root.can-remove;width:32px;height:32px;icon-size:16px;round:true;icon:Icons.trash;dark:true;background:#000000b8;clicked=>{root.remove();}}
+    border-radius: root.round ? root.width/2 : 6px;
+    clip: true;
+    CoverImage {
+        width: parent.width;
+        height: parent.height;
+        artwork: root.artwork;
+        missing: root.missing;
+        image-fit: cover;
+    }
+    hover:=TouchArea {
+    }
+    private property<bool> editing: hover.has-hover || change.has-hover || discard.has-hover || AppState.keyboard-navigation;
+    Rectangle {
+        visible: root.editing;
+        background: #00000066;
+    }
+    HorizontalLayout {
+        x: parent.width - 76px;
+        y: parent.height - 40px;
+        width: 72px;
+        height: 32px;
+        spacing: 8px;
+        change:=IconButton {
+            dialog-control: true;
+            label: "Replace cover";
+            visible: root.editing;
+            enabled: root.enabled;
+            width: 32px;
+            height: 32px;
+            icon-size: 16px;
+            round: true;
+            icon: Icons.image;
+            primary: true;
+            clicked=>{
+                root.replace();
+            }
+        }
+        discard:=IconButton {
+            dialog-control: true;
+            label: "Remove cover";
+            visible: root.editing;
+            enabled: root.enabled && root.can-remove;
+            width: 32px;
+            height: 32px;
+            icon-size: 16px;
+            round: true;
+            icon: Icons.trash;
+            dark: true;
+            background: #000000b8;
+            clicked=>{
+                root.remove();
+            }
+        }
     }
 }
+
 export component MetadataEditor inherits Rectangle {
-    init=>{title-field.focus-input();}
-    background:AppState.panel;border-radius:6px;border-color:AppState.ink.with-alpha(0.1255);border-width:1px;
-    HorizontalLayout {spacing:0;
-        if root.width>=760px: Rectangle {width:240px;background:AppState.ink.with-alpha(0.0235);
-            VerticalLayout {padding:20px;spacing:12px;alignment:start;
-                EditableCover {height:200px;artwork:AppState.editor-cover;missing:AppState.editor-cover-missing;enabled:!AppState.editor-busy;can-remove:!AppState.editor-cover-missing;replace=>{AppState.metadata-action("pick-cover","");}remove=>{AppState.metadata-action("remove-cover","");}}
-                Text {text:AppState.draft.title;color:AppState.ink;font-size:18px;font-weight:700;overflow:elide;}
-                Text {text:AppState.draft.artist;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.5020) : 0.5020);font-size:14px;overflow:elide;}
-                TextButton {dialog-control:true;text:"Find cover online";enabled:!AppState.editor-busy;clicked=>{AppState.metadata-action("fetch-cover","");}}
-                Text {text:AppState.editor-status;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.5647) : 0.5647);font-size:12px;wrap:word-wrap;}
+    private property<bool> advanced-open: false;
+    init=>{
+        title-field.focus-input();
+    }
+    background: PreferencesState.panel;
+    border-radius: 6px;
+    border-color: PreferencesState.ink.with-alpha(0.1255);
+    border-width: 1px;
+    HorizontalLayout {
+        spacing: 0;
+        if root.width>=760px: Rectangle {
+            width: 240px;
+            background: PreferencesState.ink.with-alpha(0.0235);
+            VerticalLayout {
+                padding: 20px;
+                spacing: 12px;
+                alignment: start;
+                EditableCover {
+                    height: 200px;
+                    artwork: DialogState.editor-cover;
+                    missing: DialogState.editor-cover-missing;
+                    enabled: !DialogState.editor-busy;
+                    can-remove: !DialogState.editor-cover-missing;
+                    replace=>{
+                        DialogState.metadata-action("pick-cover","");
+                    }
+                    remove=>{
+                        DialogState.metadata-action("remove-cover","");
+                    }
+                }
+                Text {
+                    text: DialogState.draft.title;
+                    color: PreferencesState.ink;
+                    font-size: 18px;
+                    font-weight: 700;
+                    overflow: elide;
+                }
+                Text {
+                    text: DialogState.draft.artist;
+                    color: PreferencesState.ink.with-alpha(PreferencesState.light-theme ? max(0.65,0.5020) : 0.5020);
+                    font-size: 14px;
+                    overflow: elide;
+                }
+                TextButton {
+                    dialog-control: true;
+                    text: "Find cover online";
+                    enabled: !DialogState.editor-busy;
+                    clicked=>{
+                        DialogState.metadata-action("fetch-cover","");
+                    }
+                }
+                Text {
+                    text: DialogState.editor-status;
+                    color: PreferencesState.ink.with-alpha(PreferencesState.light-theme ? max(0.65,0.5647) : 0.5647);
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
             }
         }
         Rectangle {
-        ScrollView {x:0px;y:0px;height:parent.height - 68px;horizontal-scrollbar-policy:always-off;
-            VerticalLayout {padding:20px;spacing:16px;alignment:start;
-                HorizontalLayout {Text {text:"Edit metadata";color:AppState.ink;font-size:24px;font-weight:700;}IconButton {label:"Close";dialog-control:true;icon:Icons.close;clicked=>{AppState.metadata-open=false;}}}
-                if root.width<760px: VerticalLayout {spacing:8px;alignment:start;
-                    EditableCover {width:96px;height:96px;artwork:AppState.editor-cover;missing:AppState.editor-cover-missing;enabled:!AppState.editor-busy;can-remove:!AppState.editor-cover-missing;replace=>{AppState.metadata-action("pick-cover","");}remove=>{AppState.metadata-action("remove-cover","");}}
-                    TextButton {dialog-control:true;text:"Find cover online";enabled:!AppState.editor-busy;clicked=>{AppState.metadata-action("fetch-cover","");}}
-                    Text {text:AppState.editor-status;color:AppState.ink.with-alpha(0.65);font-size:12px;wrap:word-wrap;}
+            ScrollView {
+                x: 0px;
+                y: 0px;
+                height: parent.height - 68px;
+                horizontal-scrollbar-policy: always-off;
+                VerticalLayout {
+                    padding: 20px;
+                    spacing: 16px;
+                    alignment: start;
+                    HorizontalLayout {
+                        Text {
+                            text: "Edit metadata";
+                            color: PreferencesState.ink;
+                            font-size: 24px;
+                            font-weight: 700;
+                        }
+                        IconButton {
+                            label: "Close";
+                            dialog-control: true;
+                            icon: Icons.close;
+                            clicked=>{
+                                DialogState.metadata-open=false;
+                            }
+                        }
+                    }
+                    if root.width<760px: VerticalLayout {
+                        spacing: 8px;
+                        alignment: start;
+                        EditableCover {
+                            width: 96px;
+                            height: 96px;
+                            artwork: DialogState.editor-cover;
+                            missing: DialogState.editor-cover-missing;
+                            enabled: !DialogState.editor-busy;
+                            can-remove: !DialogState.editor-cover-missing;
+                            replace=>{
+                                DialogState.metadata-action("pick-cover","");
+                            }
+                            remove=>{
+                                DialogState.metadata-action("remove-cover","");
+                            }
+                        }
+                        TextButton {
+                            dialog-control: true;
+                            text: "Find cover online";
+                            enabled: !DialogState.editor-busy;
+                            clicked=>{
+                                DialogState.metadata-action("fetch-cover","");
+                            }
+                        }
+                        Text {
+                            text: DialogState.editor-status;
+                            color: PreferencesState.ink.with-alpha(0.65);
+                            font-size: 12px;
+                            wrap: word-wrap;
+                        }
+                    }
+                    Text {
+                        text: "Writes directly to the audio file.";
+                        color: PreferencesState.ink.with-alpha(PreferencesState.light-theme ? max(0.65,0.4392) : 0.4392);
+                        font-size: 12px;
+                    }
+                    HorizontalLayout {
+                        spacing: 12px;
+                        title-field:=Field {
+                            label: "Title";
+                            value<=>DialogState.draft.title;
+                        }
+                        Field {
+                            label: "Artist";
+                            value<=>DialogState.draft.artist;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 12px;
+                        Field {
+                            label: "Album";
+                            value<=>DialogState.draft.album;
+                        }
+                        Field {
+                            label: "Album artist";
+                            value<=>DialogState.draft.album-artist;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 12px;
+                        Field {
+                            label: "Year";
+                            value<=>DialogState.draft.year;
+                        }
+                        Field {
+                            label: "Genre";
+                            value<=>DialogState.draft.genre;
+                        }
+                    }
+                    TextButton {
+                        dialog-control: true;
+                        text: root.advanced-open ? "Hide advanced" : "Advanced";
+                        clicked=>{
+                            root.advanced-open=!root.advanced-open;
+                        }
+                    }
+                    if root.advanced-open: VerticalLayout {
+                        spacing: 12px;
+                        HorizontalLayout {
+                            spacing: 12px;
+                            Field {
+                                label: "Track number";
+                                value<=>DialogState.draft.track-number;
+                            }
+                            Field {
+                                label: "Disc number";
+                                value<=>DialogState.draft.disc-number;
+                            }
+                        }
+                        Field {
+                            label: "Composer";
+                            value<=>DialogState.draft.composer;
+                            edited=>{
+                                DialogState.draft.advanced-changed=true;
+                            }
+                        }
+                        Field {
+                            label: "Comment";
+                            value<=>DialogState.draft.comment;
+                            edited=>{
+                                DialogState.draft.advanced-changed=true;
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 12px;
+                            Text {
+                                text: "Content advisory";
+                                color: PreferencesState.secondary-ink;
+                                font-size: 12px;
+                                vertical-alignment: center;
+                            }
+                            ComboBox {
+                                model: ["Unspecified","Clean","Explicit"];
+                                current-index: DialogState.draft.advisory;
+                                selected(value)=>{
+                                    DialogState.draft.advisory=self.current-index;
+                                    DialogState.draft.advanced-changed=true;
+                                }
+                            }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text {
+                            text: "LYRICS";
+                            color: PreferencesState.ink.with-alpha(PreferencesState.light-theme ? max(0.65,0.4392) : 0.4392);
+                            font-size: 12px;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+                        TextButton {
+                            dialog-control: true;
+                            text: "Fetch lyrics";
+                            enabled: !DialogState.editor-busy;
+                            clicked=>{
+                                DialogState.metadata-action("fetch-lyrics","");
+                            }
+                        }
+                        TextButton {
+                            dialog-control: true;
+                            text: "Import .lrc";
+                            clicked=>{
+                                DialogState.metadata-action("pick-lyrics","");
+                            }
+                        }
+                    }
+                    TextEdit {
+                        accessible-label: "Lyrics";
+                        changed has-focus=>{
+                            AppState.text-input-focused=self.has-focus;
+                        }
+                        height: 224px;
+                        text<=>DialogState.draft.lyrics;
+                        wrap: word-wrap;
+                    }
                 }
-                Text {text:"Writes directly to the audio file.";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.4392) : 0.4392);font-size:12px;}
-                HorizontalLayout {spacing:12px;title-field:=Field {label:"Title";value<=>AppState.draft.title;}Field {label:"Artist";value<=>AppState.draft.artist;}}
-                HorizontalLayout {spacing:12px;Field {label:"Album";value<=>AppState.draft.album;}Field {label:"Album artist";value<=>AppState.draft.album-artist;}}
-                HorizontalLayout {spacing:12px;Field {label:"Year";value<=>AppState.draft.year;}Field {label:"Genre";value<=>AppState.draft.genre;}}
-                HorizontalLayout {spacing:12px;Field {label:"Track number";value<=>AppState.draft.track-number;}Field {label:"Disc number";value<=>AppState.draft.disc-number;}}
-                HorizontalLayout {spacing:8px;
-                    Text {text:"LYRICS";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.4392) : 0.4392);font-size:12px;font-weight:600;vertical-alignment:center;}
-                    TextButton {dialog-control:true;text:"Fetch lyrics";enabled:!AppState.editor-busy;clicked=>{AppState.metadata-action("fetch-lyrics","");}}
-                    TextButton {dialog-control:true;text:"Import .lrc";clicked=>{AppState.metadata-action("pick-lyrics","");}}
-                }
-                TextEdit {accessible-label:"Lyrics";changed has-focus=>{AppState.text-input-focused=self.has-focus;}height:224px;text<=>AppState.draft.lyrics;wrap:word-wrap;}
             }
-        }
-        HorizontalLayout {x:20px;y:parent.height - 56px;width:parent.width - 40px;height:40px;spacing:8px;alignment:end;
-            TextButton {dialog-control:true;text:"Cancel";clicked=>{AppState.metadata-open=false;}}
-            TextButton {dialog-control:true;text:AppState.editor-busy && AppState.editor-operation == "save" ? "Saving…" : "Save metadata";primary:true;enabled:!AppState.editor-busy;clicked=>{AppState.metadata-action("save","");}}
-        }
+            HorizontalLayout {
+                x: 20px;
+                y: parent.height - 56px;
+                width: parent.width - 40px;
+                height: 40px;
+                spacing: 8px;
+                alignment: end;
+                TextButton {
+                    dialog-control: true;
+                    text: "Cancel";
+                    clicked=>{
+                        DialogState.metadata-open=false;
+                    }
+                }
+                TextButton {
+                    dialog-control: true;
+                    text: DialogState.editor-busy && DialogState.editor-operation == "save" ? "Saving…" : "Save metadata";
+                    primary: true;
+                    enabled: !DialogState.editor-busy;
+                    clicked=>{
+                        DialogState.metadata-action("save","");
+                    }
+                }
+            }
         }
     }
 }
 
 export component CollectionMenu inherits Rectangle {
-    init=>{first.take-focus();}
-    private property<bool> playlist-detail:AppState.collection-kind=="playlists" && AppState.detail-key==AppState.collection-group.key;
-    width:244px;height:root.playlist-detail ? 246px : AppState.collection-kind=="artists" || AppState.collection-kind=="albums" ? 210px : 174px;background:AppState.panel;border-color:AppState.ink.with-alpha(0.1020);border-width:1px;border-radius:6px;clip:true;
-    VerticalLayout {padding-top:10px;padding-bottom:6px;spacing:0;
-        Rectangle {height:48px;
-            Text {x:12px;y:0px;width:parent.width - 24px;height:22px;text:AppState.collection-group.title;color:AppState.ink;font-size:13px;font-weight:700;overflow:elide;}
-            Text {x:12px;y:25px;width:parent.width - 24px;height:18px;text:AppState.collection-group.subtitle;color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.6275) : 0.6275);font-size:12px;overflow:elide;}}
-        Rectangle {height:1px;background:AppState.ink.with-alpha(0.0706);}
-        first:=MenuItem {text:"Edit details";triggered=>{AppState.collection-action("name");}}
-        MenuItem {text:"Change cover";triggered=>{AppState.collection-action("cover");}}
-        MenuItem {text:"Remove cover";triggered=>{AppState.collection-action("remove-cover");}}
-        if AppState.collection-kind=="artists" || AppState.collection-kind=="albums": MenuItem {text:"Find cover online";triggered=>{AppState.collection-action("fetch-cover");}}
-        if root.playlist-detail: MenuItem {text:"Export playlist";triggered=>{AppState.collection-menu-open=false;AppState.playlist-action("export",AppState.collection-group.key);}}
-        if root.playlist-detail: MenuItem {text:"Delete playlist";triggered=>{AppState.collection-menu-open=false;AppState.playlist-action("delete",AppState.collection-group.key);}}
+    init=>{
+        first.take-focus();
+    }
+    private property<bool> playlist-detail: DialogState.collection-kind=="playlists" && LibraryState.detail-key==DialogState.collection-group.key;
+    width: 244px;
+    height: root.playlist-detail ? 246px : DialogState.collection-kind=="artists" || DialogState.collection-kind=="albums" ? 210px : 174px;
+    background: PreferencesState.panel;
+    border-color: PreferencesState.ink.with-alpha(0.1020);
+    border-width: 1px;
+    border-radius: 6px;
+    clip: true;
+    VerticalLayout {
+        padding-top: 10px;
+        padding-bottom: 6px;
+        spacing: 0;
+        Rectangle {
+            height: 48px;
+            Text {
+                x: 12px;
+                y: 0px;
+                width: parent.width - 24px;
+                height: 22px;
+                text: DialogState.collection-group.title;
+                color: PreferencesState.ink;
+                font-size: 13px;
+                font-weight: 700;
+                overflow: elide;
+            }
+            Text {
+                x: 12px;
+                y: 25px;
+                width: parent.width - 24px;
+                height: 18px;
+                text: DialogState.collection-group.subtitle;
+                color: PreferencesState.ink.with-alpha(PreferencesState.light-theme ? max(0.65,0.6275) : 0.6275);
+                font-size: 12px;
+                overflow: elide;
+            }
+        }
+        Rectangle {
+            height: 1px;
+            background: PreferencesState.ink.with-alpha(0.0706);
+        }
+        first:=MenuItem {
+            icon: Icons.edit;
+            text: "Edit details";
+            triggered=>{
+                DialogState.collection-action("name");
+            }
+        }
+        MenuItem {
+            icon: Icons.image;
+            text: "Change cover";
+            triggered=>{
+                DialogState.collection-action("cover");
+            }
+        }
+        MenuItem {
+            icon: Icons.trash;
+            text: "Remove cover";
+            triggered=>{
+                DialogState.collection-action("remove-cover");
+            }
+        }
+        if DialogState.collection-kind=="artists" || DialogState.collection-kind=="albums": MenuItem {
+            icon: Icons.image;
+            text: "Find cover online";
+            triggered=>{
+                DialogState.collection-action("fetch-cover");
+            }
+        }
+        if root.playlist-detail: MenuItem {
+            icon: Icons.export;
+            text: "Export playlist";
+            triggered=>{
+                DialogState.collection-menu-open=false;
+                DialogState.playlist-action("export",DialogState.collection-group.key);
+            }
+        }
+        if root.playlist-detail: MenuItem {
+            icon: Icons.trash;
+            text: "Delete playlist";
+            triggered=>{
+                DialogState.collection-menu-open=false;
+                DialogState.playlist-action("delete",DialogState.collection-group.key);
+            }
+        }
     }
 }
+
 export component CollectionDialog inherits Rectangle {
-    init=>{if AppState.collection-kind!="folders" {name-input.focus();}}
-    width:440px;height:AppState.collection-kind=="folders" ? 540px : 440px;background:AppState.panel;border-color:AppState.ink.with-alpha(0.1255);border-width:1px;border-radius:8px;
-    Rectangle {x:0px;y:0px;width:parent.width;height:parent.height - 68px;clip:true;
-    ScrollView {x:0px;y:0px;width:parent.width;height:parent.height;horizontal-scrollbar-policy:always-off;
-    VerticalLayout {padding:20px;spacing:12px;alignment:start;
-        Text {text:"Edit "+(AppState.collection-kind=="artists" ? "artist" : AppState.collection-kind=="albums" ? "album" : AppState.collection-kind=="genres" ? "genre" : AppState.collection-kind=="folders" ? "folder" : "playlist");color:AppState.ink;font-size:22px;font-weight:700;vertical-stretch:0;}
-        EditableCover {width:128px;height:128px;round:AppState.collection-kind=="artists";artwork:AppState.collection-cover;missing:AppState.collection-cover-missing;enabled:!AppState.collection-saving && !AppState.collection-fetching;replace=>{AppState.collection-action("cover");}remove=>{AppState.collection-action("remove-cover");}}
-        if AppState.collection-kind=="artists" || AppState.collection-kind=="albums": TextButton {dialog-control:true;enabled:!AppState.collection-saving && !AppState.collection-fetching;text:AppState.collection-fetching ? "Searching..." : "Find cover online";clicked=>{AppState.collection-action("fetch-cover");}}
-        Text {text:AppState.collection-kind=="playlists" ? "Playlist name" : AppState.collection-kind=="folders" ? "Folder name and location come from your directory." : "Saving changes this tag in every song in this collection.";color:AppState.ink.with-alpha(AppState.light-theme ? max(0.65,0.6275) : 0.6275);font-size:12px;wrap:word-wrap;}
-        name-input:=LineEdit {visible:AppState.collection-kind!="folders";enabled:!AppState.collection-saving && !AppState.collection-fetching;accessible-label:"Collection name";changed has-focus=>{AppState.text-input-focused=self.has-focus;}text<=>AppState.collection-name;placeholder-text:"Name";height:AppState.collection-kind=="folders" ? 0px : 40px;}
-        if AppState.collection-status!="": Text {text:AppState.collection-status;color:AppState.ink.with-alpha(0.75);font-size:12px;wrap:word-wrap;}
-        Text {text:"Collection covers stay in Orca; embedded song covers stay unchanged.";color:AppState.ink.with-alpha(0.65);font-size:11px;wrap:word-wrap;}
-        if AppState.collection-kind=="folders": Text {text:AppState.collection-path;color:AppState.ink.with-alpha(0.65);font-size:11px;wrap:word-wrap;}
-        if AppState.collection-kind=="folders": TextButton {dialog-control:true;text:"Open in Explorer";clicked=>{AppState.collection-action("open-location");}}
-    }
-    }
-    }
-        HorizontalLayout {x:20px;y:parent.height - 56px;width:parent.width - 40px;height:40px;spacing:8px;alignment:end;
-            TextButton {dialog-control:true;enabled:!AppState.collection-saving;text:"Cancel";clicked=>{AppState.collection-dialog=false;}}
-            TextButton {dialog-control:true;enabled:!AppState.collection-saving && !AppState.collection-fetching;text:AppState.collection-saving ? "Saving..." : "Save";primary:true;clicked=>{AppState.collection-action("save-name");}}
+    init=>{
+        if DialogState.collection-kind!="folders" {
+            name-input.focus();
         }
+    }
+    width: 440px;
+    height: DialogState.collection-kind=="folders" ? 540px : 440px;
+    background: PreferencesState.panel;
+    border-color: PreferencesState.ink.with-alpha(0.1255);
+    border-width: 1px;
+    border-radius: 8px;
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height - 68px;
+        clip: true;
+        ScrollView {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            horizontal-scrollbar-policy: always-off;
+            VerticalLayout {
+                padding: 20px;
+                spacing: 12px;
+                alignment: start;
+                Text {
+                    text: "Edit "+(DialogState.collection-kind=="artists" ? "artist" : DialogState.collection-kind=="albums" ? "album" : DialogState.collection-kind=="genres" ? "genre" : DialogState.collection-kind=="folders" ? "folder" : "playlist");
+                    color: PreferencesState.ink;
+                    font-size: 22px;
+                    font-weight: 700;
+                    vertical-stretch: 0;
+                }
+                EditableCover {
+                    width: 128px;
+                    height: 128px;
+                    round: DialogState.collection-kind=="artists";
+                    artwork: DialogState.collection-cover;
+                    missing: DialogState.collection-cover-missing;
+                    enabled: !DialogState.collection-saving && !DialogState.collection-fetching;
+                    replace=>{
+                        DialogState.collection-action("cover");
+                    }
+                    remove=>{
+                        DialogState.collection-action("remove-cover");
+                    }
+                }
+                if DialogState.collection-kind=="artists" || DialogState.collection-kind=="albums": TextButton {
+                    dialog-control: true;
+                    enabled: !DialogState.collection-saving && !DialogState.collection-fetching;
+                    text: DialogState.collection-fetching ? "Searching..." : "Find cover online";
+                    clicked=>{
+                        DialogState.collection-action("fetch-cover");
+                    }
+                }
+                Text {
+                    text: DialogState.collection-kind=="playlists" ? "Playlist name" : DialogState.collection-kind=="folders" ? "Folder name and location come from your directory." : "Saving changes this tag in every song in this collection.";
+                    color: PreferencesState.ink.with-alpha(PreferencesState.light-theme ? max(0.65,0.6275) : 0.6275);
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
+                name-input:=LineEdit {
+                    visible: DialogState.collection-kind!="folders";
+                    enabled: !DialogState.collection-saving && !DialogState.collection-fetching;
+                    accessible-label: "Collection name";
+                    changed has-focus=>{
+                        AppState.text-input-focused=self.has-focus;
+                    }
+                    text<=>DialogState.collection-name;
+                    placeholder-text: "Name";
+                    height: DialogState.collection-kind=="folders" ? 0px : 40px;
+                }
+                if DialogState.collection-status!="": Text {
+                    text: DialogState.collection-status;
+                    color: PreferencesState.ink.with-alpha(0.75);
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: "Collection covers stay in Orca; embedded song covers stay unchanged.";
+                    color: PreferencesState.ink.with-alpha(0.65);
+                    font-size: 11px;
+                    wrap: word-wrap;
+                }
+                if DialogState.collection-kind=="folders": Text {
+                    text: PlayerState.collection-path;
+                    color: PreferencesState.ink.with-alpha(0.65);
+                    font-size: 11px;
+                    wrap: word-wrap;
+                }
+                if DialogState.collection-kind=="folders": TextButton {
+                    dialog-control: true;
+                    text: AppState.windows-audio ? "Open in Explorer" : "Open folder";
+                    clicked=>{
+                        DialogState.collection-action("open-location");
+                    }
+                }
+            }
+        }
+    }
+    HorizontalLayout {
+        x: 20px;
+        y: parent.height - 56px;
+        width: parent.width - 40px;
+        height: 40px;
+        spacing: 8px;
+        alignment: end;
+        TextButton {
+            dialog-control: true;
+            enabled: !DialogState.collection-saving;
+            text: "Cancel";
+            clicked=>{
+                DialogState.collection-dialog=false;
+            }
+        }
+        TextButton {
+            dialog-control: true;
+            enabled: !DialogState.collection-saving && !DialogState.collection-fetching;
+            text: DialogState.collection-saving ? "Saving..." : "Save";
+            primary: true;
+            clicked=>{
+                DialogState.collection-action("save-name");
+            }
+        }
+    }
 }
