@@ -492,9 +492,12 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
             if refresh_queue {
                 let tracks = playback
                     .navigation
-                    .upcoming_limited(&playback.path, 20, |id| {
-                        backend.path_for_id(id).ok().flatten()
-                    })
+                    .upcoming_limited(
+                        &playback.path,
+                        20,
+                        |id| backend.path_for_id(id).ok().flatten(),
+                        |path| backend.id_for_path(path).ok().flatten(),
+                    )
                     .into_iter()
                     .filter_map(|p| backend.track(&p).ok())
                     .collect();
@@ -598,9 +601,12 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
                 }
                 let rows = playback
                     .navigation
-                    .upcoming_limited(&playback.path, 20, |id| {
-                        backend.path_for_id(id).ok().flatten()
-                    })
+                    .upcoming_limited(
+                        &playback.path,
+                        20,
+                        |id| backend.path_for_id(id).ok().flatten(),
+                        |path| backend.id_for_path(path).ok().flatten(),
+                    )
                     .into_iter()
                     .filter_map(|p| backend.track(&p).ok())
                     .collect();
@@ -671,9 +677,12 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
                         }
                         let tracks = playback
                             .navigation
-                            .upcoming_limited(&playback.path, 20, |id| {
-                                backend.path_for_id(id).ok().flatten()
-                            })
+                            .upcoming_limited(
+                                &playback.path,
+                                20,
+                                |id| backend.path_for_id(id).ok().flatten(),
+                                |path| backend.id_for_path(path).ok().flatten(),
+                            )
                             .into_iter()
                             .filter_map(|p| backend.track(&p).ok())
                             .collect();

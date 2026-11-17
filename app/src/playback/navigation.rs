@@ -52,7 +52,11 @@ impl Navigation {
         if self.is_compact() {
             if was_manual && self.order_ids.contains(&id) {
                 self.removed_ids.insert(id);
-            } else if let Some(at) = self.order_ids.iter().position(|value| *value == id) {
+            } else if let Some(at) = self
+                .order_cursor
+                .filter(|at| self.order_ids.get(*at) == Some(&id))
+                .or_else(|| self.order_ids.iter().position(|value| *value == id))
+            {
                 self.order_cursor = Some(at);
             }
             self.played_ids.insert(id);
@@ -185,7 +189,34 @@ impl Navigation {
         current: &str,
         limit: usize,
         mut resolve: impl FnMut(i64) -> Option<String>,
+        mut lookup: impl FnMut(&str) -> Option<i64>,
     ) -> Vec<String> {
+        if self.shuffle && self.repeat != 2 {
+            if limit == 0 || current.is_empty() {
+                return Vec::new();
+            }
+            let mut planned = self.clone();
+            let mut result = vec![current.to_owned()];
+            let mut path = current.to_owned();
+            while result.len() < limit {
+                let Some(next) = planned.next_compact(&path, false, false, &mut resolve) else {
+                    break;
+                };
+                if result.contains(&next) {
+                    break;
+                }
+                let was_manual = planned.manual.contains(&next);
+                planned.record(&next);
+                if planned.is_compact() {
+                    if let Some(id) = lookup(&next) {
+                        planned.mark_id(id, was_manual);
+                    }
+                }
+                result.push(next.clone());
+                path = next;
+            }
+            return result;
+        }
         if !self.is_compact() {
             return self.upcoming(current).into_iter().take(limit).collect();
         }
@@ -282,7 +313,7 @@ impl Navigation {
         }
         // Materialize only the visible queue window. Moved tracks become an
         // explicit front queue; the collection order remains compact.
-        let mut queue = self.upcoming_limited(current, 21, resolve);
+        let mut queue = self.upcoming_limited(current, 21, resolve, &mut lookup);
         if !queue.iter().any(|path| path == source) || !queue.iter().any(|path| path == target) {
             return;
         }
@@ -405,6 +436,14 @@ impl Navigation {
         paths
     }
     pub fn upcoming(&self, current: &str) -> Vec<String> {
+        if self.shuffle && self.repeat != 2 {
+            return self.upcoming_limited(
+                current,
+                self.order.len() + self.manual.len() + 1,
+                |_| None,
+                |_| None,
+            );
+        }
         let paths = self.playable(current);
         if self.repeat == 2 {
             return if current.is_empty() {
@@ -729,7 +768,12 @@ mod tests {
         assert!(navigation.order.is_empty());
         assert_eq!(
             navigation
-                .upcoming_limited("song-50000", 20, |id| Some(format!("song-{id}")))
+                .upcoming_limited(
+                    "song-50000",
+                    20,
+                    |id| Some(format!("song-{id}")),
+                    |path| path.strip_prefix("song-")?.parse().ok()
+                )
                 .len(),
             20
         );
@@ -765,7 +809,12 @@ mod tests {
         );
         assert_eq!(navigation.order_cursor, Some(0));
         assert_eq!(
-            navigation.upcoming_limited("song-1", 20, |id| Some(format!("song-{id}"))),
+            navigation.upcoming_limited(
+                "song-1",
+                20,
+                |id| Some(format!("song-{id}")),
+                |path| path.strip_prefix("song-")?.parse().ok()
+            ),
             ["song-1", "song-3", "song-2", "song-4"]
         );
         navigation.reorder_compact(
@@ -776,7 +825,12 @@ mod tests {
             |path| path.strip_prefix("song-").and_then(|id| id.parse().ok()),
         );
         assert_eq!(
-            navigation.upcoming_limited("song-1", 20, |id| Some(format!("song-{id}"))),
+            navigation.upcoming_limited(
+                "song-1",
+                20,
+                |id| Some(format!("song-{id}")),
+                |path| path.strip_prefix("song-")?.parse().ok()
+            ),
             ["song-1", "song-2", "song-4", "song-3"]
         );
         navigation.reorder_compact(
@@ -788,13 +842,78 @@ mod tests {
         );
         navigation.remove_compact("song-1", "song-2", Some(2));
         assert_eq!(
-            navigation.upcoming_limited("song-1", 20, |id| Some(format!("song-{id}"))),
+            navigation.upcoming_limited(
+                "song-1",
+                20,
+                |id| Some(format!("song-{id}")),
+                |path| path.strip_prefix("song-")?.parse().ok()
+            ),
             ["song-1", "song-3", "song-4"]
         );
         navigation.clear_compact("song-1");
         assert_eq!(
-            navigation.upcoming_limited("song-1", 20, |id| Some(format!("song-{id}"))),
+            navigation.upcoming_limited(
+                "song-1",
+                20,
+                |id| Some(format!("song-{id}")),
+                |path| path.strip_prefix("song-")?.parse().ok()
+            ),
             ["song-1"]
         );
+    }
+    #[test]
+    fn shuffled_queue_matches_playback_without_consuming_state() {
+        let resolve = |id| Some(format!("song-{id}"));
+        let lookup = |path: &str| path.strip_prefix("song-")?.parse().ok();
+        for compact in [false, true] {
+            for manual in [false, true] {
+                for repeat in [0, 1] {
+                    for seed in 0..8 {
+                        let mut navigation = Navigation::default();
+                        if compact {
+                            navigation.compact_context(
+                                (1..=6).collect(),
+                                Query::default(),
+                                1,
+                                "song-1",
+                            );
+                        } else {
+                            navigation.context(
+                                (1..=6).map(|id| format!("song-{id}")).collect(),
+                                "song-1",
+                            );
+                        }
+                        navigation.shuffle = true;
+                        navigation.repeat = repeat;
+                        navigation.seed = seed;
+                        if manual {
+                            navigation.manual = vec!["song-5".into(), "song-99".into()];
+                        }
+                        let before = navigation.clone();
+                        let preview = navigation.upcoming_limited("song-1", 20, resolve, lookup);
+                        assert!(navigation == before, "queue preview mutated playback state");
+                        assert_eq!(
+                            navigation.upcoming_limited("song-1", 20, resolve, lookup),
+                            preview
+                        );
+                        let mut current = "song-1".to_owned();
+                        for expected in preview.iter().skip(1) {
+                            let next = navigation
+                                .next_compact(&current, false, false, resolve)
+                                .unwrap();
+                            assert_eq!(
+                                &next, expected,
+                                "queue differs from the next playback choice"
+                            );
+                            let was_manual = navigation.manual.contains(&next);
+                            navigation.record(&next);
+                            navigation.mark_id(lookup(&next).unwrap(), was_manual);
+                            current = next;
+                        }
+                        assert!(preview.len() >= 6);
+                    }
+                }
+            }
+        }
     }
 }
