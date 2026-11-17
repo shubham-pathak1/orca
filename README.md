@@ -15,7 +15,7 @@
   <a href="https://github.com/shubham-pathak1/orca/issues">Report a bug</a>
 </p>
 
-![Orca library with album artwork, search and playback controls](https://ik.imagekit.io/shubhampathak/orca-web/library.png?v=20261026)
+![Orca library with album artwork, search and playback controls](https://ik.imagekit.io/shubhampathak/orca-web/library.png?v=20261117)
 
 ## Features
 
@@ -48,19 +48,23 @@ new build.
 
 ### Lyrics
 
-![Full player with album artwork and synced lyrics](https://ik.imagekit.io/shubhampathak/orca-web/fullplayer_lyrics.png?v=20261026)
+![Full player with album artwork and synced lyrics](https://ik.imagekit.io/shubhampathak/orca-web/fullplayer_lyrics.png?v=20261117)
+
+### Gradient background
+
+![Full player with an artwork-inspired gradient background](https://ik.imagekit.io/shubhampathak/orca-web/fullplayer_gradientbg.png?v=20261117)
 
 ### Artists
 
-![Artist page with songs and albums](https://ik.imagekit.io/shubhampathak/orca-web/artist.png?v=20261026)
+![Artist page with songs and albums](https://ik.imagekit.io/shubhampathak/orca-web/artist.png?v=20261117)
 
 ### Albums
 
-![Album page with track details](https://ik.imagekit.io/shubhampathak/orca-web/album.png?v=20261026)
+![Album page with track details](https://ik.imagekit.io/shubhampathak/orca-web/album.png?v=20261117)
 
 ### Metadata editor
 
-![Song metadata editor with artwork and lyrics controls](https://ik.imagekit.io/shubhampathak/orca-web/metadata_editor.png?v=20261026)
+![Song metadata editor with artwork and lyrics controls](https://ik.imagekit.io/shubhampathak/orca-web/metadata_editor.png?v=20261117)
 
 
 ## Build
