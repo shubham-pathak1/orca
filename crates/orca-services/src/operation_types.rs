@@ -9,6 +9,8 @@ pub enum CollectionKind {
     Artists,
     Albums,
     Genres,
+    Composers,
+    Years,
     Playlists,
     Folders,
 }
@@ -18,6 +20,8 @@ impl CollectionKind {
             Self::Artists => "artists",
             Self::Albums => "albums",
             Self::Genres => "genres",
+            Self::Composers => "composers",
+            Self::Years => "years",
             Self::Playlists => "playlists",
             Self::Folders => "folders",
         }
@@ -30,6 +34,8 @@ impl TryFrom<&str> for CollectionKind {
             "artists" => Ok(Self::Artists),
             "albums" => Ok(Self::Albums),
             "genres" => Ok(Self::Genres),
+            "composers" => Ok(Self::Composers),
+            "years" => Ok(Self::Years),
             "playlists" => Ok(Self::Playlists),
             "folders" => Ok(Self::Folders),
             _ => Err(OperationError::InvalidRequest(
@@ -248,6 +254,8 @@ impl From<String> for OperationError {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AlbumDetail {
+    #[serde(default)]
+    pub year: Option<i32>,
     pub key: String,
     pub title: String,
     pub artist: String,
@@ -260,6 +268,8 @@ pub struct AlbumDetail {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CollectionDetail {
+    #[serde(default)]
+    pub year: Option<i32>,
     #[serde(flatten)]
     pub identity: CollectionIdentity,
     pub title: String,

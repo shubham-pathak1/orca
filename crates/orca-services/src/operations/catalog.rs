@@ -82,6 +82,7 @@ pub(super) fn run(
                 .or(song_thumb);
             let backdrop = backend.small_artwork(artwork.as_deref())?;
             response = OperationResult::Detail(CollectionDetail {
+                year: None,
                 identity: CollectionIdentity {
                     kind: CollectionKind::Artists,
                     key: key.into(),
@@ -93,7 +94,7 @@ pub(super) fn run(
                 count: count.max(0) as u64,
                 duration: duration.max(0) as u64,
                 album_count: albums.len() as u64,
-                albums: albums.into_iter().take(6).map(album_detail).collect(),
+                albums: albums.into_iter().map(album_detail).collect(),
             });
         }
         OperationRequest::CollectionPreview(preview) => {
@@ -133,6 +134,7 @@ pub(super) fn run(
             let kind = identity.kind.as_str();
             let key = identity.key.as_str();
             let secondary = identity.secondary.as_str();
+            let mut year = None;
             let (title, artwork, albums) = match kind {
                 "folders" => {
                     let selected = backend.folder_group(key)?;
@@ -148,13 +150,25 @@ pub(super) fn run(
                         .iter()
                         .find(|a| a.title == key && a.artist == secondary)
                         .ok_or_else(|| "Album not found".to_string())?;
+                    year = selected.year;
                     let artwork = selected.artwork.clone();
                     let related: Vec<_> = all
                         .into_iter()
                         .filter(|a| a.artist == secondary && a.title != key)
-                        .take(6)
                         .collect();
                     (key.to_string(), artwork, related)
+                }
+                "composers" | "years" => {
+                    let sql=format!("SELECT COALESCE(NULLIF(NULLIF(s.artwork_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_preview_url,'DELETED'),''),NULLIF(NULLIF(s.artwork_thumb_url,'DELETED'),''),NULLIF(NULLIF(awa.artwork_path,'DELETED'),'')) FROM active_songs s LEFT JOIN album_artworks awa ON awa.album_key=s.album_artist || ':' || s.album WHERE ({}) AND ?1 IS NOT NULL AND ?3 IS NOT NULL ORDER BY s.disc_number,s.track_number,s.id LIMIT 1",crate::catalog::predicate(kind));
+                    let artwork = backend
+                        .conn
+                        .query_row(&sql, rusqlite::params!["", key, ""], |row| {
+                            row.get::<_, Option<String>>(0)
+                        })
+                        .optional()
+                        .map_err(|error| error.to_string())?
+                        .ok_or_else(|| "Collection not found".to_string())?;
+                    (key.to_owned(), artwork, Vec::new())
                 }
                 "genres" => {
                     let selected = db::get_genres(&backend.conn)?
@@ -196,6 +210,7 @@ pub(super) fn run(
             };
             let backdrop = backend.small_artwork(artwork.as_deref())?;
             response = OperationResult::Detail(CollectionDetail {
+                year,
                 identity: identity.clone(),
                 title,
                 artwork,
@@ -214,7 +229,17 @@ pub(super) fn run(
                 }
                 _ => unreachable!(),
             };
-            if !["artists", "albums", "genres", "playlists", "folders"].contains(&kind) {
+            if ![
+                "artists",
+                "albums",
+                "genres",
+                "playlists",
+                "folders",
+                "composers",
+                "years",
+            ]
+            .contains(&kind)
+            {
                 return Err("Unknown queue group type".into());
             }
             let query = crate::types::Query {
@@ -302,6 +327,7 @@ pub(super) fn run(
 
 fn album_detail(album: db::AlbumEntry) -> AlbumDetail {
     AlbumDetail {
+        year: album.year,
         navigation_title: album.title.clone(),
         key: album.key,
         title: album.title,

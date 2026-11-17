@@ -206,6 +206,7 @@ pub(super) fn apply(
                 .albums
                 .into_iter()
                 .map(|album| Group {
+                    year: album.year,
                     key: album.navigation_title,
                     secondary: album.artist,
                     title: album.title,

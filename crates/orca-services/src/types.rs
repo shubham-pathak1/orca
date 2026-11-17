@@ -15,6 +15,8 @@ pub struct Track {
     pub album_artist: String,
     pub genre: String,
     pub explicit: bool,
+    pub liked: bool,
+    pub bit_depth: u32,
     pub duration_ms: u64,
     pub artwork: String,
     pub artwork_thumb: String,
@@ -41,6 +43,8 @@ pub struct Page {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Group {
+    #[serde(default)]
+    pub year: Option<i32>,
     pub key: String,
     pub secondary: String,
     pub title: String,
