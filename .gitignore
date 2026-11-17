@@ -25,3 +25,14 @@ orca_settings.json
 audio_prefs.json
 lyrics_cache/
 thumbs-*/
+
+# Native profiles and local working backups
+local-backups/
+slint-settings.json
+slint-settings.json.bak
+slint-session.json
+slint-session.json.bak
+slint-session.json.position
+slint-session.json.position.bak
+orca.db-wal
+orca.db-shm

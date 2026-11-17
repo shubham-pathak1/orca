@@ -18,7 +18,7 @@ fn api_sig(params: &BTreeMap<&str, String>, secret: &str) -> String {
     format!("{:x}", digest)
 }
 
-/// Step 1 of the auth flow — get a request token.
+/// Request a token for browser authorization.
 pub fn get_token(api_key: &str) -> Result<String, String> {
     let url = format!(
         "{}?method=auth.gettoken&api_key={}&format=json",
@@ -45,7 +45,7 @@ pub fn auth_url(api_key: &str, token: &str) -> String {
     )
 }
 
-/// Step 2 — after user approves in browser, exchange the token for a session key.
+/// Exchange an authorized request token for a session key.
 pub fn get_session(api_key: &str, secret: &str, token: &str) -> Result<String, String> {
     let mut params: BTreeMap<&str, String> = BTreeMap::new();
     params.insert("api_key", api_key.to_string());
@@ -81,8 +81,7 @@ pub fn get_session(api_key: &str, secret: &str, token: &str) -> Result<String, S
     Ok(data.session.key)
 }
 
-/// Notify Last.fm of the currently playing track ("now playing" update).
-/// This does NOT count as a scrobble.
+/// Publish currently playing metadata without recording a scrobble.
 pub fn update_now_playing(
     api_key: &str,
     secret: &str,
