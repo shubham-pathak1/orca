@@ -103,6 +103,7 @@ pub fn edit(draft: &MetadataDraft) -> Result<orca_services::types::MetadataEdit,
     use orca_services::types::{MetadataEdit, MetadataFields};
     Ok(MetadataEdit {
         fields: MetadataFields {
+            advanced: None,
             path: draft.path.to_string(),
             title: draft.title.trim().into(),
             artist: draft.artist.trim().into(),

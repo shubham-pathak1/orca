@@ -1,8 +1,11 @@
 //! Metadata contracts contain owned data, never widgets or database handles.
+pub use orca_core::library::AdvancedMetadata;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct MetadataFields {
+    #[serde(default)]
+    pub advanced: Option<AdvancedMetadata>,
     pub path: String,
     pub title: String,
     pub artist: String,

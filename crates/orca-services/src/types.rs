@@ -4,7 +4,7 @@ mod playback;
 mod romanization;
 pub use romanization::{romanization_language_code, RomanizationMode, RomanizationPolicy, ROMANIZATION_LANGUAGES};
 pub use metadata::{
-    MetadataAssetKind, MetadataDocument, MetadataEdit, MetadataFields, MetadataRequest,
+    AdvancedMetadata, MetadataAssetKind, MetadataDocument, MetadataEdit, MetadataFields, MetadataRequest,
 };
 pub use playback::{PlaybackCommand, PlaylistChange, PlaylistEdit};
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

@@ -115,6 +115,7 @@ impl Backend {
             let artwork = self.track(path)?.artwork_original;
             song.artwork = (!artwork.is_empty()).then_some(artwork);
         }
+        let advanced = library::read_advanced_metadata(Path::new(path))?;
         if orca_core::atomic_file::FileVersion::read(Path::new(path))
             .map_err(|e| e.to_string())?
             .token()
@@ -127,6 +128,7 @@ impl Backend {
         }
         Ok(MetadataDocument {
             fields: MetadataFields {
+                advanced: Some(advanced),
                 path: song.path,
                 title: song.title,
                 artist: song.artist,
@@ -171,12 +173,16 @@ impl Backend {
         .map(|value| value.len())
         .sum::<usize>()
             + fields.genre.as_ref().map_or(0, String::len)
-            + fields.lyrics.as_ref().map_or(0, String::len);
+            + fields.lyrics.as_ref().map_or(0, String::len)
+            + fields.advanced.as_ref().map_or(0, |advanced| {
+                advanced.composer.as_ref().map_or(0, String::len)
+                    + advanced.comment.as_ref().map_or(0, String::len)
+            });
         if bytes > 1024 * 1024 {
             return Err("Metadata document exceeds 1 MB".into());
         }
         let update = library::SongMetadataUpdate {
-            advanced: None,
+            advanced: fields.advanced,
             path: fields.path,
             title: fields.title,
             artist: fields.artist,
@@ -277,8 +283,7 @@ impl Backend {
             .lock()
             .map_err(|_| "Metadata save lock unavailable")?;
         recover_metadata_locked(&self.conn, &self.data_dir)?;
-        let saved = self.saved_lyrics(path)?;
-        let lyrics = crate::original_lyrics(&saved);
+        let lyrics = self.saved_lyrics(path)?;
         let removed_cover = self
             .conn
             .query_row(
