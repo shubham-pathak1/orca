@@ -1,6 +1,8 @@
 //! UI-independent native service data. No Slint or platform handles cross this boundary.
 mod metadata;
 mod playback;
+mod romanization;
+pub use romanization::{romanization_language_code, RomanizationMode, RomanizationPolicy, ROMANIZATION_LANGUAGES};
 pub use metadata::{
     MetadataAssetKind, MetadataDocument, MetadataEdit, MetadataFields, MetadataRequest,
 };

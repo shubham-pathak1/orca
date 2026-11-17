@@ -1,6 +1,7 @@
 //! Metadata writes and recovery coordination.
 pub(crate) mod lyrics;
 mod playlists;
+pub(crate) mod romanization;
 mod waveform;
 use super::{
     types::{MetadataDocument, MetadataEdit, MetadataFields},
@@ -99,7 +100,8 @@ impl Backend {
             .map_err(|e| e.to_string())?
             .token();
         let mut song = library::scan_music_file(Path::new(path), &self.data_dir.join("artwork"))?;
-        let lyrics = self.saved_lyrics(path)?;
+        let saved = self.saved_lyrics(path)?;
+        let lyrics = crate::original_lyrics(&saved);
         song.lyrics = if lyrics.trim().is_empty() {
             None
         } else {
@@ -275,7 +277,8 @@ impl Backend {
             .lock()
             .map_err(|_| "Metadata save lock unavailable")?;
         recover_metadata_locked(&self.conn, &self.data_dir)?;
-        let lyrics = self.saved_lyrics(path)?;
+        let saved = self.saved_lyrics(path)?;
+        let lyrics = crate::original_lyrics(&saved);
         let removed_cover = self
             .conn
             .query_row(

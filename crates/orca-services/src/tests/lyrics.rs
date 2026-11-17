@@ -10,7 +10,7 @@ fn playlist_membership_and_local_lyrics_cross_the_boundary() {
     let id = group.key.parse().unwrap();
     let song = b.track("一.wav").unwrap();
     b.playlist_action("add", id, song.id, "").unwrap();
-    let q = ffi::Query {
+    let q = types::Query {
         kind: "playlists".into(),
         key: group.key,
         ..Default::default()

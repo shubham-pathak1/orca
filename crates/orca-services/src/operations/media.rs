@@ -76,7 +76,7 @@ fn run_with_lyrics_lookup(
                 } else {
                     LyricsStatus::Ok
                 },
-                lyrics: Some(lyrics),
+                lyrics: Some(crate::original_lyrics(&lyrics)),
                 path: song.path,
             });
         }

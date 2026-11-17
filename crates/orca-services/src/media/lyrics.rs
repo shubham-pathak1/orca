@@ -10,6 +10,53 @@ use std::{
 
 const SESSION_LYRICS_LIMIT: usize = 256;
 
+/// Read original LRC from cache entries written by the retired rich-lyrics
+/// feature. This compatibility reader never fetches or renders extra text.
+pub fn original_lyrics(text: &str) -> String {
+    #[derive(serde::Deserialize)]
+    struct Legacy {
+        orca_lyrics: u8,
+        original_lrc: String,
+    }
+    if text.len() <= 1024 * 1024 && text.trim_start().starts_with('{') {
+        if let Ok(old) = serde_json::from_str::<Legacy>(text) {
+            if old.orca_lyrics == 1 {
+                return old.original_lrc;
+            }
+        }
+    }
+    text.to_owned()
+}
+
+#[cfg(test)]
+mod compatibility_tests {
+    use super::*;
+    #[test]
+    fn retired_cache_entries_keep_original_lrc_and_empty_misses_expire() {
+        let old = serde_json::json!({"orca_lyrics":1,"original_lrc":"[00:01.00]Original","translations":["unused"]}).to_string();
+        assert_eq!(original_lyrics(&old), "[00:01.00]Original");
+        assert_eq!(
+            original_lyrics("[00:02.00]Local edit"),
+            "[00:02.00]Local edit"
+        );
+        let track = Track {
+            path: "test.wav".into(),
+            title: "Song".into(),
+            ..Default::default()
+        };
+        let mut cache = SessionLyrics::default();
+        cache.insert(&track, String::new());
+        assert_eq!(cache.get(&track), Some(String::new()));
+        cache.entries.get_mut("test.wav").unwrap().fetched_at =
+            std::time::Instant::now() - std::time::Duration::from_secs(31);
+        assert!(cache.get(&track).is_none());
+        cache.insert(&track, "[00:01.00]Found".into());
+        cache.entries.get_mut("test.wav").unwrap().fetched_at =
+            std::time::Instant::now() - std::time::Duration::from_secs(31);
+        assert_eq!(cache.get(&track).as_deref(), Some("[00:01.00]Found"));
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct SessionLyrics {
     entries: HashMap<String, SessionLyricEntry>,
@@ -17,6 +64,7 @@ pub(crate) struct SessionLyrics {
 }
 
 struct SessionLyricEntry {
+    fetched_at: std::time::Instant,
     title: String,
     artist: String,
     album: String,
@@ -28,7 +76,9 @@ struct SessionLyricEntry {
 impl SessionLyrics {
     fn get(&self, track: &Track) -> Option<String> {
         self.entries.get(&track.path).and_then(|entry| {
-            (entry.title == track.title
+            ((!entry.lyrics.is_empty()
+                || entry.fetched_at.elapsed() < std::time::Duration::from_secs(30))
+                && entry.title == track.title
                 && entry.artist == track.artist
                 && entry.album == track.album
                 && entry.duration_ms == track.duration_ms)
@@ -64,6 +114,7 @@ impl SessionLyrics {
         self.entries.insert(
             track.path.clone(),
             SessionLyricEntry {
+                fetched_at: std::time::Instant::now(),
                 title: track.title.clone(),
                 artist: track.artist.clone(),
                 album: track.album.clone(),
@@ -101,7 +152,7 @@ impl Backend {
             }
         }
         if let Some(value) = db::get_lyrics(&self.conn, path).filter(|s| !s.trim().is_empty()) {
-            return Ok(value);
+            return Ok(original_lyrics(&value));
         }
         let embedded: String = self
             .conn
