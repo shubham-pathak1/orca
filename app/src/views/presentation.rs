@@ -1,6 +1,5 @@
 //! UI image/color helpers; no database or playback commands.
-use crate::{AppState, OrcaWindow, Song};
-use slint::ComponentHandle;
+use crate::{OrcaWindow, Song};
 pub(crate) fn waveform(peaks: &[f32]) -> slint::Image {
     let mut buffer = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(720, 48);
     let pixels = buffer.make_mut_slice();
@@ -63,20 +62,19 @@ pub(crate) fn player_background_tone(rgb: [u8; 3]) -> [u8; 3] {
     })
 }
 pub(crate) fn reset_empty_player(ui: &OrcaWindow) {
-    let s = ui.global::<AppState>();
-    s.set_now(Song {
+    ui.player().set_now(Song {
         cover_missing: true,
         ..Default::default()
     });
-    s.set_waveform(slint::Image::default());
-    s.set_original_cover(slint::Image::default());
-    s.set_original_cover_missing(true);
-    s.set_full_backdrop(slint::Image::default());
-    s.set_backdrop(slint::Image::default());
-    s.set_position(0.0);
-    s.set_lyric_position(0.0);
-    s.set_duration(0.0);
-    s.set_playing(false);
-    s.set_elapsed("0:00".into());
-    s.set_total("0:00".into());
+    ui.player().set_waveform(slint::Image::default());
+    ui.player().set_original_cover(slint::Image::default());
+    ui.player().set_original_cover_missing(true);
+    ui.player().set_full_backdrop(slint::Image::default());
+    ui.player().set_backdrop(slint::Image::default());
+    ui.player().set_position(0.0);
+    ui.lyrics().set_lyric_position(0.0);
+    ui.player().set_duration(0.0);
+    ui.player().set_playing(false);
+    ui.player().set_elapsed("0:00".into());
+    ui.player().set_total("0:00".into());
 }

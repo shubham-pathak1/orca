@@ -50,7 +50,26 @@ impl PlaybackState {
         collection: Query,
     ) -> Result<(), String> {
         match action {
-            CollectionAction::Play if audio => {
+            CollectionAction::Play | CollectionAction::Toggle if audio => {
+                if action == CollectionAction::Toggle {
+                    let snapshot = backend.snapshot()?;
+                    let active = backend
+                        .id_for_path(&snapshot.path)?
+                        .and_then(|id| self.navigation.collection_for_id(id));
+                    if active.is_some_and(|query| {
+                        query.kind == collection.kind
+                            && query.key == collection.key
+                            && query.secondary == collection.secondary
+                    }) && (snapshot.duration_ms == 0
+                        || snapshot.position_ms < snapshot.duration_ms)
+                    {
+                        return backend.playback_command(if snapshot.playing {
+                            PlaybackCommand::Pause
+                        } else {
+                            PlaybackCommand::Resume
+                        });
+                    }
+                }
                 let ids = backend.context_ids(&collection)?;
                 if let Some(id) = ids.first().copied() {
                     let Some(target) = backend.path_for_id(id)? else {

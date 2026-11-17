@@ -2,7 +2,7 @@
 use super::browse::query;
 use crate::{
     protocol::{CollectionAction, PlayerAction, Request},
-    AppState, OrcaWindow,
+    OrcaWindow,
 };
 use slint::ComponentHandle;
 use std::{
@@ -20,6 +20,7 @@ pub(crate) fn command_request(
 ) -> Result<Request, String> {
     Ok(match action.as_str() {
         "play-context" => Request::Collection(CollectionAction::Play, query(ui).0),
+        "toggle-context" => Request::Collection(CollectionAction::Toggle, query(ui).0),
         "queue-context" => Request::Collection(CollectionAction::AddToQueue, query(ui).0),
         _ => Request::Command(PlayerAction::parse(&action)?),
     })
@@ -94,19 +95,20 @@ pub(crate) fn install_player_swipe(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<
         let Some(ui) = weak.upgrade() else {
             return;
         };
-        let state = ui.global::<AppState>();
-        state.set_player_swipe_offset(if action == PlayerAction::Next {
-            -20.0
-        } else {
-            20.0
-        });
+
+        ui.player()
+            .set_player_swipe_offset(if action == PlayerAction::Next {
+                -20.0
+            } else {
+                20.0
+            });
         let weak = weak.clone();
         motion_timer.start(
             slint::TimerMode::SingleShot,
             Duration::from_millis(85),
             move || {
                 if let Some(ui) = weak.upgrade() {
-                    ui.global::<AppState>().set_player_swipe_offset(0.0);
+                    ui.player().set_player_swipe_offset(0.0);
                 }
             },
         );
@@ -114,14 +116,14 @@ pub(crate) fn install_player_swipe(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<
     });
     let weak = ui.as_weak();
     let wheel_skip = skip.clone();
-    ui.global::<AppState>().on_player_swipe(move |dx, dy| {
+    ui.player().on_player_swipe(move |dx, dy| {
         let Some(ui) = weak.upgrade() else {
             return false;
         };
-        let state = ui.global::<AppState>();
-        if state.get_now().path.is_empty()
-            || state.get_queue_open()
-            || state.get_playlist_picker_open()
+
+        if ui.player().get_now().path.is_empty()
+            || (ui.player().get_queue_open() && !ui.player().get_full_player())
+            || ui.dialogs().get_playlist_picker_open()
         {
             return false;
         }
@@ -132,14 +134,14 @@ pub(crate) fn install_player_swipe(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<
         handled
     });
     let weak = ui.as_weak();
-    ui.global::<AppState>().on_player_drag(move |dx, dy| {
+    ui.player().on_player_drag(move |dx, dy| {
         let Some(ui) = weak.upgrade() else {
             return false;
         };
-        let state = ui.global::<AppState>();
-        if state.get_now().path.is_empty()
-            || state.get_queue_open()
-            || state.get_playlist_picker_open()
+
+        if ui.player().get_now().path.is_empty()
+            || (ui.player().get_queue_open() && !ui.player().get_full_player())
+            || ui.dialogs().get_playlist_picker_open()
             || !dx.is_finite()
             || !dy.is_finite()
             || dx.abs() < 85.0
@@ -215,39 +217,45 @@ fn new_swipe_after_inertia_tail_does_not_wait_for_full_cooldown() {
 }
 
 pub(crate) fn install_keyboard(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<Request>) {
-    let state = ui.global::<AppState>();
     let weak = ui.as_weak();
     let fullscreen = Cell::new(false);
     let last_volume = Cell::new(1.0f32);
-    state.on_keyboard(move |key, alt| {
+    ui.shell().on_keyboard(move |key, alt| {
         let Some(ui) = weak.upgrade() else {
             return false;
         };
-        let s = ui.global::<AppState>();
+
+        if key == "reset-scale" {
+            ui.preferences().set_scale(1.0);
+            ui.preferences().invoke_save_settings();
+            return true;
+        }
         let escape: slint::SharedString = slint::platform::Key::Escape.into();
         let f11: slint::SharedString = slint::platform::Key::F11.into();
         if key == escape {
-            if s.get_metadata_open() {
-                s.set_metadata_open(false);
-            } else if s.get_collection_dialog() {
-                s.set_collection_dialog(false);
-            } else if s.get_playlist_dialog() {
-                s.set_playlist_dialog(false);
-            } else if s.get_folder_dialog() {
-                s.set_folder_dialog(false);
-            } else if s.get_folder_remove_open() {
-                s.set_folder_remove_open(false);
-                s.set_folder_remove_path("".into());
-            } else if s.get_playlist_picker_open() {
-                s.set_playlist_picker_open(false);
-            } else if s.get_menu_open() {
-                s.set_menu_open(false);
-            } else if s.get_collection_menu_open() {
-                s.set_collection_menu_open(false);
-            } else if s.get_queue_open() {
-                s.set_queue_open(false);
-            } else if s.get_full_player() {
-                s.set_full_player(false);
+            if ui.dialogs().get_audio_info_open() {
+                ui.dialogs().set_audio_info_open(false);
+            } else if ui.dialogs().get_metadata_open() {
+                ui.dialogs().set_metadata_open(false);
+            } else if ui.dialogs().get_collection_dialog() {
+                ui.dialogs().set_collection_dialog(false);
+            } else if ui.dialogs().get_playlist_dialog() {
+                ui.dialogs().set_playlist_dialog(false);
+            } else if ui.dialogs().get_folder_dialog() {
+                ui.dialogs().set_folder_dialog(false);
+            } else if ui.dialogs().get_folder_remove_open() {
+                ui.dialogs().set_folder_remove_open(false);
+                ui.dialogs().set_folder_remove_path("".into());
+            } else if ui.dialogs().get_playlist_picker_open() {
+                ui.dialogs().set_playlist_picker_open(false);
+            } else if ui.dialogs().get_menu_open() {
+                ui.dialogs().set_menu_open(false);
+            } else if ui.dialogs().get_collection_menu_open() {
+                ui.dialogs().set_collection_menu_open(false);
+            } else if ui.player().get_queue_open() {
+                ui.player().set_queue_open(false);
+            } else if ui.player().get_full_player() {
+                ui.player().set_full_player(false);
                 ui.invoke_focus_shell();
             } else {
                 return false;
@@ -255,11 +263,12 @@ pub(crate) fn install_keyboard(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<Requ
             ui.invoke_focus_shell();
             return true;
         }
-        if s.get_metadata_open()
-            || s.get_playlist_dialog()
-            || s.get_collection_dialog()
-            || s.get_folder_dialog()
-            || s.get_folder_remove_open()
+        if ui.dialogs().get_audio_info_open()
+            || ui.dialogs().get_metadata_open()
+            || ui.dialogs().get_playlist_dialog()
+            || ui.dialogs().get_collection_dialog()
+            || ui.dialogs().get_folder_dialog()
+            || ui.dialogs().get_folder_remove_open()
         {
             return false;
         }
@@ -278,8 +287,8 @@ pub(crate) fn install_keyboard(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<Requ
             "p" if alt => {
                 let _ = tx.send(Request::Command(PlayerAction::Previous));
             }
-            "m" if !alt => {
-                let volume = s.get_volume();
+            "m" if !alt && !ui.player().get_output_unprocessed() => {
+                let volume = ui.player().get_volume();
                 if volume > 0.0 {
                     last_volume.set(volume);
                 }
@@ -288,62 +297,62 @@ pub(crate) fn install_keyboard(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<Requ
                 } else {
                     0.0
                 };
-                s.set_volume(volume);
+                ui.player().set_volume(volume);
                 let _ = tx.send(Request::Volume(volume as f64));
             }
             "l" if !alt => {
-                if !s.get_now().path.is_empty() {
-                    s.set_queue_open(false);
-                    s.set_playlist_picker_open(false);
-                    s.set_lyrics_open(!s.get_lyrics_open());
+                if !ui.player().get_now().path.is_empty() {
+                    ui.player().set_queue_open(false);
+                    ui.dialogs().set_playlist_picker_open(false);
+                    ui.lyrics().set_lyrics_open(!ui.lyrics().get_lyrics_open());
                 }
             }
             "f" if !alt => {
-                if s.get_full_player() || !s.get_now().path.is_empty() {
-                    s.set_full_player(!s.get_full_player());
-                    s.set_queue_open(false);
-                    s.set_playlist_picker_open(false);
+                if ui.player().get_full_player() || !ui.player().get_now().path.is_empty() {
+                    ui.player().set_full_player(!ui.player().get_full_player());
+                    ui.player().set_queue_open(false);
+                    ui.dialogs().set_playlist_picker_open(false);
                     ui.invoke_focus_shell();
                 }
             }
             "q" if !alt => {
-                s.set_queue_open(!s.get_queue_open());
-                if s.get_queue_open() {
-                    s.set_playlist_picker_open(false);
+                ui.player().set_queue_open(!ui.player().get_queue_open());
+                if ui.player().get_queue_open() {
+                    ui.dialogs().set_playlist_picker_open(false);
                     let _ = tx.send(Request::Command(PlayerAction::QueuePreview));
                 }
                 ui.invoke_focus_shell();
             }
             "open-settings" => {
-                s.set_full_player(false);
-                s.set_queue_open(false);
-                s.set_playlist_picker_open(false);
-                s.set_menu_open(false);
-                s.set_collection_menu_open(false);
-                s.set_view("settings".into());
-                s.set_search("".into());
-                s.set_detail_key("".into());
-                s.invoke_browse();
+                ui.player().set_full_player(false);
+                ui.player().set_queue_open(false);
+                ui.dialogs().set_playlist_picker_open(false);
+                ui.dialogs().set_menu_open(false);
+                ui.dialogs().set_collection_menu_open(false);
+                ui.shell().set_view("settings".into());
+                ui.library().set_search("".into());
+                ui.library().set_detail_key("".into());
+                ui.library().invoke_browse();
                 ui.invoke_focus_shell();
             }
             "focus-search" => {
-                if !s.get_full_player()
-                    && (s.get_search_input_focused() || s.get_search_focus_pending())
+                if !ui.player().get_full_player()
+                    && (ui.shell().get_search_input_focused()
+                        || ui.shell().get_search_focus_pending())
                 {
                     ui.invoke_focus_shell();
                     return true;
                 }
-                s.set_search_focus_pending(true);
-                s.set_full_player(false);
-                s.set_queue_open(false);
-                s.set_menu_open(false);
+                ui.shell().set_search_focus_pending(true);
+                ui.player().set_full_player(false);
+                ui.player().set_queue_open(false);
+                ui.dialogs().set_menu_open(false);
                 let weak = ui.as_weak();
                 slint::Timer::single_shot(Duration::from_millis(1), move || {
                     if let Some(ui) = weak.upgrade() {
-                        let s = ui.global::<AppState>();
-                        if s.get_search_focus_pending() {
-                            s.set_search_focus_request(
-                                s.get_search_focus_request().wrapping_add(1),
+                        if ui.shell().get_search_focus_pending() {
+                            ui.shell().set_search_focus_request(
+                                ui.shell().get_search_focus_request().wrapping_add(1),
                             );
                         }
                     }
@@ -353,4 +362,26 @@ pub(crate) fn install_keyboard(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<Requ
         }
         true
     });
+}
+
+pub(crate) fn install(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<Request>) {
+    let weak = ui.as_weak();
+    ui.shell().on_unfocus(move || {
+        if let Some(ui) = weak.upgrade() {
+            ui.invoke_focus_shell();
+        }
+    });
+    install_keyboard(ui, tx.clone());
+    install_player_swipe(ui, tx.clone());
+    {
+        let tx = tx.clone();
+        let weak = ui.as_weak();
+        ui.dialogs().on_menu(move |path, x, y| {
+            if let Some(ui) = weak.upgrade() {
+                ui.dialogs().set_menu_x(x);
+                ui.dialogs().set_menu_y(y);
+            }
+            let _ = tx.send(Request::Context(path.into()));
+        });
+    }
 }

@@ -47,7 +47,7 @@ pub enum MetadataRequest {
         generation: i32,
     },
     Save {
-        edit: MetadataEdit,
+        edit: Box<MetadataEdit>,
         generation: i32,
     },
     SelectAsset {

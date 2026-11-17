@@ -32,7 +32,6 @@ pub(crate) fn cancel_preload(
 #[derive(Default)]
 pub(crate) struct PlaybackErrors {
     revision: u64,
-    output_status: String,
     output_error: String,
 }
 impl PlaybackErrors {
@@ -44,18 +43,13 @@ impl PlaybackErrors {
                 errors.push(snapshot.playback_error.clone());
             }
         }
-        if snapshot.output_status != self.output_status {
-            self.output_status.clone_from(&snapshot.output_status);
-            let status: serde_json::Value =
-                serde_json::from_str(&snapshot.output_status).unwrap_or_default();
-            let error = status["error"].as_str().unwrap_or_default();
-            if error != self.output_error {
-                self.output_error = error.to_string();
-                if !error.is_empty() {
-                    let message = format!("output:{error}");
-                    if !errors.contains(&message) {
-                        errors.push(message);
-                    }
+        let error = &snapshot.output.error;
+        if error != &self.output_error {
+            self.output_error.clone_from(error);
+            if !error.is_empty() {
+                let message = format!("output:{error}");
+                if !errors.contains(&message) {
+                    errors.push(message);
                 }
             }
         }

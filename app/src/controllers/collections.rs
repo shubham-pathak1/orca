@@ -1,5 +1,5 @@
 //! Collection editor callbacks and draft identity checks for late async results.
-use crate::{protocol::Request, AppState, OrcaWindow};
+use crate::{protocol::Request, OrcaWindow};
 use orca_services::operation_types::{
     CollectionEdit, CollectionKind, CollectionPreview, CoverFetch, OperationRequest,
 };
@@ -8,31 +8,90 @@ use slint::ComponentHandle;
 use std::sync::mpsc::Sender;
 
 pub(crate) fn install(ui: &OrcaWindow, tx: Sender<Request>) {
+    ui.library().on_artist_names(|credits, title| {
+        std::rc::Rc::new(slint::VecModel::from(artist_links(&credits, &title))).into()
+    });
+    ui.library().on_open_collection({
+        let weak = ui.as_weak();
+        move |kind, key, secondary| {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+
+            if key.is_empty()
+                || ui.shell().get_focus_layer() != "browse"
+                || !matches!(kind.as_str(), "artists" | "albums" | "years" | "composers")
+            {
+                return;
+            }
+            ui.shell().set_view(kind);
+            ui.library().invoke_open_group(key.clone(), secondary, key);
+        }
+    });
+    ui.player().on_like_song({
+        let tx = tx.clone();
+        move |id| {
+            if id > 0 {
+                let _ = tx.send(Request::ToggleLiked(id as i64));
+            }
+        }
+    });
+    ui.player().on_play_group({
+        let weak = ui.as_weak();
+        let tx = tx.clone();
+        move |group, kind| {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+
+            if group.key.is_empty()
+                || ui.shell().get_focus_layer() != "browse"
+                || !matches!(
+                    kind.as_str(),
+                    "albums" | "genres" | "artists" | "playlists" | "composers" | "years"
+                )
+            {
+                return;
+            }
+            let _ = tx.send(Request::Collection(
+                crate::protocol::CollectionAction::Toggle,
+                orca_services::types::Query {
+                    kind: kind.into(),
+                    key: group.key.into(),
+                    secondary: group.secondary.into(),
+                    ..Default::default()
+                },
+            ));
+        }
+    });
     let weak = ui.as_weak();
-    ui.global::<AppState>().on_collection_menu({
+    ui.dialogs().on_collection_menu({
         let weak = weak.clone();
         move |group, x, y| {
             let Some(ui) = weak.upgrade() else {
                 return;
             };
-            let state = ui.global::<AppState>();
-            state.set_menu_open(false);
-            state.set_collection_kind(state.get_view());
-            state.set_collection_menu_x(x);
-            state.set_collection_menu_y(y);
-            state.set_collection_request(
+
+            ui.dialogs().set_menu_open(false);
+            if matches!(ui.shell().get_view().as_str(), "composers" | "years") {
+                return;
+            }
+            ui.dialogs().set_collection_kind(ui.shell().get_view());
+            ui.dialogs().set_collection_menu_x(x);
+            ui.dialogs().set_collection_menu_y(y);
+            ui.dialogs().set_collection_request(
                 json!({
-                    "action": "collection-edit", "kind": state.get_view().as_str(),
+                    "action": "collection-edit", "kind": ui.shell().get_view().as_str(),
                     "key": group.key.as_str(), "secondary": group.secondary.as_str()
                 })
                 .to_string()
                 .into(),
             );
-            state.set_collection_group(group);
-            state.set_collection_menu_open(true);
+            ui.dialogs().set_collection_group(group);
+            ui.dialogs().set_collection_menu_open(true);
         }
     });
-    ui.global::<AppState>().on_collection_action(move |action| {
+    ui.dialogs().on_collection_action(move |action| {
         if let Some(ui) = weak.upgrade() {
             handle_action(&ui, &tx, action.as_str());
         }
@@ -40,28 +99,26 @@ pub(crate) fn install(ui: &OrcaWindow, tx: Sender<Request>) {
 }
 
 fn handle_action(ui: &OrcaWindow, tx: &Sender<Request>, action: &str) {
-    let state = ui.global::<AppState>();
-    let staged = state.get_collection_dialog();
-    if state.get_collection_saving() || (staged && state.get_collection_fetching()) {
+    let staged = ui.dialogs().get_collection_dialog();
+    if ui.dialogs().get_collection_saving() || (staged && ui.dialogs().get_collection_fetching()) {
         return;
     }
-    let from_menu = state.get_collection_menu_open();
+    let from_menu = ui.dialogs().get_collection_menu_open();
     let mut request = if staged || from_menu {
-        serde_json::from_str::<Value>(&state.get_collection_request()).unwrap_or_default()
+        serde_json::from_str::<Value>(&ui.dialogs().get_collection_request()).unwrap_or_default()
     } else {
-        json!({"action": "collection-edit", "kind": state.get_view().as_str(),
-            "key": state.get_detail_key().as_str(), "secondary": state.get_detail_secondary().as_str()})
+        json!({"action": "collection-edit", "kind": ui.shell().get_view().as_str(),
+            "key": ui.library().get_detail_key().as_str(), "secondary": ui.library().get_detail_secondary().as_str()})
     };
     let edit = match OperationRequest::from_value(request.clone()) {
         Ok(OperationRequest::CollectionEdit(edit)) => edit,
         _ => {
-            state.set_error(
-                "Oops, this collection is no longer available. Please open it again.".into(),
-            );
+            ui.shell()
+                .set_error("This collection is no longer available. Please open it again.".into());
             return;
         }
     };
-    state.set_collection_menu_open(false);
+    ui.dialogs().set_collection_menu_open(false);
     if action == "open-location" && edit.identity.kind == CollectionKind::Folders {
         #[cfg(windows)]
         if let Err(error) = std::process::Command::new("explorer.exe")
@@ -70,16 +127,25 @@ fn handle_action(ui: &OrcaWindow, tx: &Sender<Request>, action: &str) {
             ))
             .spawn()
         {
-            state.set_error(format!("Could not open folder: {error}").into());
+            ui.shell()
+                .set_error(format!("Could not open folder: {error}").into());
+        }
+        #[cfg(target_os = "linux")]
+        if let Err(error) = std::process::Command::new("xdg-open")
+            .arg(&edit.identity.key)
+            .spawn()
+        {
+            ui.shell()
+                .set_error(format!("Could not open folder: {error}").into());
         }
         return;
     }
     match action {
         "name" => {
-            state.set_collection_saving(false);
-            state.set_collection_fetching(false);
-            state.set_collection_status("".into());
-            state.set_collection_path(
+            ui.dialogs().set_collection_saving(false);
+            ui.dialogs().set_collection_fetching(false);
+            ui.dialogs().set_collection_status("".into());
+            ui.player().set_collection_path(
                 super::preferences::clean_folder_path(&edit.identity.key.replace('/', "\\")).into(),
             );
             request["draft_id"] = json!(std::time::SystemTime::now()
@@ -87,24 +153,26 @@ fn handle_action(ui: &OrcaWindow, tx: &Sender<Request>, action: &str) {
                 .unwrap_or_default()
                 .as_nanos()
                 .to_string());
-            state.set_collection_kind(request["kind"].as_str().unwrap_or("").into());
-            state.set_collection_name(if from_menu {
-                state.get_collection_group().title
+            ui.dialogs()
+                .set_collection_kind(request["kind"].as_str().unwrap_or("").into());
+            ui.dialogs().set_collection_name(if from_menu {
+                ui.dialogs().get_collection_group().title
             } else {
-                state.get_detail_title()
+                ui.library().get_detail_title()
             });
-            state.set_collection_cover(if from_menu {
-                state.get_collection_group().cover
+            ui.dialogs().set_collection_cover(if from_menu {
+                ui.dialogs().get_collection_group().cover
             } else {
-                state.get_detail_cover()
+                ui.library().get_detail_cover()
             });
-            state.set_collection_cover_missing(if from_menu {
-                state.get_collection_group().cover_missing
+            ui.dialogs().set_collection_cover_missing(if from_menu {
+                ui.dialogs().get_collection_group().cover_missing
             } else {
-                state.get_detail_cover_missing()
+                ui.library().get_detail_cover_missing()
             });
-            state.set_collection_request(request.to_string().into());
-            state.set_collection_dialog(true);
+            ui.dialogs()
+                .set_collection_request(request.to_string().into());
+            ui.dialogs().set_collection_dialog(true);
             let preview = OperationRequest::CollectionPreview(CollectionPreview {
                 identity: edit.identity,
                 collection_seed: request.to_string(),
@@ -112,10 +180,10 @@ fn handle_action(ui: &OrcaWindow, tx: &Sender<Request>, action: &str) {
             let _ = tx.send(Request::Operation(preview));
         }
         "save-name" => {
-            let name = state.get_collection_name();
+            let name = ui.dialogs().get_collection_name();
             let name = name.trim();
             if name.is_empty() && edit.identity.kind != CollectionKind::Folders {
-                state.set_error("Please enter a name :)".into());
+                ui.shell().set_error("Please enter a name :)".into());
                 return;
             }
             // The runtime closes this exact draft only after successful persistence.
@@ -123,13 +191,13 @@ fn handle_action(ui: &OrcaWindow, tx: &Sender<Request>, action: &str) {
                 name: (edit.identity.kind != CollectionKind::Folders).then(|| name.into()),
                 ..edit
             };
-            state.set_collection_saving(true);
+            ui.dialogs().set_collection_saving(true);
             if tx
                 .send(Request::Operation(OperationRequest::CollectionEdit(edit)))
                 .is_err()
             {
-                state.set_collection_saving(false);
-                state.set_error(
+                ui.dialogs().set_collection_saving(false);
+                ui.shell().set_error(
                     "Orca couldn't save this edit. Please restart and try again.".into(),
                 );
             }
@@ -137,9 +205,10 @@ fn handle_action(ui: &OrcaWindow, tx: &Sender<Request>, action: &str) {
         "remove-cover" => {
             request["cover"] = json!("");
             if staged {
-                state.set_collection_request(request.to_string().into());
-                state.set_collection_cover(slint::Image::default());
-                state.set_collection_cover_missing(true);
+                ui.dialogs()
+                    .set_collection_request(request.to_string().into());
+                ui.dialogs().set_collection_cover(slint::Image::default());
+                ui.dialogs().set_collection_cover_missing(true);
             } else {
                 let edit = CollectionEdit {
                     cover: Some(String::new()),
@@ -169,8 +238,9 @@ fn handle_action(ui: &OrcaWindow, tx: &Sender<Request>, action: &str) {
         }
         "fetch-cover" => {
             if staged {
-                state.set_collection_fetching(true);
-                state.set_collection_status("Searching for artwork...".into());
+                ui.dialogs().set_collection_fetching(true);
+                ui.dialogs()
+                    .set_collection_status("Searching for artwork...".into());
             }
             let identity = edit.identity;
             let album = identity.kind == CollectionKind::Albums;
@@ -189,11 +259,11 @@ fn handle_action(ui: &OrcaWindow, tx: &Sender<Request>, action: &str) {
                 editor_generation: None,
                 editor_path: None,
                 collection_draft: staged,
-                collection_seed: state.get_collection_request().to_string(),
+                collection_seed: ui.dialogs().get_collection_request().to_string(),
             });
             if tx.send(Request::Operation(fetch)).is_err() {
-                state.set_collection_fetching(false);
-                state.set_collection_status(
+                ui.dialogs().set_collection_fetching(false);
+                ui.dialogs().set_collection_status(
                     "Artwork search couldn't start. Please restart Orca.".into(),
                 );
             }
@@ -222,38 +292,103 @@ pub(crate) fn collection_seed_matches(seed: &serde_json::Value, current: &str) -
 }
 
 pub(crate) fn finish_collection_fetch(ui: &OrcaWindow, fetch: &CoverFetch, message: &str) -> bool {
-    let state = ui.global::<AppState>();
     if !fetch.collection_draft
-        || !state.get_collection_dialog()
+        || !ui.dialogs().get_collection_dialog()
         || !collection_seed_matches(
             &Value::String(fetch.collection_seed.clone()),
-            &state.get_collection_request(),
+            &ui.dialogs().get_collection_request(),
         )
     {
         return false;
     }
-    state.set_collection_fetching(false);
-    state.set_collection_status(message.into());
+    ui.dialogs().set_collection_fetching(false);
+    ui.dialogs().set_collection_status(message.into());
     true
 }
 
 pub(crate) fn stage_collection_draft(ui: &OrcaWindow, draft: &serde_json::Value) -> bool {
-    let s = ui.global::<AppState>();
-    if !s.get_collection_dialog() {
+    if !ui.dialogs().get_collection_dialog() {
         return false;
     }
-    let current =
-        serde_json::from_str::<serde_json::Value>(&s.get_collection_request()).unwrap_or_default();
+    let current = serde_json::from_str::<serde_json::Value>(&ui.dialogs().get_collection_request())
+        .unwrap_or_default();
     if ["kind", "key", "secondary", "draft_id"]
         .iter()
         .any(|field| current[*field] != draft[*field])
     {
         return false;
     }
-    s.set_collection_request(draft.to_string().into());
+    ui.dialogs()
+        .set_collection_request(draft.to_string().into());
     if draft["cover"].as_str() == Some("") {
-        s.set_collection_cover(slint::Image::default());
-        s.set_collection_cover_missing(true);
+        ui.dialogs().set_collection_cover(slint::Image::default());
+        ui.dialogs().set_collection_cover_missing(true);
     }
     true
+}
+
+// Preserve the original credit, including featured guests and punctuation. Only
+// names with artist-browser membership become navigation targets.
+fn artist_links(credits: &str, title: &str) -> Vec<crate::ArtistCredit> {
+    let mut links = Vec::new();
+    let mut cursor = 0;
+    for name in orca_services::primary_artist_names(credits, title) {
+        let Some(relative) = credits[cursor..].find(&name) else {
+            continue;
+        };
+        let start = cursor + relative;
+        if start > cursor {
+            links.push(crate::ArtistCredit {
+                text: credits[cursor..start].into(),
+                key: "".into(),
+            });
+        }
+        cursor = start + name.len();
+        links.push(crate::ArtistCredit {
+            text: name.clone().into(),
+            key: name.into(),
+        });
+    }
+    if cursor < credits.len() {
+        links.push(crate::ArtistCredit {
+            text: credits[cursor..].into(),
+            key: "".into(),
+        });
+    }
+    links
+}
+
+#[cfg(test)]
+mod link_tests {
+    #[test]
+    fn artist_links_preserve_original_credits_and_do_not_link_featured_guests() {
+        for (credits, title, expected) in [
+            (" Band ; Guest ", "Song", vec!["Band", "Guest"]),
+            ("Band feat. Guest", "Song", vec!["Band"]),
+            ("Band; Guest", "Song (feat. Guest)", vec!["Band"]),
+            ("Earth, Wind & Fire", "Song", vec!["Earth", "Wind & Fire"]),
+            (
+                "Grover Washington, Jr.",
+                "Song",
+                vec!["Grover Washington, Jr."],
+            ),
+        ] {
+            let links = super::artist_links(credits, title);
+            assert_eq!(
+                links
+                    .iter()
+                    .map(|link| link.text.as_str())
+                    .collect::<String>(),
+                credits
+            );
+            assert_eq!(
+                links
+                    .iter()
+                    .filter(|link| !link.key.is_empty())
+                    .map(|link| link.key.as_str())
+                    .collect::<Vec<_>>(),
+                expected
+            );
+        }
+    }
 }

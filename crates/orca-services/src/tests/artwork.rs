@@ -236,10 +236,7 @@ fn removed_artist_cover_uses_available_song_artwork_and_new_portrait_wins() {
     db::update_artist_artwork(&b.conn, "A", Some("fetched.png"), Some("fetched-thumb.png"))
         .unwrap();
     assert_eq!(detail()["artwork"], "fetched.png");
-    assert_eq!(
-        b.groups("artists", "A").unwrap()[0].artwork,
-        "fetched-thumb.png"
-    );
+    assert_eq!(b.groups("artists", "A").unwrap()[0].artwork, "fetched.png");
 }
 
 #[test]
@@ -414,7 +411,7 @@ fn missing_song_artwork_inherits_album_cover_without_replacing_embedded_art() {
         Some("album-thumb.png"),
     )
     .unwrap();
-    let q = ffi::Query {
+    let q = types::Query {
         kind: "songs".into(),
         ..Default::default()
     };
@@ -628,7 +625,7 @@ fn collection_edits_preserve_identity_and_removed_cover_survives_reopening() {
     assert_eq!(detail["title"], "A");
     assert!(detail["artwork"].is_null());
     assert!(detail["backdrop"].is_null());
-    let query = ffi::Query {
+    let query = types::Query {
         kind: "artists".into(),
         key: artist.key.clone(),
         ..Default::default()
@@ -761,7 +758,7 @@ fn removed_artwork_stays_removed_until_a_manual_replacement_and_keeps_display_na
         .find(|g| g.key == "A")
         .unwrap();
     assert_eq!(group.title, "A");
-    assert_eq!(group.artwork, "new-thumb.png");
+    assert_eq!(group.artwork, "new.png");
 }
 
 #[test]
@@ -774,4 +771,30 @@ fn full_player_artwork_stays_separate_from_preview_and_thumbnail_paths() {
     assert_eq!(track.artwork_original, "original.png");
     assert_eq!(track.artwork, "preview.webp");
     assert_eq!(track.artwork_thumb, "thumb.webp");
+}
+
+#[test]
+fn artist_and_album_details_return_every_related_release_beyond_six() {
+    let fixture = Fixture::new();
+    let backend = fixture.backend();
+    for index in 0..12 {
+        backend.conn.execute("INSERT INTO songs(path,title,artist,album_artist,album,duration) VALUES(?1,'Song','Band','Band',?2,1000)",params![format!("song-{index}.flac"),format!("Album {index:02}")]).unwrap();
+    }
+    let artist: serde_json::Value = serde_json::from_str(
+        &backend
+            .operation(r#"{"action":"artist-detail","key":"Band"}"#)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(artist["albumCount"], 12);
+    assert_eq!(artist["albums"].as_array().unwrap().len(), 12);
+    let album: serde_json::Value = serde_json::from_str(
+        &backend
+            .operation(
+                r#"{"action":"group-detail","kind":"albums","key":"Album 00","secondary":"Band"}"#,
+            )
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(album["albums"].as_array().unwrap().len(), 11);
 }

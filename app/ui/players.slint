@@ -3,7 +3,7 @@ import { AppState, LyricRender } from "state.slint";
 import { Icons } from "icons.slint";
 import { IconButton, PlaybackControls, SeekBar, VolumeControl, TextButton, AmbientBackground, CoverImage, ScrollMotion, ActionFocus } from "controls.slint";
 
-component PlayerDragArea inherits TouchArea {
+export component PlayerDragArea inherits TouchArea {
     callback tapped;
     callback activity;
     private property<float> start-x;

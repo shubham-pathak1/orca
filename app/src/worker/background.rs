@@ -1,4 +1,4 @@
-//! Background worker ownership: bounded network queue and latest-only analysis.
+//! Run cancellable media, artwork and operation jobs outside the UI thread.
 use crate::jobs::LatestReceiver;
 use crate::{operation_dispatch, protocol::Event};
 use orca_services::{
@@ -16,6 +16,9 @@ use std::{
     time::Duration,
 };
 pub(super) struct BackgroundWorkers {
+    pub romanization_generation: Arc<AtomicU64>,
+    pub romanization_rx:
+        LatestReceiver<(u64, Vec<String>, orca_services::types::RomanizationPolicy)>,
     pub bulk_cancel: Arc<AtomicBool>,
     pub artwork_rx: LatestReceiver<orca_services::operation_types::ArtworkDemand>,
     pub directory: PathBuf,
@@ -27,8 +30,10 @@ pub(super) struct BackgroundWorkers {
     pub analysis_rx: LatestReceiver<(u64, String, bool)>,
     pub lyrics_rx: LatestReceiver<(u64, String, bool)>,
 }
-pub(super) fn spawn(workers: BackgroundWorkers) -> Vec<thread::JoinHandle<()>> {
+pub(super) fn spawn_background_workers(workers: BackgroundWorkers) -> Vec<thread::JoinHandle<()>> {
     let BackgroundWorkers {
+        romanization_generation,
+        romanization_rx,
         bulk_cancel,
         artwork_rx,
         directory,
@@ -41,6 +46,31 @@ pub(super) fn spawn(workers: BackgroundWorkers) -> Vec<thread::JoinHandle<()>> {
         lyrics_rx,
     } = workers;
     let mut handles = Vec::new();
+    {
+        let cache = orca_services::RomanizationCache::new(&directory);
+        let stop = stop.clone();
+        let events = events.clone();
+        handles.push(thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                let Some((generation, lines, policy)) = romanization_rx.receive(&stop) else {
+                    break;
+                };
+                let cancelled = || {
+                    stop.load(Ordering::Relaxed)
+                        || generation != romanization_generation.load(Ordering::Relaxed)
+                };
+                if lines.is_empty() || cancelled() {
+                    continue;
+                }
+                if let Ok(result) = cache.get(&lines, &policy, cancelled) {
+                    if !cancelled() {
+                        let _ = events.send(Event::Romanized(generation, result));
+                    }
+                }
+            }
+        }));
+    }
+
     {
         let directory = directory.clone();
         let stop = stop.clone();
@@ -234,8 +264,8 @@ pub(super) fn spawn(workers: BackgroundWorkers) -> Vec<thread::JoinHandle<()>> {
         handles.push(thread::spawn(move || {
             let mut backend = None;
             while !stop.load(Ordering::Relaxed) {
-                let Some(job) = jobs.receive() else {
-                    continue;
+                let Some(job) = jobs.receive(&stop) else {
+                    break;
                 };
                 let (revision, path, refresh) = job;
                 if revision != generation.load(Ordering::Relaxed) {
@@ -262,12 +292,12 @@ pub(super) fn spawn(workers: BackgroundWorkers) -> Vec<thread::JoinHandle<()>> {
                     {
                         let (text, status) = match lyrics {
                             Ok(text) if !text.is_empty() => (text, String::new()),
-                            Ok(_) => (String::new(), "Oops, lyrics not found :(".into()),
+                            Ok(_) => (String::new(), "Lyrics not found.".into()),
                             Err(error)
                                 if error == "Lyrics not found"
                                     || error == "No lyrics found for a matching recording" =>
                             {
-                                (String::new(), "Oops, lyrics not found :(".into())
+                                (String::new(), "Lyrics not found.".into())
                             }
                             Err(_) => (
                                 String::new(),

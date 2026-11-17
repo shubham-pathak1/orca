@@ -93,6 +93,7 @@ impl Backend {
             .map(|(key, (count, artwork))| {
                 let entry = overrides.get(&serde_json::json!(["folders", key, ""]).to_string());
                 Group {
+                    year: None,
                     title: entry
                         .and_then(|e| e["name"].as_str())
                         .unwrap_or_else(|| {
@@ -189,6 +190,7 @@ impl Backend {
         let overrides = self.collection_overrides()?;
         let entry = overrides.get(&serde_json::json!(["folders", key, ""]).to_string());
         let group = Group {
+            year: None,
             title: key
                 .rsplit('/')
                 .find(|part| !part.is_empty())

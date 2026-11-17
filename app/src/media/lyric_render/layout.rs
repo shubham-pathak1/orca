@@ -8,14 +8,30 @@ pub(super) fn shape(
     line: Line,
     config: &Config,
 ) -> Prepared {
-    let mut builder = context.ranged_builder(fonts, &line.text, 1.0, true);
+    let original_end = line.text.len();
+    let text = if line.secondary.is_empty() {
+        line.text.clone()
+    } else {
+        format!("{}\n{}", line.text, line.secondary)
+    };
+    let mut builder = context.ranged_builder(fonts, &text, 1.0, true);
     builder.push_default(StyleProperty::FontSize(config.size as f32));
     builder.push_default(StyleProperty::FontWeight(FontWeight::new(900.0)));
     builder.push_default(StyleProperty::OverflowWrap(parley::OverflowWrap::BreakWord));
     if !config.family.is_empty() {
         builder.push_default(StyleProperty::FontFamily(config.family.as_str().into()));
     }
-    let mut layout = builder.build(&line.text);
+    if !line.secondary.is_empty() {
+        builder.push(
+            StyleProperty::FontSize(config.size as f32 * 0.58),
+            original_end + 1..text.len(),
+        );
+        builder.push(
+            StyleProperty::FontWeight(FontWeight::new(600.0)),
+            original_end + 1..text.len(),
+        );
+    }
+    let mut layout = builder.build(&text);
     layout.break_all_lines(Some(config.width as f32));
     layout.align(
         if config.left_aligned {
@@ -30,6 +46,8 @@ pub(super) fn shape(
         .max(MIN_LYRIC_ROW_HEIGHT * config.dpr) as u32;
     let padding = (height as f32 - layout.height()) / 2.0;
     let mut spans = vec![];
+    let mut captions = vec![];
+    let caption_chars = line.secondary.chars().count().max(1) as f32;
     for row in layout.lines() {
         let metrics = row.metrics();
         let mut x = metrics.offset + metrics.inline_min_coord;
@@ -37,6 +55,25 @@ pub(super) fn shape(
             for cluster in run.visual_clusters() {
                 let range = cluster.text_range();
                 let advance = cluster.advance();
+                if !line.secondary.is_empty() && range.start > original_end {
+                    let start =
+                        text[original_end + 1..range.start].chars().count() as f32 / caption_chars;
+                    let end = start + text[range.clone()].chars().count() as f32 / caption_chars;
+                    captions.push(super::projection::Cluster {
+                        start,
+                        end,
+                        span: Span {
+                            caption: true,
+                            x,
+                            y: metrics.baseline - metrics.ascent + padding,
+                            width: advance,
+                            height: metrics.line_height,
+                            time: 0.0,
+                            end_time: 0.0,
+                            rtl: false,
+                        },
+                    });
+                }
                 if let Some(word) = line
                     .words
                     .iter()
@@ -51,6 +88,7 @@ pub(super) fn shape(
                         previous.width += advance;
                     } else {
                         spans.push(Span {
+                            caption: false,
                             x,
                             y,
                             width: advance,
@@ -84,6 +122,7 @@ pub(super) fn shape(
         *at += span.width;
         span.end_time = start + duration * (*at / total);
     }
+    spans.extend(super::projection::project(&line, &captions));
     Prepared {
         layout,
         spans,

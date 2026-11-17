@@ -1,4 +1,4 @@
-//! Move the native profile to its permanent directory without losing local artwork.
+//! Move legacy profiles to Orca and update stored artwork paths.
 use orca_core::{atomic_file, db};
 use rusqlite::{params, Connection, OpenFlags};
 use serde_json::Value;

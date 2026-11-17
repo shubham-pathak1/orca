@@ -1,7 +1,7 @@
 //! Windows media controls are owned by the UI lifetime; callbacks send service requests.
 #[cfg(windows)]
 mod windows_session {
-    use crate::{protocol::Request, AppState, OrcaWindow};
+    use crate::{protocol::Request, OrcaWindow};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use slint::{ComponentHandle, Timer, TimerMode};
     use std::{
@@ -15,7 +15,6 @@ mod windows_session {
         core::{w, Interface, GUID, HSTRING, PCWSTR},
         Foundation::TypedEventHandler,
         Media::*,
-        Storage::{StorageFile, Streams::RandomAccessStreamReference},
         Win32::{
             Foundation::{HWND, PROPERTYKEY},
             System::{
@@ -31,8 +30,8 @@ mod windows_session {
                 },
             },
             UI::Shell::{
-                IShellLinkW, PropertiesSystem::IPropertyStore,
-                SetCurrentProcessExplicitAppUserModelID,
+                IShellLinkW, PropertiesSystem::IPropertyStore, SHChangeNotify,
+                SetCurrentProcessExplicitAppUserModelID, SHCNE_UPDATEITEM, SHCNF_PATHW,
             },
         },
     };
@@ -93,16 +92,60 @@ mod windows_session {
         let Some(roaming) = std::env::var_os("APPDATA") else {
             return Ok(());
         };
-        let shortcut = Path::new(&roaming)
-            .join("Microsoft")
-            .join("Windows")
-            .join("Start Menu")
-            .join("Programs")
-            .join("Orca.lnk");
-        if !shortcut.is_file() {
-            return Ok(());
+        let roaming = Path::new(&roaming);
+        let mut shortcuts = vec![roaming.join("Microsoft/Windows/Start Menu/Programs/Orca.lnk")];
+        // Explorer keeps its own copy when pinning a portable executable.
+        // Preserve every target and argument; repair only shortcuts to this EXE.
+        let pinned = roaming.join("Microsoft/Internet Explorer/Quick Launch/User Pinned/TaskBar");
+        if let Ok(entries) = std::fs::read_dir(pinned) {
+            shortcuts.extend(
+                entries
+                    .take(256)
+                    .filter_map(Result::ok)
+                    .map(|entry| entry.path())
+                    .filter(|path| {
+                        path.extension()
+                            .is_some_and(|extension| extension.eq_ignore_ascii_case("lnk"))
+                    }),
+            );
         }
-        set_shortcut_app_id(&shortcut, exe)
+        let mut targets = vec![exe.to_path_buf()];
+        // Installed and portable Orca intentionally share one stable identity.
+        // An older installed pin can be migrated without changing its target.
+        if let Some(installed) = installed_executable() {
+            targets.push(installed);
+        }
+        for shortcut in shortcuts.into_iter().filter(|path| path.is_file()) {
+            for target in &targets {
+                if let Err(error) = set_shortcut_app_id(&shortcut, target) {
+                    eprintln!("Windows shortcut identity: {error}");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn installed_executable() -> Option<std::path::PathBuf> {
+        let mut directory = [0u16; 32768];
+        let mut bytes = (directory.len() * 2) as u32;
+        let status = unsafe {
+            RegGetValueW(
+                HKEY_CURRENT_USER,
+                w!("Software\\Orca\\Install"),
+                w!("Directory"),
+                RRF_RT_REG_SZ,
+                None,
+                Some(directory.as_mut_ptr().cast()),
+                Some(&mut bytes),
+            )
+        };
+        if status.is_err() {
+            return None;
+        }
+        let end = directory.iter().position(|unit| *unit == 0)?;
+        let executable =
+            std::path::PathBuf::from(OsString::from_wide(&directory[..end])).join("Orca.exe");
+        executable.is_file().then_some(executable)
     }
 
     fn set_shortcut_app_id(shortcut: &Path, exe: &Path) -> windows::core::Result<()> {
@@ -120,7 +163,7 @@ mod windows_session {
             .position(|unit| *unit == 0)
             .unwrap_or(target.len());
         let target = std::path::PathBuf::from(OsString::from_wide(&target[..end]));
-        // Portable builds must never claim an installed shortcut for another executable.
+        // Never retarget or claim a shortcut belonging to another executable.
         let Ok(target) = std::fs::canonicalize(&target) else {
             return Ok(());
         };
@@ -143,6 +186,12 @@ mod windows_session {
             properties.SetValue(&APP_ID_KEY, &app_id)?;
             properties.Commit()?;
             persist.Save(PCWSTR(shortcut_wide.as_ptr()), true)?;
+            SHChangeNotify(
+                SHCNE_UPDATEITEM,
+                SHCNF_PATHW,
+                Some(shortcut_wide.as_ptr().cast()),
+                None,
+            );
         }
         Ok(())
     }
@@ -226,11 +275,13 @@ mod windows_session {
             let weak = ui.as_weak();
             let polling = controls.clone();
             let mut last: Option<(String, String, String, String, String, bool)> = None;
+            let covers = super::super::media_cover::CoverWorker::new();
+            let mut cover_generation = 0u64;
             timer.start(TimerMode::Repeated, Duration::from_millis(250), move || {
                 let Some(ui) = weak.upgrade() else {
                     return;
                 };
-                let s = ui.global::<AppState>();
+
                 let song = track.borrow();
                 let cover = [&song.artwork, &song.artwork_original, &song.artwork_thumb]
                     .into_iter()
@@ -243,9 +294,10 @@ mod windows_session {
                     song.artist.clone(),
                     song.album.clone(),
                     cover.to_string(),
-                    s.get_playing(),
+                    ui.player().get_playing(),
                 );
                 if last.as_ref() == Some(&current) {
+                    publish_cover(&covers, &polling, cover_generation);
                     return;
                 }
                 let metadata_changed = last.as_ref().is_none_or(|previous| {
@@ -255,11 +307,20 @@ mod windows_session {
                         || previous.3 != current.3
                         || previous.4 != current.4
                 });
+                if metadata_changed {
+                    cover_generation = cover_generation.wrapping_add(1);
+                    let paths = [&song.artwork_thumb, &song.artwork, &song.artwork_original]
+                        .into_iter()
+                        .filter(|path| !path.is_empty())
+                        .cloned()
+                        .collect();
+                    covers.request(cover_generation, paths);
+                }
                 let result = (|| -> windows::core::Result<()> {
                     polling.SetIsEnabled(!song.path.is_empty())?;
                     polling.SetPlaybackStatus(if song.path.is_empty() {
                         MediaPlaybackStatus::Stopped
-                    } else if s.get_playing() {
+                    } else if ui.player().get_playing() {
                         MediaPlaybackStatus::Playing
                     } else {
                         MediaPlaybackStatus::Paused
@@ -275,15 +336,6 @@ mod windows_session {
                     properties.SetTitle(&HSTRING::from(song.title.as_str()))?;
                     properties.SetArtist(&HSTRING::from(song.artist.as_str()))?;
                     properties.SetAlbumTitle(&HSTRING::from(song.album.as_str()))?;
-                    if let Some(path) = cover_path(cover) {
-                        if let Ok(file) = StorageFile::GetFileFromPathAsync(&HSTRING::from(path))
-                            .and_then(|load| load.get())
-                        {
-                            if let Ok(stream) = RandomAccessStreamReference::CreateFromFile(&file) {
-                                updater.SetThumbnail(&stream)?;
-                            }
-                        }
-                    }
                     updater.Update()
                 })();
                 if let Err(error) = &result {
@@ -292,6 +344,7 @@ mod windows_session {
                 if result.is_ok() {
                     last = Some(current);
                 }
+                publish_cover(&covers, &polling, cover_generation);
             });
             Ok(Self {
                 controls,
@@ -301,16 +354,30 @@ mod windows_session {
             })
         }
     }
-    fn cover_path(path: &str) -> Option<String> {
-        if path.is_empty() {
-            return None;
+    fn publish_cover(
+        worker: &super::super::media_cover::CoverWorker,
+        controls: &SystemMediaTransportControls,
+        generation: u64,
+    ) {
+        let Some((completed, result)) = worker.take() else {
+            return;
+        };
+        if completed != generation {
+            return;
         }
-        let path = path.replace('/', "\\");
-        Some(if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
-            format!(r"\\{unc}")
-        } else {
-            path.strip_prefix(r"\\?\").unwrap_or(&path).to_string()
-        })
+        match result {
+            Ok(stream) => {
+                let result = (|| -> windows::core::Result<()> {
+                    let updater = controls.DisplayUpdater()?;
+                    updater.SetThumbnail(&stream)?;
+                    updater.Update()
+                })();
+                if let Err(error) = result {
+                    eprintln!("Media controls artwork: {error}");
+                }
+            }
+            Err(error) => eprintln!("Media controls artwork: {error}"),
+        }
     }
     impl Drop for Session {
         fn drop(&mut self) {
@@ -321,7 +388,7 @@ mod windows_session {
     }
     #[cfg(test)]
     mod tests {
-        use super::{cover_path, set_shortcut_app_id, ComApartment, APP_ID, APP_ID_KEY};
+        use super::{set_shortcut_app_id, ComApartment, APP_ID, APP_ID_KEY};
         use std::os::windows::ffi::OsStrExt;
         use windows::{
             core::{Interface, GUID, PCWSTR},
@@ -335,17 +402,6 @@ mod windows_session {
         };
 
         #[test]
-        fn cover_paths_preserve_unicode_and_unc_paths() {
-            let name = format!(r"C:\Music\a #{}.png", '\u{e9}');
-            assert_eq!(cover_path(&format!(r"\\?\{name}")).unwrap(), name);
-            assert_eq!(
-                cover_path(r"\\?\UNC\server\music\a.png").unwrap(),
-                r"\\server\music\a.png"
-            );
-            assert!(cover_path("").is_none());
-        }
-
-        #[test]
         fn installed_shortcut_receives_the_process_app_id() {
             let directory = std::env::temp_dir().join(format!(
                 "orca-shortcut-{}-{}",
@@ -356,7 +412,7 @@ mod windows_session {
                     .as_nanos()
             ));
             std::fs::create_dir(&directory).unwrap();
-            let shortcut = directory.join("Orca.lnk");
+            let shortcut = directory.join("Portable Orca.lnk");
             let exe = std::env::current_exe().unwrap();
             let shortcut_wide: Vec<u16> =
                 shortcut.as_os_str().encode_wide().chain(Some(0)).collect();
@@ -374,6 +430,15 @@ mod windows_session {
             drop(persist);
             drop(link);
 
+            let other = directory.join("other.exe");
+            std::fs::write(&other, []).unwrap();
+            let before = std::fs::read(&shortcut).unwrap();
+            set_shortcut_app_id(&shortcut, &other).unwrap();
+            assert_eq!(
+                std::fs::read(&shortcut).unwrap(),
+                before,
+                "unrelated executable shortcuts must remain untouched"
+            );
             set_shortcut_app_id(&shortcut, &exe).unwrap();
             let link: IShellLinkW =
                 unsafe { CoCreateInstance(&clsid, None, CLSCTX_INPROC_SERVER).unwrap() };

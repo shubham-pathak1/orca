@@ -274,7 +274,7 @@ fn playlist_import_deduplicates_and_exports_in_file_order() {
     assert_eq!(result["imported"], 2);
     assert_eq!(result["unavailable"], 1);
     let group = user_playlist(&b);
-    let query = ffi::Query {
+    let query = types::Query {
         kind: "playlists".into(),
         key: group.key.clone(),
         sort: "title".into(),

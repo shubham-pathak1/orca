@@ -1,4 +1,4 @@
-//! Service-owned state; unrelated catalog changes cannot mutate playback plans.
+//! AppWorker-owned state; unrelated catalog changes cannot mutate playback plans.
 use crate::{navigation::Navigation, playback_flow::PlaybackErrors};
 use orca_services::types::Query;
 #[derive(Default)]

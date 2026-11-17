@@ -1,79 +1,131 @@
-//! Apply service results to UI models. Late results are checked against current identity/revision.
+//! Drain bounded batches of worker events and reject results for stale queries or drafts.
 use super::RuntimeModels;
 use crate::controllers::{
     collections::stage_collection_draft, folders, preferences::register_font,
 };
-use crate::presentation::{reset_empty_player, waveform};
 use crate::{
-    errors, lyrics, metadata, models,
+    errors, metadata, models,
     protocol::{Event, Request},
-    AppState, CatalogGroup, LyricLine, OrcaTray, OrcaWindow, PlaylistChoice,
+    OrcaTray, OrcaWindow, PlaylistChoice,
 };
-use slint::{ComponentHandle, VecModel};
+use slint::VecModel;
 use std::{
     cell::Cell,
     rc::Rc,
     sync::atomic::Ordering,
     time::{Duration, Instant},
 };
-pub(super) fn apply(
+pub(super) fn drain_events(
     ui: &OrcaWindow,
     models: &RuntimeModels,
-    poll_tray: &Option<slint::Weak<OrcaTray>>,
+    tray: &Option<slint::Weak<OrcaTray>>,
     neighbor_revision: &Cell<u64>,
     artwork_epoch: &Cell<u64>,
 ) -> bool {
     let RuntimeModels {
-        service: poll_service,
+        worker,
+        player,
+        catalog,
+        ..
+    } = models;
+    let crate::playback::state::PlayerModels {
         lyric_renderer,
-        playback_clock,
-        tracks,
-        list,
-        grid,
-        groups,
-        neighbors,
         queue_tracks,
         now,
         lines,
         preview,
+        neighbors,
         ..
-    } = models;
+    } = player.as_ref();
+    let models::CatalogModels {
+        tracks,
+        list,
+        grid,
+        groups,
+        ..
+    } = catalog.as_ref();
     let columns = grid.columns.get();
-    let s = ui.global::<AppState>();
+
     let mut update_images = false;
-    for event in poll_service.rx.try_iter() {
+    let started = Instant::now();
+    let mut processed = 0;
+    while processed < 64 && (processed == 0 || started.elapsed() < Duration::from_millis(4)) {
+        let Ok(event) = worker.rx.try_recv() else {
+            break;
+        };
+        processed += 1;
         match event {
+            Event::OutputDevices(result) => match result {
+                Ok(devices) => {
+                    let mut choices = vec![crate::OutputChoice {
+                        id: "".into(),
+                        name: "System default".into(),
+                    }];
+                    for device in devices {
+                        choices.push(crate::OutputChoice {
+                            id: device.id.into(),
+                            name: format!(
+                                "{}{}",
+                                device.name,
+                                if device.is_default { " (default)" } else { "" }
+                            )
+                            .into(),
+                        });
+                    }
+                    let wanted = ui.player().get_output_device_id();
+                    if !wanted.is_empty() && !choices.iter().any(|d| d.id == wanted) {
+                        choices.push(crate::OutputChoice {
+                            id: wanted.clone(),
+                            name: "Saved device (unavailable)".into(),
+                        });
+                    }
+                    let selected = choices.iter().position(|d| d.id == wanted).unwrap_or(0);
+                    ui.player().set_output_names(
+                        Rc::new(VecModel::from(
+                            choices.iter().map(|d| d.name.clone()).collect::<Vec<_>>(),
+                        ))
+                        .into(),
+                    );
+                    ui.player()
+                        .set_output_choices(Rc::new(VecModel::from(choices)).into());
+                    ui.player().set_output_device_index(selected as i32);
+                }
+                Err(error) => ui.player().set_output_error(error.into()),
+            },
             Event::Font(path, bytes) => match register_font(bytes) {
                 Ok(family) => {
-                    s.set_custom_font_family(family.clone().into());
-                    s.set_font_family(family.into());
-                    s.set_font_path(path.into());
-                    s.invoke_save_settings();
+                    ui.preferences()
+                        .set_custom_font_family(family.clone().into());
+                    ui.preferences().set_font_family(family.into());
+                    ui.preferences().set_font_path(path.into());
+                    ui.preferences().invoke_save_settings();
                 }
-                Err(error) => s.set_error(error.into()),
+                Err(error) => ui.shell().set_error(error.into()),
             },
-            Event::Ready => s.invoke_browse(),
-            Event::LibraryChanged => s.invoke_browse(),
+            Event::Ready => ui.library().invoke_browse(),
+            Event::LibraryChanged => ui.library().invoke_browse(),
             Event::CollectionDraft(value) => {
                 if let Ok(value) = serde_json::from_str(&value) {
                     update_images |= stage_collection_draft(ui, &value);
                 }
             }
-            Event::GroupGone(at, kind, key, secondary)
-                if at == poll_service.latest_query.load(Ordering::Relaxed)
-                    && s.get_view() == kind
-                    && s.get_detail_key() == key
-                    && s.get_detail_secondary() == secondary =>
+            Event::GroupGone(generation, kind, key, secondary)
+                if generation == worker.latest_query.load(Ordering::Relaxed)
+                    && ui.shell().get_view() == kind
+                    && ui.library().get_detail_key() == key
+                    && ui.library().get_detail_secondary() == secondary =>
             {
-                s.invoke_go_back();
+                ui.library().invoke_go_back();
             }
-            Event::PagesSkipped(at, offsets) => {
-                tracks.discard_pages(at, &offsets);
-                if at == poll_service.latest_query.load(Ordering::Relaxed) {
-                    let first = s.get_song_first().max(0) as usize;
-                    let end = s.get_song_end().max(0) as usize;
+            Event::PagesSkipped(generation, offsets) => {
+                tracks.discard_pages(generation, &offsets);
+                if generation == worker.latest_query.load(Ordering::Relaxed) {
+                    let first = ui.library().get_song_first().max(0) as usize;
+                    let end = ui.library().get_song_end().max(0) as usize;
                     for offset in offsets {
-                        if s.get_view() == "songs" && s.get_grid() && s.get_detail_key().is_empty()
+                        if ui.shell().get_view() == "songs"
+                            && ui.preferences().get_grid()
+                            && ui.library().get_detail_key().is_empty()
                         {
                             let rows: Vec<_> = {
                                 let visible = grid.visible_rows.borrow();
@@ -87,6 +139,7 @@ pub(super) fn apply(
                                     .collect()
                             };
                             for row in rows {
+                                grid.refresh_row(row);
                                 grid.notify.row_changed(row);
                             }
                         } else {
@@ -99,101 +152,34 @@ pub(super) fn apply(
                     }
                 }
             }
-            Event::Page(at, offset, count, rows)
-                if at == poll_service.latest_query.load(Ordering::Relaxed) =>
+            Event::Page(generation, offset, count, rows)
+                if generation == worker.latest_query.load(Ordering::Relaxed) =>
             {
-                s.set_catalog_loading(false);
-                let reset = tracks.count.get() != count as usize;
-                let length = rows.len();
-                tracks.apply(at, offset as usize, count as usize, rows);
-                artwork_epoch.set(artwork_epoch.get().wrapping_add(1));
-                if reset {
-                    list.notify.reset();
-                    grid.notify.reset();
-                } else {
-                    // Notify only the active viewport. Offscreen delegates read
-                    // the latest cached page when Slint creates them.
-                    if !s.get_detail_key().is_empty() || s.get_view() == "songs" && !s.get_grid() {
-                        let start = (offset as usize).max(s.get_song_first().max(0) as usize);
-                        let end = (offset as usize + length).min(s.get_song_end().max(0) as usize);
-                        for index in start..end {
-                            list.notify.row_changed(index);
-                        }
-                    } else if s.get_view() == "songs" && s.get_grid() {
-                        let rows: Vec<_> = {
-                            let visible = grid.visible_rows.borrow();
-                            (offset as usize / columns
-                                ..(offset as usize + length).div_ceil(columns))
-                                .filter(|row| {
-                                    visible
-                                        .get(row)
-                                        .is_some_and(|model| model.strong_count() > 0)
-                                })
-                                .collect()
-                        };
-                        for row in rows {
-                            grid.notify.row_changed(row);
-                        }
-                    }
-                }
-            }
-            Event::Groups(at, rows) if at == poll_service.latest_query.load(Ordering::Relaxed) => {
-                if s.get_detail_key().is_empty() {
-                    s.set_catalog_loading(false);
-                }
-                let rows: Vec<_> = if s.get_view() == "playlists" && !s.get_show_liked_songs() {
-                    rows.into_iter()
-                        .filter(|group| group.key != "liked")
-                        .collect()
-                } else {
-                    rows
-                };
-                s.set_catalog_summary(
-                    format!(
-                        "{} {}",
-                        rows.len(),
-                        if rows.len() == 1 {
-                            s.get_view().trim_end_matches('s').to_string()
-                        } else {
-                            s.get_view().to_string()
-                        }
-                    )
-                    .into(),
+                super::catalog_events::apply_page(
+                    ui,
+                    models,
+                    artwork_epoch,
+                    generation,
+                    offset,
+                    count,
+                    rows,
                 );
-                if *groups.groups.borrow() != rows {
-                    *groups.groups.borrow_mut() = rows;
-                    groups.reset();
-                    artwork_epoch.set(artwork_epoch.get().wrapping_add(1));
-                }
-                if s.get_catalog_scroll_restore_pending() && s.get_detail_key().is_empty() {
-                    s.set_catalog_scroll_restore_pending(false);
-                    let weak = ui.as_weak();
-                    let view = s.get_view();
-                    slint::Timer::single_shot(Duration::from_millis(16), move || {
-                        if let Some(ui) = weak.upgrade() {
-                            let state = ui.global::<AppState>();
-                            if state.get_detail_key().is_empty() && state.get_view() == view {
-                                state.set_catalog_scroll_restore_revision(
-                                    state.get_catalog_scroll_restore_revision().wrapping_add(1),
-                                );
-                            }
-                        }
-                    });
-                }
+            }
+            Event::Groups(generation, rows)
+                if generation == worker.latest_query.load(Ordering::Relaxed) =>
+            {
+                super::catalog_events::apply_groups(ui, models, artwork_epoch, rows);
             }
             Event::Statistics(stats) => {
-                s.set_known_artists(stats.artists as i32);
-                s.set_known_albums(stats.albums as i32);
-                s.set_known_genres(stats.genres as i32);
-                s.set_known_playlists(stats.playlists as i32 + i32::from(s.get_show_liked_songs()));
-                s.set_summary(
-                    format!(
-                        "{} songs | {} artists | {} albums",
-                        stats.songs, stats.artists, stats.albums
-                    )
-                    .into(),
+                ui.library().set_known_artists(stats.artists as i32);
+                ui.library().set_known_albums(stats.albums as i32);
+                ui.library().set_known_genres(stats.genres as i32);
+                ui.library().set_known_playlists(
+                    stats.playlists as i32 + i32::from(ui.preferences().get_show_liked_songs()),
                 );
-                s.set_folders(
+                ui.library()
+                    .set_summary(format!("{} songs", stats.songs).into());
+                ui.library().set_folders(
                     Rc::new(VecModel::from(
                         stats
                             .roots
@@ -211,95 +197,33 @@ pub(super) fn apply(
                 open,
                 nodes,
             } => {
-                if !open && !s.get_folder_dialog() {
+                if !open && !ui.dialogs().get_folder_dialog() {
                     continue;
                 }
-                if s.get_folder_dialog()
-                    && (s.get_folder_root() != root || s.get_folder_adding() != adding)
+                if ui.dialogs().get_folder_dialog()
+                    && (ui.dialogs().get_folder_root() != root
+                        || ui.dialogs().get_folder_adding() != adding)
                 {
                     continue;
                 }
-                if !s.get_folder_dialog() && current == root {
-                    s.set_folder_rules(Rc::new(VecModel::default()).into());
+                if !ui.dialogs().get_folder_dialog() && current == root {
+                    ui.dialogs()
+                        .set_folder_rules(Rc::new(VecModel::default()).into());
                 }
-                let rows = folders::choices(nodes, &folders::drafts(&s));
-                s.set_folder_root(root.into());
-                s.set_folder_current(current.into());
-                s.set_folder_adding(adding);
-                s.set_folder_choices(Rc::new(VecModel::from(rows)).into());
-                s.set_folder_dialog(true);
+                let rows = folders::choices(nodes, &folders::drafts(&ui.dialogs()));
+                ui.dialogs().set_folder_root(root.into());
+                ui.dialogs().set_folder_current(current.into());
+                ui.dialogs().set_folder_adding(adding);
+                ui.dialogs()
+                    .set_folder_choices(Rc::new(VecModel::from(rows)).into());
+                ui.dialogs().set_folder_dialog(true);
             }
             Event::Playback(snapshot) => {
-                if let Some(tray) = poll_tray.as_ref().and_then(slint::Weak::upgrade) {
-                    tray.set_playing(snapshot.playing);
-                }
-                let mut seek = preview.borrow_mut();
-                if seek.as_ref().is_some_and(|p| {
-                    p.path != snapshot.path
-                        || p.started.elapsed() > Duration::from_secs(2)
-                        || (snapshot.position_ms as f32 - p.target).abs() < 750.0
-                        || !snapshot.error.is_empty()
-                }) {
-                    *seek = None;
-                }
-                let position = seek
-                    .as_ref()
-                    .map_or(snapshot.position_ms as f32, |p| p.target);
-                s.set_position(position);
-                s.set_lyric_position(position);
-                playback_clock.borrow_mut().update(
-                    position,
-                    snapshot.duration_ms as f32,
-                    snapshot.playing,
-                    Instant::now(),
-                );
-                s.set_elapsed(models::duration(position.max(0.0) as u64).into());
-                s.set_duration(snapshot.duration_ms as f32);
-                s.set_total(models::duration(snapshot.duration_ms).into());
-                s.set_playing(snapshot.playing);
-                s.set_volume(snapshot.volume);
-                s.set_active_line(lyrics::active(&lines.borrow(), position));
-                if !snapshot.error.is_empty() {
-                    s.set_error(errors::friendly(&snapshot.error).into());
-                }
+                super::playback_events::apply_snapshot(ui, models, tray, snapshot)
             }
             Event::Now(track) => {
-                s.set_lyrics_refreshing(false);
-                if *now.borrow() == track {
-                    continue;
-                }
-                let changed_song = now.borrow().path != track.path;
-                if !changed_song {
-                    // A collection/tag/artwork refresh is not a new song. Keep
-                    // the current lyric layout, focus and neighbor prefetch.
-                    *now.borrow_mut() = track;
-                    update_images = true;
-                    continue;
-                }
-                neighbors.borrow_mut().clear();
-                s.set_liked(false);
-                if track.id > 0 {
-                    let _ = poll_service.tx.send(Request::LikedStatus(track.id));
-                }
-                neighbor_revision.set(neighbor_revision.get().wrapping_add(1));
-                if track.path.is_empty() {
-                    reset_empty_player(ui);
-                    *preview.borrow_mut() = None;
-                }
-                *now.borrow_mut() = track;
-                lines.borrow_mut().clear();
-                lyric_renderer.borrow_mut().invalidate();
-                s.set_lyrics(Rc::new(VecModel::<LyricLine>::default()).into());
-                s.set_active_line(-1);
-                s.set_lyrics_status(
-                    if now.borrow().path.is_empty() {
-                        ""
-                    } else {
-                        "Just a sec, fetching lyrics…"
-                    }
-                    .into(),
-                );
-                update_images = true;
+                update_images |=
+                    super::playback_events::apply_track(ui, models, neighbor_revision, track);
             }
             Event::Neighbors(path, rows) if path == now.borrow().path => {
                 *neighbors.borrow_mut() = rows;
@@ -310,89 +234,50 @@ pub(super) fn apply(
                 update_images = true;
             }
             Event::Modes(shuffle, repeat) => {
-                s.set_shuffle(shuffle);
-                s.set_repeat(repeat as i32);
+                ui.player().set_shuffle(shuffle);
+                ui.player().set_repeat(repeat as i32);
             }
-            Event::Analysis(at, path, text, peaks)
-                if at == poll_service.analysis_generation.load(Ordering::Relaxed)
+            Event::Analysis(generation, path, text, peaks)
+                if generation == worker.analysis_generation.load(Ordering::Relaxed)
                     && path == now.borrow().path =>
             {
-                if !text.is_empty() && lines.borrow().is_empty() {
-                    if s.get_metadata_open()
-                        && s.get_draft().path.as_str() == now.borrow().path
-                        && s.get_draft().lyrics.trim().is_empty()
-                        && s.get_editor_status().starts_with("Could not connect")
-                    {
-                        let mut draft = s.get_draft();
-                        draft.lyrics = text.clone().into();
-                        s.set_draft(draft);
-                        s.set_editor_status("Lyrics ready - Save metadata to embed them".into());
-                    }
-                    let parsed = lyrics::parse(&text);
-                    s.set_lyrics(Rc::new(VecModel::from(parsed.clone())).into());
-                    *lines.borrow_mut() = parsed;
-                    lyric_renderer.borrow_mut().invalidate();
-                    s.set_lyrics_status("".into());
-                }
-                s.set_waveform(waveform(&peaks));
-                s.set_active_line(lyrics::active(&lines.borrow(), s.get_position()));
+                super::lyric_events::apply_analysis(ui, models, text, peaks);
             }
-            Event::Lyrics(at, text, status, refresh)
-                if at == poll_service.analysis_generation.load(Ordering::Relaxed) =>
+            Event::Lyrics(generation, text, status, refresh)
+                if generation == worker.analysis_generation.load(Ordering::Relaxed) =>
             {
-                if refresh {
-                    s.set_lyrics_refreshing(false);
-                    if text.is_empty() && !lines.borrow().is_empty() {
-                        s.set_error(status.clone().into());
-                    }
-                }
-                if !text.is_empty() {
-                    if s.get_metadata_open()
-                        && s.get_draft().path.as_str() == now.borrow().path
-                        && s.get_draft().lyrics.trim().is_empty()
-                        && s.get_editor_status().starts_with("Could not connect")
-                    {
-                        let mut draft = s.get_draft();
-                        draft.lyrics = text.clone().into();
-                        s.set_draft(draft);
-                        s.set_editor_status("Lyrics ready - Save metadata to embed them".into());
-                    }
-                    let parsed = lyrics::parse(&text);
-                    s.set_lyrics(Rc::new(VecModel::from(parsed.clone())).into());
-                    *lines.borrow_mut() = parsed;
-                    lyric_renderer.borrow_mut().invalidate();
-                    s.set_active_line(lyrics::active(&lines.borrow(), s.get_position()));
-                }
-                s.set_lyrics_status(status.into());
+                super::lyric_events::apply_lyrics(ui, models, text, status, refresh);
+            }
+            Event::Romanized(generation, romanized)
+                if (1..=2).contains(&ui.preferences().get_romanization_mode())
+                    && generation == worker.romanization_generation.load(Ordering::Relaxed)
+                    && romanized.len() == lines.borrow().len() =>
+            {
+                lyric_renderer.borrow_mut().set_romanization(romanized);
             }
             Event::Context(track) => {
-                s.set_menu_song(models::text_song(&track, 0));
-                s.set_menu_open(true);
+                ui.dialogs().set_menu_song(models::text_song(&track, 0));
+                ui.dialogs().set_menu_open(true);
             }
-            Event::Playlists(groups) => {
-                s.set_playlists(
-                    Rc::new(VecModel::from(
-                        groups
+            Event::Playlists(items) => {
+                ui.library().set_playlists(
+                    Rc::new(models::PlaylistMenu {
+                        groups: items
                             .into_iter()
                             .filter(|group| group.key != "liked")
-                            .map(|group| CatalogGroup {
-                                key: group.key.into(),
-                                secondary: group.secondary.into(),
-                                title: group.title.into(),
-                                subtitle: group.subtitle.into(),
-                                count: group.count as i32,
-                                cover_missing: group.artwork.is_empty(),
-                                cover: slint::Image::default(),
-                            })
-                            .collect::<Vec<_>>(),
-                    ))
+                            .collect(),
+                        cache: groups.cache.clone(),
+                        edge: models::physical_artwork_edge(22, ui.shell().get_display_dpr()),
+                        notify: slint::ModelNotify::default(),
+                        recent: std::cell::RefCell::new(Default::default()),
+                    })
                     .into(),
                 );
             }
             Event::PlaylistChoices(song_id, groups, selected)
-                if s.get_now().id as i64 == song_id =>
+                if ui.player().get_now().id as i64 == song_id =>
             {
-                s.set_playlist_choices(
+                ui.dialogs().set_playlist_choices(
                     Rc::new(VecModel::from(
                         groups
                             .into_iter()
@@ -408,79 +293,104 @@ pub(super) fn apply(
                     ))
                     .into(),
                 );
-                s.set_playlist_picker_loading(false);
+                ui.dialogs().set_playlist_picker_loading(false);
             }
-            Event::LikedStatus(song_id, liked) if now.borrow().id == song_id => {
-                s.set_liked(liked);
+            Event::LikedStatus(song_id, liked) => {
+                if now.borrow().id == song_id {
+                    ui.player().set_liked(liked);
+                }
+                let changed = tracks.set_liked(song_id, liked);
+                for &index in &changed {
+                    list.notify.row_changed(index);
+                }
+                grid.artwork_changed(&changed);
             }
-            Event::Jump(at, index) if at == poll_service.latest_query.load(Ordering::Relaxed) => {
-                s.set_jump_index(index as i32);
-                s.set_jump_revision(s.get_jump_revision().wrapping_add(1));
+            Event::PlaybackCollection(collection) => {
+                let collection = collection.unwrap_or_default();
+                ui.player().set_playback_kind(collection.kind.into());
+                ui.player().set_playback_key(collection.key.into());
+                ui.player()
+                    .set_playback_secondary(collection.secondary.into());
+            }
+            Event::Jump(generation, index)
+                if generation == worker.latest_query.load(Ordering::Relaxed) =>
+            {
+                ui.library().set_jump_index(index as i32);
+                ui.library()
+                    .set_jump_revision(ui.library().get_jump_revision().wrapping_add(1));
             }
             Event::Metadata(document, fetch_cover, generation)
-                if generation == s.get_editor_generation() =>
+                if generation == ui.dialogs().get_editor_generation() =>
             {
-                s.set_draft(metadata::from_document(document));
-                s.set_metadata_open(true);
-                s.set_editor_busy(false);
-                s.set_editor_status("".into());
+                ui.dialogs().set_draft(metadata::from_document(document));
+                ui.dialogs().set_metadata_open(true);
+                ui.dialogs().set_editor_busy(false);
+                ui.dialogs().set_editor_status("".into());
                 update_images = true;
                 if fetch_cover {
-                    s.invoke_metadata_action("fetch-cover".into(), "".into());
+                    ui.dialogs()
+                        .invoke_metadata_action("fetch-cover".into(), "".into());
                 }
             }
             Event::MetadataAsset(kind, target, value, generation)
-                if generation == s.get_editor_generation()
-                    && s.get_metadata_open()
-                    && s.get_draft().path == target.as_str() =>
+                if generation == ui.dialogs().get_editor_generation()
+                    && ui.dialogs().get_metadata_open()
+                    && ui.dialogs().get_draft().path == target.as_str() =>
             {
-                let mut draft = s.get_draft();
+                let mut draft = ui.dialogs().get_draft();
                 if kind == crate::protocol::MetadataAssetKind::Cover {
                     draft.cover_to_embed = value.into();
                     draft.remove_cover = false;
-                    s.set_editor_status("Artwork ready — Save metadata to embed it".into());
+                    ui.dialogs()
+                        .set_editor_status("Artwork ready — Save metadata to embed it".into());
                 } else {
                     draft.lyrics = value.into();
                 }
-                s.set_draft(draft);
+                ui.dialogs().set_draft(draft);
                 update_images = true;
             }
             Event::MetadataSaved(path, generation) => {
                 // New embedded covers have new content-hashed paths. Preserve
                 // unrelated decoded covers while fresh catalog rows arrive.
-                if generation == s.get_editor_generation() && s.get_draft().path == path.as_str() {
-                    s.set_editor_busy(false);
-                    s.set_metadata_open(false);
+                if generation == ui.dialogs().get_editor_generation()
+                    && ui.dialogs().get_draft().path == path.as_str()
+                {
+                    ui.dialogs().set_editor_busy(false);
+                    ui.dialogs().set_metadata_open(false);
                 }
-                s.invoke_browse();
+                ui.library().invoke_browse();
             }
-            Event::MetadataFailed(generation, error) if generation == s.get_editor_generation() => {
-                s.set_editor_busy(false);
-                s.set_editor_status(error.into());
+            Event::MetadataFailed(generation, error)
+                if generation == ui.dialogs().get_editor_generation() =>
+            {
+                ui.dialogs().set_editor_busy(false);
+                ui.dialogs().set_editor_status(error.into());
             }
             Event::PlaylistChanged(result) => {
-                s.set_playlist_dialog(false);
+                ui.dialogs().set_playlist_dialog(false);
                 if result == crate::protocol::PlaylistChange::Deleted {
-                    s.invoke_go_back();
+                    ui.library().invoke_go_back();
                 } else if result == crate::protocol::PlaylistChange::Renamed {
-                    s.set_detail_title(s.get_playlist_name());
-                    s.invoke_browse();
+                    ui.library()
+                        .set_detail_title(ui.dialogs().get_playlist_name());
+                    ui.library().invoke_browse();
                 } else if result != crate::protocol::PlaylistChange::Membership
-                    || s.get_view() == "playlists"
+                    || ui.shell().get_view() == "playlists"
                 {
-                    s.invoke_browse();
+                    ui.library().invoke_browse();
                 }
             }
             Event::OperationFailed(request, error) => {
                 if matches!(&request, crate::protocol::OperationRequest::ArtworkBulk(_)) {
-                    s.set_artwork_bulk_running(false);
-                    s.set_artwork_bulk_progress("Paused. Please try again.".into());
+                    ui.library().set_artwork_bulk_running(false);
+                    ui.library()
+                        .set_artwork_bulk_progress("Paused. Please try again.".into());
                 }
                 eprintln!("Orca: {error}");
                 if let crate::protocol::OperationRequest::CollectionEdit(_) = &request {
-                    s.set_collection_saving(false);
-                    let _ = poll_service.tx.send(Request::Reconcile);
-                    s.invoke_browse();
+                    ui.dialogs().set_collection_saving(false);
+                    let _ = worker.tx.send(Request::Reconcile);
+                    ui.library().invoke_browse();
                 }
                 if let crate::protocol::OperationRequest::FetchCover(fetch) = &request {
                     if fetch.collection_draft
@@ -493,11 +403,11 @@ pub(super) fn apply(
                         continue;
                     }
                     if fetch.editor_path.is_some()
-                        && (!s.get_metadata_open()
+                        && (!ui.dialogs().get_metadata_open()
                             || !metadata::artwork_target_matches(
                                 fetch,
-                                &s.get_draft(),
-                                s.get_editor_generation(),
+                                &ui.dialogs().get_draft(),
+                                ui.dialogs().get_editor_generation(),
                             ))
                     {
                         continue;
@@ -505,48 +415,53 @@ pub(super) fn apply(
                 }
                 if let crate::protocol::OperationRequest::FetchLyrics(fetch) = &request {
                     if fetch.editor_path.is_some()
-                        && (!s.get_metadata_open()
-                            || fetch.editor_path.as_deref() != Some(s.get_draft().path.as_str())
-                            || fetch
-                                .editor_generation
-                                .is_some_and(|at| at != s.get_editor_generation()))
+                        && (!ui.dialogs().get_metadata_open()
+                            || fetch.editor_path.as_deref()
+                                != Some(ui.dialogs().get_draft().path.as_str())
+                            || fetch.editor_generation.is_some_and(|generation| {
+                                generation != ui.dialogs().get_editor_generation()
+                            }))
                     {
                         continue;
                     }
                 }
                 let message = errors::operation(&error);
-                s.set_error(message.clone().into());
+                ui.shell().set_error(message.clone().into());
                 if matches!(&request,crate::protocol::OperationRequest::FetchCover(fetch) if fetch.editor_path.is_some())
                     || matches!(&request,crate::protocol::OperationRequest::FetchLyrics(fetch) if fetch.editor_path.is_some())
                 {
-                    s.set_editor_status(message.into());
-                    s.set_editor_busy(false);
+                    ui.dialogs().set_editor_status(message.into());
+                    ui.dialogs().set_editor_busy(false);
                 }
                 // Release the library mutation guard after a failed removal too.
                 if request.removes_source() {
-                    let _ = poll_service.tx.send(Request::SourceChanged);
+                    let _ = worker.tx.send(Request::SourceChanged);
                 }
             }
             Event::Operation(request, result) => {
-                update_images |= super::operation_results::apply(ui, models, request, result);
+                update_images |=
+                    super::operation_results::apply_operation_result(ui, models, request, result);
             }
-            Event::CatalogDetail(at, request, result)
-                if at == poll_service.latest_query.load(Ordering::Relaxed) =>
+            Event::CatalogDetail(generation, request, result)
+                if generation == worker.latest_query.load(Ordering::Relaxed) =>
             {
-                update_images |= super::operation_results::apply(ui, models, request, result);
+                update_images |=
+                    super::operation_results::apply_operation_result(ui, models, request, result);
             }
             Event::AutomaticArtworkUpdated => {
                 // Artwork paths are content-hashed. Retain decoded images for
                 // unchanged paths instead of clearing every visible cover.
-                let range =
-                    if s.get_view() == "songs" && s.get_grid() && s.get_detail_key().is_empty() {
-                        grid.nearby_range()
-                    } else {
-                        Some((
-                            s.get_song_first().max(0) as usize,
-                            s.get_song_end().max(0) as usize,
-                        ))
-                    };
+                let range = if ui.shell().get_view() == "songs"
+                    && ui.preferences().get_grid()
+                    && ui.library().get_detail_key().is_empty()
+                {
+                    grid.nearby_range()
+                } else {
+                    Some((
+                        ui.library().get_song_first().max(0) as usize,
+                        ui.library().get_song_end().max(0) as usize,
+                    ))
+                };
                 let offsets = range
                     .map(|(start, end)| {
                         (start / 128..end.div_ceil(128))
@@ -555,23 +470,29 @@ pub(super) fn apply(
                             .collect()
                     })
                     .unwrap_or_default();
-                let _ = poll_service.tx.send(Request::ArtworkRefresh(
-                    poll_service.latest_query.load(Ordering::Relaxed),
+                let _ = worker.tx.send(Request::ArtworkRefresh(
+                    worker.latest_query.load(Ordering::Relaxed),
                     offsets,
                 ));
             }
-            Event::CatalogError(at, error)
-                if at == poll_service.latest_query.load(Ordering::Relaxed) =>
+            Event::CatalogError(generation, error)
+                if generation == worker.latest_query.load(Ordering::Relaxed) =>
             {
-                s.set_catalog_loading(false);
+                ui.library().set_catalog_loading(false);
                 eprintln!("Orca catalog: {error}");
-                s.set_error(errors::friendly(&error).into());
+                ui.shell().set_error(errors::friendly(&error).into());
             }
             Event::Error(error) => {
                 eprintln!("Orca: {error}");
-                s.set_playlist_picker_loading(false);
+                ui.dialogs().set_playlist_picker_loading(false);
                 let message = errors::friendly(&error);
-                s.set_error(message.clone().into());
+                ui.player()
+                    .set_audio_error_banner(if errors::is_playback_failure(&error) {
+                        message.clone().into()
+                    } else {
+                        "".into()
+                    });
+                ui.shell().set_error(message.clone().into());
                 *preview.borrow_mut() = None;
             }
             _ => {}

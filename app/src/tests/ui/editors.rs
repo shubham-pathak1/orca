@@ -3,20 +3,20 @@ use super::*;
 pub(super) fn verify(case: &mut UiCase) {
     let ui = &case.ui;
     let window = &case.window;
-    let state = ui.global::<AppState>();
+
     let pixels = &mut case.pixels;
     let (edit_tx, edit_rx) = std::sync::mpsc::channel();
     controllers::collections::install(ui, edit_tx);
-    state.set_collection_dialog(true);
-    state.set_collection_request(r#"{"action":"collection-edit","kind":"artists","key":"Artist","secondary":"","draft_id":"save-test"}"#.into());
-    state.invoke_collection_action("fetch-cover".into());
+    ui.dialogs().set_collection_dialog(true);
+    ui.dialogs().set_collection_request(r#"{"action":"collection-edit","kind":"artists","key":"Artist","secondary":"","draft_id":"save-test"}"#.into());
+    ui.dialogs().invoke_collection_action("fetch-cover".into());
     let Request::Operation(orca_services::operation_types::OperationRequest::FetchCover(fetch)) =
         edit_rx.try_recv().unwrap()
     else {
         panic!("expected artwork fetch");
     };
-    assert!(state.get_collection_fetching());
-    state.invoke_collection_action("fetch-cover".into());
+    assert!(ui.dialogs().get_collection_fetching());
+    ui.dialogs().invoke_collection_action("fetch-cover".into());
     assert!(
         edit_rx.try_recv().is_err(),
         "a pending search must not enqueue duplicate requests"
@@ -26,18 +26,18 @@ pub(super) fn verify(case: &mut UiCase) {
     assert!(!controllers::collections::finish_collection_fetch(
         ui, &stale, "stale"
     ));
-    assert!(state.get_collection_fetching());
+    assert!(ui.dialogs().get_collection_fetching());
     assert!(controllers::collections::finish_collection_fetch(
         ui,
         &fetch,
         "Artist identified, no image"
     ));
-    assert!(!state.get_collection_fetching());
-    assert!(state.get_collection_status().contains("identified"));
-    state.set_collection_name("Renamed".into());
-    state.invoke_collection_action("save-name".into());
+    assert!(!ui.dialogs().get_collection_fetching());
+    assert!(ui.dialogs().get_collection_status().contains("identified"));
+    ui.dialogs().set_collection_name("Renamed".into());
+    ui.dialogs().invoke_collection_action("save-name".into());
     assert!(
-        state.get_collection_dialog(),
+        ui.dialogs().get_collection_dialog(),
         "pending save must preserve the editor"
     );
     let Request::Operation(request) = edit_rx.try_recv().unwrap() else {
@@ -48,32 +48,33 @@ pub(super) fn verify(case: &mut UiCase) {
     };
     assert_eq!(request.name.as_deref(), Some("Renamed"));
     assert_eq!(request.draft_id.as_deref(), Some("save-test"));
-    assert!(state.get_collection_saving());
-    state.invoke_collection_action("save-name".into());
+    assert!(ui.dialogs().get_collection_saving());
+    ui.dialogs().invoke_collection_action("save-name".into());
     assert!(
         edit_rx.try_recv().is_err(),
         "pending saves must not enqueue another write"
     );
-    state.set_collection_saving(false);
-    state.set_collection_name("   ".into());
-    state.invoke_collection_action("save-name".into());
-    assert!(state.get_collection_dialog());
+    ui.dialogs().set_collection_saving(false);
+    ui.dialogs().set_collection_name("   ".into());
+    ui.dialogs().invoke_collection_action("save-name".into());
+    assert!(ui.dialogs().get_collection_dialog());
     assert!(
         edit_rx.try_recv().is_err(),
         "blank name must not enqueue a write"
     );
-    assert!(state.get_error().contains("name"));
-    state.set_error("".into());
-    state.set_collection_kind("folders".into());
-    state.set_collection_request(r#"{"action":"collection-edit","kind":"folders","key":"C:/Music","secondary":"","draft_id":"folder-save-test"}"#.into());
-    state.set_collection_name("Music".into());
-    state.set_collection_path(r"C:\Users\Test\Music".into());
-    state.set_collection_cover_missing(true);
+    assert!(ui.shell().get_error().contains("name"));
+    ui.shell().set_error("".into());
+    ui.dialogs().set_collection_kind("folders".into());
+    ui.dialogs().set_collection_request(r#"{"action":"collection-edit","kind":"folders","key":"C:/Music","secondary":"","draft_id":"folder-save-test"}"#.into());
+    ui.dialogs().set_collection_name("Music".into());
+    ui.player()
+        .set_collection_path(r"C:\Users\Test\Music".into());
+    ui.dialogs().set_collection_cover_missing(true);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "folder-editor-smoke");
-    state.invoke_collection_action("save-name".into());
+    ui.dialogs().invoke_collection_action("save-name".into());
     let Request::Operation(orca_services::operation_types::OperationRequest::CollectionEdit(
         folder,
     )) = edit_rx.try_recv().unwrap()
@@ -84,13 +85,13 @@ pub(super) fn verify(case: &mut UiCase) {
         folder.name.is_none(),
         "folder editor must never write a directory alias or file tag"
     );
-    state.set_collection_saving(false);
-    state.set_collection_dialog(false);
-    state.set_browse_artwork(false);
-    state.set_view("artists".into());
-    state.set_detail_key("Artist".into());
-    state.set_detail_title("Artist".into());
-    state.set_related_albums(
+    ui.dialogs().set_collection_saving(false);
+    ui.dialogs().set_collection_dialog(false);
+    ui.preferences().set_browse_artwork(false);
+    ui.shell().set_view("artists".into());
+    ui.library().set_detail_key("Artist".into());
+    ui.library().set_detail_title("Artist".into());
+    ui.library().set_related_albums(
         Rc::new(VecModel::from(vec![
             Rc::new(VecModel::from(vec![
                 CatalogGroup {

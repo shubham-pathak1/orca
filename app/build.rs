@@ -99,6 +99,7 @@ fn main() {
         winresource::WindowsResource::new()
             .set_icon(icon.to_str().unwrap())
             .set("ProductName", "Orca")
+            .set("CompanyName", "Shubham Pathak")
             .set("FileDescription", "Orca Music Player")
             .set("OriginalFilename", "orca-slint.exe")
             .compile()

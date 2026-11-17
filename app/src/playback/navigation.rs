@@ -24,6 +24,15 @@ pub struct Navigation {
     seed: u64,
 }
 impl Navigation {
+    /// A queued track outside the source collection must not light its play button.
+    pub fn collection_for_id(&self, id: i64) -> Option<&Query> {
+        if self.order_cleared || !self.order_ids.contains(&id) {
+            return None;
+        }
+        self.context_query
+            .as_ref()
+            .filter(|query| !query.kind.is_empty())
+    }
     pub fn compact_context(&mut self, ids: Vec<i64>, query: Query, current_id: i64, current: &str) {
         self.order.clear();
         self.order_ids = Arc::new(ids);
@@ -277,6 +286,8 @@ impl Navigation {
         if !queue.iter().any(|path| path == source) || !queue.iter().any(|path| path == target) {
             return;
         }
+        let moving_down = queue.iter().position(|path| path == source)
+            < queue.iter().position(|path| path == target);
         queue.retain(|path| path != current && path != source);
         let at = if target == current {
             0
@@ -284,7 +295,7 @@ impl Navigation {
             let Some(at) = queue.iter().position(|path| path == target) else {
                 return;
             };
-            at
+            at + usize::from(moving_down)
         };
         queue.insert(at, source.into());
         queue.truncate(20);
@@ -523,9 +534,14 @@ impl Navigation {
         if !paths.iter().any(|p| p == source) || !paths.iter().any(|p| p == target) {
             return;
         }
+        let moving_down = paths.iter().position(|path| path == source)
+            < paths.iter().position(|path| path == target);
         paths.retain(|p| p != source);
         if let Some(at) = paths.iter().position(|p| p == target) {
-            paths.insert(at + usize::from(target == current), source.into());
+            paths.insert(
+                at + usize::from(target == current || moving_down),
+                source.into(),
+            );
         }
         self.order = paths;
         self.manual.clear();
@@ -534,6 +550,26 @@ impl Navigation {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn collection_button_tracks_its_context_and_ignores_external_queue_tracks() {
+        let mut navigation = Navigation::default();
+        navigation.compact_context(
+            vec![1, 2],
+            Query {
+                kind: "albums".into(),
+                key: "Album".into(),
+                secondary: "Band".into(),
+                ..Default::default()
+            },
+            1,
+            "first",
+        );
+        assert_eq!(navigation.collection_for_id(2).unwrap().key, "Album");
+        assert!(navigation.collection_for_id(9).is_none());
+        navigation.clear_compact("first");
+        assert!(navigation.collection_for_id(1).is_none());
+    }
+
     use super::*;
     #[test]
     fn queued_external_tracks_resume_the_original_context_after_consumption() {
@@ -641,6 +677,8 @@ mod tests {
         q.context(vec!["a".into(), "b".into(), "c".into()], "a");
         q.reorder("a", "c", "b");
         assert_eq!(q.upcoming("a"), ["a", "c", "b"]);
+        q.reorder("a", "c", "b");
+        assert_eq!(q.upcoming("a"), ["a", "b", "c"]);
         q.clear("a");
         assert_eq!(q.upcoming("a"), ["a"]);
     }
@@ -729,6 +767,24 @@ mod tests {
         assert_eq!(
             navigation.upcoming_limited("song-1", 20, |id| Some(format!("song-{id}"))),
             ["song-1", "song-3", "song-2", "song-4"]
+        );
+        navigation.reorder_compact(
+            "song-1",
+            "song-3",
+            "song-4",
+            |id| Some(format!("song-{id}")),
+            |path| path.strip_prefix("song-").and_then(|id| id.parse().ok()),
+        );
+        assert_eq!(
+            navigation.upcoming_limited("song-1", 20, |id| Some(format!("song-{id}"))),
+            ["song-1", "song-2", "song-4", "song-3"]
+        );
+        navigation.reorder_compact(
+            "song-1",
+            "song-3",
+            "song-2",
+            |id| Some(format!("song-{id}")),
+            |path| path.strip_prefix("song-").and_then(|id| id.parse().ok()),
         );
         navigation.remove_compact("song-1", "song-2", Some(2));
         assert_eq!(

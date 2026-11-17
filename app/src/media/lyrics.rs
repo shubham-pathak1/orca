@@ -19,6 +19,8 @@ pub fn timestamp(text: &str) -> Option<u64> {
 }
 // Blank rows end the preceding lyric interval even though they are not rendered.
 pub fn parse(text: &str) -> Vec<LyricLine> {
+    let original = orca_services::original_lyrics(text);
+    let text = original.as_str();
     let offset = text
         .lines()
         .find_map(|line| {

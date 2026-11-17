@@ -1,6 +1,9 @@
+//! Lazy catalog models retain visible image handles and publish targeted row updates.
+mod grid_window;
 mod groups;
 mod songs;
-pub use groups::GroupGrid;
+pub(crate) use grid_window::install_grid_window;
+pub use groups::{GroupGrid, PlaylistMenu};
 pub use songs::{SongGrid, SongList};
 
 use crate::{
@@ -17,9 +20,101 @@ use std::{
     sync::mpsc::Sender,
 };
 
+pub(crate) struct CatalogModels {
+    pub tracks: Rc<Tracks>,
+    pub list: Rc<SongList>,
+    pub grid: Rc<SongGrid>,
+    pub groups: Rc<GroupGrid>,
+    pub related: Rc<GroupGrid>,
+    pub detail_art: Rc<RefCell<(String, String)>>,
+}
+impl CatalogModels {
+    pub fn new(tx: Sender<Request>, cache: Rc<RefCell<ArtworkCache>>) -> Self {
+        let tracks = Rc::new(Tracks::new(tx, cache.clone()));
+        let list = Rc::new(SongList {
+            store: tracks.clone(),
+            notify: ModelNotify::default(),
+        });
+        let grid = Rc::new(SongGrid {
+            visible_rows: RefCell::new(std::collections::HashMap::new()),
+            store: tracks.clone(),
+            notify: ModelNotify::default(),
+            columns: Cell::new(6),
+            edge: Cell::new(192),
+        });
+        let groups = Rc::new(GroupGrid {
+            landscape: Cell::new(false),
+            visible_rows: RefCell::new(std::collections::HashMap::new()),
+            artwork: Cell::new(true),
+            circular: Cell::new(false),
+            groups: RefCell::new(vec![]),
+            notify: ModelNotify::default(),
+            columns: Cell::new(6),
+            edge: Cell::new(240),
+            cache: cache.clone(),
+        });
+        let related = Rc::new(GroupGrid {
+            landscape: Cell::new(false),
+            visible_rows: RefCell::new(std::collections::HashMap::new()),
+            artwork: Cell::new(true),
+            circular: Cell::new(false),
+            groups: RefCell::new(vec![]),
+            notify: ModelNotify::default(),
+            columns: Cell::new(2),
+            edge: Cell::new(160),
+            cache: cache.clone(),
+        });
+        Self {
+            tracks,
+            list,
+            grid,
+            groups,
+            related,
+            detail_art: Rc::new(RefCell::new(Default::default())),
+        }
+    }
+}
+
 pub fn duration(ms: u64) -> String {
     format!("{}:{:02}", ms / 60000, ms / 1000 % 60)
 }
+pub fn quality_label(source: &str, bits: i32) -> String {
+    let fields: Vec<_> = source
+        .split('|')
+        .map(str::trim)
+        .filter(|field| !field.is_empty())
+        .collect();
+    let Some(codec) = fields.first() else {
+        return String::new();
+    };
+    let codec = codec.to_ascii_uppercase();
+    let display = |value: &str| value.replace("KHZ", "kHz").replace("KBPS", "kbps");
+    if bits > 0
+        && matches!(
+            codec.as_str(),
+            "FLAC" | "ALAC" | "WAV" | "WAVE" | "AIFF" | "AIF" | "APE" | "WV" | "WAVPACK"
+        )
+    {
+        let mut label = codec;
+        if let Some(rate) = fields
+            .iter()
+            .find(|field| field.to_ascii_lowercase().ends_with("khz"))
+        {
+            label.push_str(&format!(" | {}", display(rate)));
+        }
+        return format!("{label} | {bits}-bit");
+    }
+    if matches!(codec.as_str(), "MP3" | "AAC" | "OPUS" | "VORBIS") {
+        if let Some(rate) = fields
+            .iter()
+            .find(|field| field.to_ascii_lowercase().ends_with("kbps"))
+        {
+            return format!("{codec} | {}", display(rate));
+        }
+    }
+    display(source)
+}
+
 pub fn text_song(track: &Track, index: usize) -> Song {
     Song {
         id: track.id as i32,
@@ -31,6 +126,8 @@ pub fn text_song(track: &Track, index: usize) -> Song {
         duration: duration(track.duration_ms).into(),
         quality: track.quality.to_uppercase().into(),
         explicit: track.explicit,
+        liked: track.liked,
+        bit_depth: track.bit_depth as i32,
         index: index as i32,
         ..Default::default()
     }
@@ -47,7 +144,7 @@ pub fn grid_song(
 ) -> Song {
     build_song(track, index, edge, false, cache)
 }
-fn artwork_path(track: &Track, thumbnail: bool) -> &str {
+fn artwork_path(track: &Track, thumbnail: bool, _edge: u32) -> &str {
     if thumbnail && !track.artwork_thumb.is_empty() {
         &track.artwork_thumb
     } else if !track.artwork.is_empty() {
@@ -56,6 +153,7 @@ fn artwork_path(track: &Track, thumbnail: bool) -> &str {
         &track.artwork_thumb
     }
 }
+
 fn build_song(
     track: &Track,
     index: usize,
@@ -63,7 +161,7 @@ fn build_song(
     thumbnail: bool,
     cache: &Rc<RefCell<ArtworkCache>>,
 ) -> Song {
-    let path = artwork_path(track, thumbnail);
+    let path = artwork_path(track, thumbnail, edge);
     let cover_missing = path.is_empty() || cache.borrow().failed(path);
     Song {
         id: track.id as i32,
@@ -75,6 +173,8 @@ fn build_song(
         duration: duration(track.duration_ms).into(),
         quality: track.quality.to_uppercase().into(),
         explicit: track.explicit,
+        liked: track.liked,
+        bit_depth: track.bit_depth as i32,
         cover_missing,
         cover: if thumbnail {
             // Prepare list thumbnails at the physical row-cover size.
@@ -115,7 +215,7 @@ impl Tracks {
     pub fn new(tx: Sender<Request>, cache: Rc<RefCell<ArtworkCache>>) -> Self {
         Self {
             artwork: Cell::new(true),
-            list_edge: Cell::new(28),
+            list_edge: Cell::new(36),
             generation: Cell::new(0),
             count: Cell::new(0),
             rows: RefCell::new(HashMap::new()),
@@ -179,7 +279,7 @@ impl Tracks {
                 .cloned()
                 .unwrap_or_default();
             if self.artwork.get() {
-                let path = artwork_path(track, !grid);
+                let path = artwork_path(track, !grid, edge);
                 let mut cache = self.cache.borrow_mut();
                 song.cover_missing = path.is_empty() || cache.failed(path);
                 song.cover = if grid {
@@ -205,9 +305,28 @@ impl Tracks {
         let rows = self.rows.borrow();
         for index in indices {
             if let Some(track) = rows.get(&index) {
-                paths.extend([track.artwork.clone(), track.artwork_thumb.clone()]);
+                paths.extend([
+                    track.artwork.clone(),
+                    track.artwork_thumb.clone(),
+                    track.artwork_original.clone(),
+                ]);
             }
         }
+    }
+    pub fn set_liked(&self, id: i64, liked: bool) -> Vec<usize> {
+        let mut changed = Vec::new();
+        let mut rows = self.rows.borrow_mut();
+        let mut text = self.text_rows.borrow_mut();
+        for (&index, track) in rows.iter_mut() {
+            if track.id == id && track.liked != liked {
+                track.liked = liked;
+                if let Some(song) = text.get_mut(&index) {
+                    song.liked = liked;
+                }
+                changed.push(index);
+            }
+        }
+        changed
     }
     pub fn visible_ids(&self, indices: impl Iterator<Item = usize>) -> Vec<i64> {
         let rows = self.rows.borrow();
@@ -225,10 +344,10 @@ impl Tracks {
         for index in start..end.min(self.count.get()) {
             if let Some(track) = rows.get(&index) {
                 if grid {
-                    cache.prefetch_grid_cover(artwork_path(track, false), edge, false);
+                    cache.prefetch_grid_cover(artwork_path(track, false, edge), edge, false);
                 } else {
                     cache.prefetch_cover(
-                        artwork_path(track, true),
+                        artwork_path(track, true, edge),
                         edge,
                         (edge / 32).clamp(1, 12),
                         false,
@@ -245,13 +364,18 @@ impl Tracks {
         }
     }
     pub fn artwork_indices(&self, keys: &[Key]) -> Vec<usize> {
+        let paths: HashSet<&str> = keys
+            .iter()
+            .filter(|key| key.backdrop.is_none())
+            .map(|key| key.path.as_str())
+            .collect();
         self.rows
             .borrow()
             .iter()
             .filter(|(_, track)| {
-                keys.iter().any(|key| {
-                    key.backdrop.is_none() && (key.path == track.artwork || key.path == track.artwork_thumb)
-                })
+                paths.contains(track.artwork.as_str())
+                    || paths.contains(track.artwork_thumb.as_str())
+                    || paths.contains(track.artwork_original.as_str())
             })
             .map(|(&index, _)| index)
             .collect()

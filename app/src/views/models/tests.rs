@@ -1,4 +1,5 @@
 use super::*;
+use crate::media::artwork::BackdropStyle;
 #[test]
 fn disabled_browse_artwork_keeps_metadata_without_requesting_images() {
     let (tx, _) = std::sync::mpsc::channel();
@@ -30,6 +31,7 @@ fn disabled_browse_artwork_keeps_metadata_without_requesting_images() {
         artwork: Cell::new(false),
         circular: Cell::new(false),
         groups: RefCell::new(vec![Group {
+            year: None,
             key: "playlist".into(),
             title: "Playlist".into(),
             artwork: "cover.webp".into(),
@@ -144,15 +146,23 @@ fn list_uses_thumbnail_and_grid_uses_preview_independently_of_decode_size() {
         artwork_thumb: "thumb.webp".into(),
         ..Default::default()
     };
-    assert_eq!(artwork_path(&track, true), "thumb.webp");
-    assert_eq!(artwork_path(&track, false), "preview.webp");
+    assert_eq!(artwork_path(&track, true, 64), "thumb.webp");
+    assert_eq!(artwork_path(&track, false, 256), "preview.webp");
+    let original = Track {
+        artwork_original: "original.png".into(),
+        ..track.clone()
+    };
+    assert_eq!(artwork_path(&original, false, 256), "preview.webp");
+    assert_eq!(artwork_path(&original, true, 64), "thumb.webp");
+    assert_eq!(artwork_path(&original, true, 120), "thumb.webp");
     assert_eq!(
         artwork_path(
             &Track {
                 artwork: "preview.webp".into(),
                 ..Default::default()
             },
-            true
+            true,
+            64
         ),
         "preview.webp"
     );
@@ -243,9 +253,21 @@ fn cover_completion_updates_one_visible_cell_without_replacing_the_row() {
     first.title = "Updated first".into();
     second.title = "Unrelated change".into();
     store.apply(1, 0, 2, vec![first, second]);
+    let reused = grid.row_data(0).unwrap();
+    assert_eq!(reused.row_data(0).unwrap().title, "First");
     grid.artwork_changed(&[0]);
     assert_eq!(row.row_data(0).unwrap().title, "Updated first");
     assert_eq!(row.row_data(1).unwrap().title, "Second");
+    grid.refresh_row(0);
+    assert_eq!(row.row_data(1).unwrap().title, "Unrelated change");
+    assert_eq!(reused.row_data(1).unwrap().title, "Unrelated change");
+    grid.reset();
+    assert!(grid.visible_rows.borrow().is_empty());
+    assert_eq!(
+        grid.row_data(0).unwrap().row_data(1).unwrap().title,
+        "Unrelated change"
+    );
+    drop(reused);
     drop(row);
     grid.artwork_changed(&[]);
     assert!(
@@ -262,12 +284,14 @@ fn catalog_cover_updates_reuse_the_row_and_leave_other_cells_unchanged() {
         circular: Cell::new(false),
         groups: RefCell::new(vec![
             Group {
+                year: None,
                 key: "a".into(),
                 title: "First".into(),
                 artwork: "a.webp".into(),
                 ..Default::default()
             },
             Group {
+                year: None,
                 key: "b".into(),
                 title: "Second".into(),
                 artwork: "b.webp".into(),
@@ -359,9 +383,86 @@ fn artwork_completion_only_invalidates_tracks_using_that_cover() {
             edge: 160,
             height: 0,
             radius: 0,
-            backdrop: Some(crate::artwork::BackdropStyle::Artwork),
+            backdrop: Some(BackdropStyle::Artwork),
             blend: None,
             revision: 0
         }])
         .is_empty());
+}
+
+#[test]
+fn liking_a_visible_song_updates_only_its_cached_rows_without_reloading() {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let cache = Rc::new(RefCell::new(ArtworkCache::new(1024)));
+    let store = Tracks::new(tx, cache);
+    store.artwork.set(false);
+    store.apply(
+        1,
+        0,
+        2,
+        vec![
+            Track {
+                id: 1,
+                path: "one.flac".into(),
+                ..Default::default()
+            },
+            Track {
+                id: 2,
+                path: "two.flac".into(),
+                ..Default::default()
+            },
+        ],
+    );
+    assert_eq!(store.set_liked(2, true), vec![1]);
+    assert!(!store.row(0, 36, false).liked);
+    assert!(store.row(1, 36, false).liked);
+    assert!(store.set_liked(2, true).is_empty());
+    assert!(
+        rx.try_recv().is_err(),
+        "liking must not issue a catalog or artwork request"
+    );
+}
+
+#[test]
+fn playlist_menu_only_requests_visible_rows_and_keeps_its_working_set_bounded() {
+    let cache = Rc::new(RefCell::new(ArtworkCache::new(1024)));
+    let model = PlaylistMenu {
+        groups: (0..1000)
+            .map(|index| Group {
+                year: None,
+                key: index.to_string(),
+                title: format!("Playlist {index}"),
+                ..Default::default()
+            })
+            .collect(),
+        cache,
+        edge: 32,
+        notify: ModelNotify::default(),
+        recent: RefCell::new(Default::default()),
+    };
+    assert_eq!(model.row_count(), 1000);
+    assert!(model.recent.borrow().is_empty());
+    assert_eq!(model.row_data(500).unwrap().title, "Playlist 500");
+    assert_eq!(model.recent.borrow().len(), 1);
+    for index in 0..100 {
+        model.row_data(index);
+    }
+    assert_eq!(model.recent.borrow().len(), 64);
+}
+
+#[test]
+fn player_quality_badge_uses_known_lossless_precision_and_lossy_bitrate() {
+    assert_eq!(
+        quality_label("FLAC | 96 KHZ | 3152 KBPS", 24),
+        "FLAC | 96 kHz | 24-bit"
+    );
+    assert_eq!(
+        quality_label("MP3 | 44.1 KHZ | 320 KBPS", 16),
+        "MP3 | 320 kbps"
+    );
+    assert_eq!(
+        quality_label("FLAC | 96 KHZ | 3152 KBPS", 0),
+        "FLAC | 96 kHz | 3152 kbps"
+    );
+    assert_eq!(quality_label("", 24), "");
 }

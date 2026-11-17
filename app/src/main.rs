@@ -2,42 +2,33 @@
 
 slint::include_modules!();
 mod controllers;
+mod infrastructure;
 mod media;
 mod platform;
 mod playback;
 mod protocol;
 mod runtime;
-mod infrastructure;
 #[cfg(test)]
 mod tests;
 mod views;
 mod worker;
 
-use media::{artwork, lyric_render, lyrics, metadata};
-use platform::{hotkey, media_session, platform_integration, render_mode};
-use playback::{navigation, playback_clock, playback_flow};
 use infrastructure::{errors, jobs, operation_dispatch, persistence, watcher};
+use media::{artwork, lyric_render, lyrics, metadata};
+#[cfg(windows)]
+use platform::media_session;
+use platform::{hotkey, platform_integration, render_mode};
+use playback::{navigation, playback_clock, playback_flow};
 use views::{models, presentation};
 
-use controllers::{
-    browse::query,
-    input::{command_request, install_keyboard, install_player_swipe, play_request},
-    preferences::{apply_settings, clean_folder_path, setting_matches, settings},
-};
+use controllers::preferences::{apply_settings, settings_from_ui};
 use orca_services::types::Track;
 use platform_integration::{dispatch_tray_action, toggle_background_playback};
 use presentation::waveform;
 use protocol::Request;
-use runtime::SeekPreview;
-use slint::{ComponentHandle, Model, ModelNotify, Timer, TimerMode, VecModel};
-use std::{
-    cell::{Cell, RefCell},
-    path::PathBuf,
-    rc::Rc,
-    sync::atomic::Ordering,
-    time::{Duration, Instant},
-};
-use worker::Service;
+use slint::{ComponentHandle, Timer, TimerMode};
+use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Duration};
+use worker::AppWorker;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result = run();
@@ -75,6 +66,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         selector
     };
+    #[cfg(windows)]
+    let frame_pacing = (mode == render_mode::Mode::Cpu).then(|| {
+        platform::frame_pacing::FramePacing::new(
+            !args.iter().any(|arg| arg == "--legacy-frame-pacing"),
+        )
+    });
+    #[cfg(windows)]
+    let selector = if let Some(pacing) = &frame_pacing {
+        selector.with_winit_custom_application_handler(pacing.clone())
+    } else {
+        selector
+    };
     selector.select()?;
     eprintln!("Orca renderer: {renderer}");
     let audio = !args.iter().any(|a| a == "--no-audio");
@@ -88,8 +91,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/share/orca-slint")
     };
     std::fs::create_dir_all(&directory)?;
-    // Import a SQLite snapshot on first use without modifying Tauri's database.
-    // Backend startup moves referenced artwork into the native profile.
+    // Import the legacy library only when the current profile has no database.
     if !media_smoke && !directory.join("orca.db").exists() {
         let source = args
             .windows(2)
@@ -102,22 +104,29 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             orca_services::import_library(&source, &directory)?;
         }
     }
-    let saved = worker::read_json(&directory.join("slint-settings.json")).unwrap_or_default();
-    let service = Rc::new(Service::start(directory.clone(), audio));
+    let saved = persistence::read_json(&directory.join("slint-settings.json")).unwrap_or_default();
+    let worker = Rc::new(AppWorker::start(directory.clone(), audio));
     let cache = Rc::new(RefCell::new(artwork::ArtworkCache::new(30 * 1024 * 1024)));
-    let lyric_renderer = Rc::new(RefCell::new(lyric_render::Renderer::new()));
-    let playback_clock = Rc::new(RefCell::new(playback_clock::PlaybackClock::new()));
     let ui = OrcaWindow::new()?;
+    ui.shell().set_app_version(env!("CARGO_PKG_VERSION").into());
+    models::install_grid_window(&ui);
+    ui.shell()
+        .set_software_rendering(mode == render_mode::Mode::Cpu);
+    #[cfg(windows)]
+    if let Some(pacing) = &frame_pacing {
+        pacing.attach(&ui);
+    }
+    platform::input_modality::install(&ui);
     let tray = OrcaTray::new()
         .map_err(|error| {
             eprintln!("Tray unavailable: {error}");
             error
         })
         .ok();
-    ui.global::<AppState>().set_tray_available(tray.is_some());
+    ui.shell().set_tray_available(tray.is_some());
     {
         let weak = ui.as_weak();
-        ui.global::<AppState>().on_phantom(move || {
+        ui.shell().on_phantom(move || {
             if let Some(ui) = weak.upgrade() {
                 toggle_background_playback(&ui);
             }
@@ -138,11 +147,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         None
     };
-    ui.global::<AppState>()
-        .set_phantom_global(phantom_hotkey.is_some());
+    ui.shell().set_phantom_global(phantom_hotkey.is_some());
     if let Some(tray) = &tray {
         let weak = ui.as_weak();
-        let tx = service.tx.clone();
+        let tx = worker.tx.clone();
         tray.on_action(move |action| {
             if action == "quit" {
                 let _ = slint::quit_event_loop();
@@ -156,406 +164,40 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         slint::CloseRequestResponse::HideWindow
     });
     apply_settings(&ui, saved);
-    let tracks = Rc::new(models::Tracks::new(service.tx.clone(), cache.clone()));
-    let list = Rc::new(models::SongList {
-        store: tracks.clone(),
-        notify: ModelNotify::default(),
-    });
-    let grid = Rc::new(models::SongGrid {
-        visible_rows: RefCell::new(std::collections::HashMap::new()),
-        store: tracks.clone(),
-        notify: ModelNotify::default(),
-        columns: Cell::new(6),
-        edge: Cell::new(192),
-    });
-    let groups = Rc::new(models::GroupGrid {
-        landscape: Cell::new(false),
-        visible_rows: RefCell::new(std::collections::HashMap::new()),
-        artwork: Cell::new(true),
-        circular: Cell::new(false),
-        groups: RefCell::new(vec![]),
-        notify: ModelNotify::default(),
-        columns: Cell::new(6),
-        edge: Cell::new(240),
-        cache: cache.clone(),
-    });
-    let related = Rc::new(models::GroupGrid {
-        landscape: Cell::new(false),
-        visible_rows: RefCell::new(std::collections::HashMap::new()),
-        artwork: Cell::new(true),
-        circular: Cell::new(false),
-        groups: RefCell::new(vec![]),
-        notify: ModelNotify::default(),
-        columns: Cell::new(2),
-        edge: Cell::new(160),
-        cache: cache.clone(),
-    });
-    let neighbors = Rc::new(RefCell::new(Vec::<Track>::new()));
-    let detail_art = Rc::new(RefCell::new((String::new(), String::new())));
-    let queue = Rc::new(VecModel::<Song>::default());
-    let queue_tracks = Rc::new(RefCell::new(Vec::<Track>::new()));
-    let now = Rc::new(RefCell::new(Track::default()));
-    let lines = Rc::new(RefCell::new(Vec::<LyricLine>::new()));
-    let preview = Rc::new(RefCell::new(None::<SeekPreview>));
+    let catalog = Rc::new(models::CatalogModels::new(worker.tx.clone(), cache.clone()));
+    let models::CatalogModels {
+        list,
+        grid,
+        groups,
+        related,
+        ..
+    } = catalog.as_ref();
+    let player = Rc::new(playback::state::PlayerModels::new());
     let browse = Rc::new(Timer::default());
     let settings_timer = Rc::new(Timer::default());
-    let state = ui.global::<AppState>();
-    state.on_display_path(|path| clean_folder_path(&path).into());
-    state.on_setting_matches(|text, search| setting_matches(&text, &search));
-    {
-        let weak = ui.as_weak();
-        state.on_font_scale(move |value| {
-            if let Some(ui) = weak.upgrade() {
-                if let Ok(value) = value.trim().parse::<f32>() {
-                    if value.is_finite() {
-                        let s = ui.global::<AppState>();
-                        s.set_scale(value.clamp(80.0, 120.0) / 100.0);
-                        s.invoke_save_settings();
-                    }
-                }
-            }
-        });
-    }
-    state.set_songs(list.clone().into());
-    state.set_song_grid(grid.clone().into());
-    state.set_group_grid(groups.clone().into());
-    state.set_queue(queue.clone().into());
-    state.set_waveform(waveform(&[]));
-    state.set_related_albums(related.clone().into());
-    {
-        let weak = ui.as_weak();
-        state.on_unfocus(move || {
-            if let Some(ui) = weak.upgrade() {
-                ui.invoke_focus_shell();
-            }
-        });
-    }
-    install_keyboard(&ui, service.tx.clone());
-    install_player_swipe(&ui, service.tx.clone());
-    controllers::preferences::install(&ui, service.tx.clone(), settings_timer.clone());
-    controllers::collections::install(&ui, service.tx.clone());
-    controllers::editor::install(&ui, service.tx.clone());
-    controllers::playlists::install(&ui, service.tx.clone());
-    {
-        let weak = ui.as_weak();
-        let service = service.clone();
-        let timer = browse.clone();
-        let last_browse = Rc::new(RefCell::new(None::<(orca_services::types::Query, String)>));
-        let tracks = tracks.clone();
-        let list = list.clone();
-        let grid = grid.clone();
-        let groups = groups.clone();
-        let related = related.clone();
-        let detail_art = detail_art.clone();
-        state.on_browse(move || {
-            let Some(ui) = weak.upgrade() else {
-                return;
-            };
-            let (query, view) = query(&ui);
-            let generation = service.latest_query.fetch_add(1, Ordering::Relaxed) + 1;
-            let previous = last_browse.borrow().clone();
-            let changed = previous.as_ref() != Some(&(query.clone(), view.clone()));
-            let search_changed = previous.as_ref().is_some_and(|(old, old_view)| {
-                old_view == &view
-                    && old.kind == query.kind
-                    && old.key == query.key
-                    && old.secondary == query.secondary
-                    && old.sort == query.sort
-                    && old.search != query.search
-            });
-            let detail_changed = previous.as_ref().is_none_or(|(old, old_view)| {
-                old_view != &view
-                    || old.kind != query.kind
-                    || old.key != query.key
-                    || old.secondary != query.secondary
-            });
-            if detail_changed && view == "settings" {
-                service.artwork_bulk(orca_services::operation_types::ArtworkBulkAction::Status);
-            }
-            *last_browse.borrow_mut() = Some((query.clone(), view.clone()));
-            let state = ui.global::<AppState>();
-            state.set_catalog_loading(view != "settings");
-            if changed && !search_changed {
-                state.set_library_scroll_index(0);
-                state.set_library_scroll_fraction(0.0);
-                state.set_library_view_restore(false);
-                tracks.clear(generation);
-                list.notify.reset();
-                grid.notify.reset();
-                grid.visible_rows.borrow_mut().clear();
-                groups.groups.borrow_mut().clear();
-                groups.reset();
-                let count = match view.as_str() {
-                    "artists" => state.get_known_artists(),
-                    "albums" => state.get_known_albums(),
-                    "genres" => state.get_known_genres(),
-                    "playlists" => state.get_known_playlists(),
-                    _ => -1,
-                };
-                state.set_catalog_summary(if count >= 0 && query.search.is_empty() {
-                    format!(
-                        "{count} {}",
-                        if count == 1 {
-                            view.trim_end_matches('s')
-                        } else {
-                            &view
-                        }
-                    )
-                    .into()
-                } else {
-                    "".into()
-                });
-            }
-            if search_changed {
-                state.set_library_scroll_index(0);
-                state.set_library_scroll_fraction(0.0);
-                state.set_library_view_restore(false);
-                state.set_jump_index(0);
-                state.set_jump_revision(state.get_jump_revision().wrapping_add(1));
-            }
-            if detail_changed {
-                *detail_art.borrow_mut() = (String::new(), String::new());
-                related.groups.borrow_mut().clear();
-                related.reset();
-                let state = ui.global::<AppState>();
-                state.set_detail_cover(slint::Image::default());
-                state.set_detail_backdrop(slint::Image::default());
-                state.set_detail_summary("Loading...".into());
-            }
-            let service = service.clone();
-            let delay = if search_changed { 100 } else { 0 };
-            timer.start(
-                TimerMode::SingleShot,
-                Duration::from_millis(delay),
-                move || {
-                    let _ =
-                        service
-                            .tx
-                            .send(Request::Browse(generation, query.clone(), view.clone()));
-                },
-            );
-        });
-    }
-    {
-        let tx = service.tx.clone();
-        let weak = ui.as_weak();
-        state.on_play(move |path| {
-            if let Some(ui) = weak.upgrade() {
-                if ui.global::<AppState>().get_catalog_loading() {
-                    return;
-                }
-                let _ = tx.send(play_request(&ui, path.into()));
-            }
-        });
-    }
-    {
-        let tx = service.tx.clone();
-        let weak = ui.as_weak();
-        state.on_command(move |action, value| {
-            if let Some(ui) = weak.upgrade() {
-                match command_request(&ui, action.into(), value as f64) {
-                    Ok(request) => {
-                        let _ = tx.send(request);
-                    }
-                    Err(error) => ui.global::<AppState>().set_error(error.into()),
-                }
-            }
-        });
-    }
-    {
-        let tx = service.tx.clone();
-        let weak = ui.as_weak();
-        let preview = preview.clone();
-        state.on_seek(move |target| {
-            if let Some(ui) = weak.upgrade() {
-                let state = ui.global::<AppState>();
-                *preview.borrow_mut() = Some(SeekPreview {
-                    target,
-                    path: state.get_now().path.into(),
-                    started: Instant::now(),
-                });
-                state.set_position(target);
-                state.set_lyric_position(target);
-                state.set_elapsed(models::duration(target.max(0.0) as u64).into());
-            }
-            let _ = tx.send(Request::Seek(target as f64));
-        });
-    }
-    {
-        let tx = service.tx.clone();
-        let weak = ui.as_weak();
-        state.on_volume_changed(move |value| {
-            if let Some(ui) = weak.upgrade() {
-                ui.global::<AppState>().set_volume(value.clamp(0.0, 1.0));
-            }
-            let _ = tx.send(Request::Volume(value as f64));
-        });
-    }
-    {
-        let tx = service.tx.clone();
-        state.on_refresh(move || {
-            let _ = tx.send(Request::Refresh);
-        });
-    }
-    {
-        let service = service.clone();
-        state.on_artwork_bulk(move |action| {
-            use orca_services::operation_types::ArtworkBulkAction;
-            let action = match action.as_str() {
-                "start" => ArtworkBulkAction::Start,
-                "pause" => ArtworkBulkAction::Pause,
-                "resume" => ArtworkBulkAction::Resume,
-                _ => ArtworkBulkAction::Status,
-            };
-            service.artwork_bulk(action);
-        });
-    }
-    {
-        let tx = service.tx.clone();
-        state.on_refresh_lyrics(move || {
-            let _ = tx.send(Request::RefreshLyrics);
-        });
-    }
-    {
-        let tx = service.tx.clone();
-        state.on_folder_action(move |action, folder| {
-            let request = if action == "manage" {
-                Request::FolderPreview {
-                    root: folder.to_string(),
-                    current: folder.to_string(),
-                    adding: false,
-                }
-            } else if action == "rescan" {
-                Request::Folder(folder.into())
-            } else {
-                Request::Operation(
-                    orca_services::operation_types::OperationRequest::RemoveSource {
-                        key: folder.to_string(),
-                    },
-                )
-            };
-            let _ = tx.send(request);
-        });
-    }
-    {
-        let tx = service.tx.clone();
-        state.on_add_folder(move || {
-            let tx = tx.clone();
-            std::thread::spawn(move || {
-                if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                    let root = path.to_string_lossy().into_owned();
-                    let _ = tx.send(Request::FolderPreview {
-                        current: root.clone(),
-                        root,
-                        adding: true,
-                    });
-                }
-            });
-        });
-    }
-    controllers::folders::install(&ui, service.tx.clone());
-    let catalog_scroll = Rc::new(RefCell::new(None::<(String, f32)>));
-    {
-        let weak = ui.as_weak();
-        let header_art = detail_art.clone();
-        let header_albums = related.clone();
-        let catalog_groups = groups.clone();
-        let header_cache = cache.clone();
-        let catalog_scroll = catalog_scroll.clone();
-        state.on_open_group(move |key, secondary, title| {
-            if let Some(ui) = weak.upgrade() {
-                let s = ui.global::<AppState>();
-                if s.get_catalog_loading() {
-                    return;
-                }
-                let selected = catalog_groups
-                    .groups
-                    .borrow()
-                    .iter()
-                    .chain(header_albums.groups.borrow().iter())
-                    .find(|group| {
-                        group.key == key.as_str() && group.secondary == secondary.as_str()
-                    })
-                    .cloned();
-                if s.get_detail_key().is_empty() {
-                    *catalog_scroll.borrow_mut() =
-                        Some((s.get_view().to_string(), s.get_catalog_scroll_y()));
-                }
-                header_art.borrow_mut().0.clear();
-                header_art.borrow_mut().1.clear();
-                header_albums.groups.borrow_mut().clear();
-                header_albums.reset();
-                s.set_detail_cover(slint::Image::default());
-                s.set_detail_backdrop(slint::Image::default());
-                s.set_detail_cover_missing(false);
-                s.set_detail_summary("Loading...".into());
-                s.set_detail_key(key);
-                s.set_detail_secondary(secondary);
-                s.set_detail_title(title);
-                s.set_search("".into());
-                s.invoke_browse();
-                if let Some(group) = selected {
-                    if s.get_browse_artwork() {
-                        s.set_detail_cover(
-                            header_cache.borrow_mut().cached_cover(&[&group.artwork]),
-                        );
-                    }
-                    *header_art.borrow_mut() = (group.artwork.clone(), group.artwork);
-                    s.set_detail_summary(format!("{} songs", group.count).into());
-                }
-            }
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        let catalog_scroll = catalog_scroll.clone();
-        state.on_go_back(move || {
-            if let Some(ui) = weak.upgrade() {
-                let s = ui.global::<AppState>();
-                if s.get_view() == "folders" && !s.get_detail_secondary().is_empty() {
-                    let parent = s.get_detail_secondary().to_string();
-                    let root = s
-                        .get_folders()
-                        .iter()
-                        .any(|root| root.replace('\\', "/").trim_end_matches('/') == parent);
-                    let ancestor = if root {
-                        String::new()
-                    } else {
-                        parent
-                            .rsplit_once('/')
-                            .map(|(path, _)| path.to_string())
-                            .unwrap_or_default()
-                    };
-                    s.set_detail_title(parent.rsplit('/').next().unwrap_or(&parent).into());
-                    s.set_detail_key(parent.into());
-                    s.set_detail_secondary(ancestor.into());
-                } else {
-                    s.set_detail_key("".into());
-                    s.set_detail_secondary("".into());
-                    s.set_catalog_scroll_restore_pending(false);
-                    if let Some((view, position)) = catalog_scroll.borrow().as_ref() {
-                        if view == s.get_view().as_str() {
-                            s.set_catalog_scroll_target(*position);
-                            s.set_catalog_scroll_restore_pending(true);
-                        }
-                    }
-                }
-                s.set_search("".into());
-                s.invoke_browse();
-            }
-        });
-    }
-    {
-        let tx = service.tx.clone();
-        state.on_queue_action(move |action, source, target| {
-            if let Ok(action) =
-                crate::protocol::QueueAction::parse(&action, source.into(), target.into())
-            {
-                let _ = tx.send(Request::Queue(action));
-            }
-        });
-    }
-    state.on_report_issue(|| {
+
+    ui.shell().set_windows_audio(cfg!(windows));
+    ui.library().set_songs(list.clone().into());
+    ui.library().set_song_grid(grid.clone().into());
+    ui.library().set_group_grid(groups.clone().into());
+    ui.player().set_queue(player.queue.clone().into());
+    ui.player().set_waveform(waveform(&[]));
+    ui.library().set_related_albums(related.clone().into());
+    controllers::input::install(&ui, worker.tx.clone());
+    controllers::preferences::install(&ui, worker.tx.clone(), settings_timer.clone());
+    controllers::collections::install(&ui, worker.tx.clone());
+    controllers::editor::install(&ui, worker.tx.clone());
+    controllers::playlists::install(&ui, worker.tx.clone());
+    controllers::browse::install(
+        &ui,
+        worker.clone(),
+        catalog.clone(),
+        cache.clone(),
+        browse.clone(),
+    );
+    controllers::player::install(&ui, worker.tx.clone(), player.clone());
+    controllers::folders::install(&ui, worker.tx.clone());
+    ui.shell().on_report_issue(|| {
         let url = "https://github.com/shubham-pathak1/orca/issues";
         #[cfg(target_os = "windows")]
         let _ = std::process::Command::new("explorer.exe").arg(url).spawn();
@@ -564,49 +206,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(target_os = "macos")]
         let _ = std::process::Command::new("open").arg(url).spawn();
     });
-    {
-        let tx = service.tx.clone();
-        let weak = ui.as_weak();
-        state.on_menu(move |path, x, y| {
-            if let Some(ui) = weak.upgrade() {
-                let s = ui.global::<AppState>();
-                s.set_menu_x(x);
-                s.set_menu_y(y);
-            }
-            let _ = tx.send(Request::Context(path.into()));
-        });
-    }
     if let Some(scan) = args.windows(2).find(|a| a[0] == "--scan") {
-        let _ = service.tx.send(Request::Folder(scan[1].clone()));
-    }
-    {
-        let renderer = lyric_renderer.clone();
-        state.on_lyric_render(move |index, _| renderer.borrow_mut().get_signed(index));
-        let renderer = lyric_renderer.clone();
-        state.on_lyric_offset(move |index, _| renderer.borrow().offset(index.max(0) as usize));
+        let _ = worker.tx.send(Request::Folder(scan[1].clone()));
     }
     #[cfg(windows)]
-    let media_track = now.clone();
-    let poll = runtime::install(
+    let media_track = player.now.clone();
+    let ui_runtime = runtime::start(
         &ui,
         tray.as_ref().map(OrcaTray::as_weak),
         runtime::RuntimeModels {
-            service: service.clone(),
+            worker: worker.clone(),
             cache,
-            lyric_renderer,
-            playback_clock,
-            tracks,
-            list,
-            grid,
-            groups,
-            related,
-            neighbors,
-            detail_art,
-            queue,
-            queue_tracks,
-            now,
-            lines,
-            preview,
+            catalog,
+            player,
         },
     );
     ui.show()?;
@@ -618,7 +230,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             artist: "Orca".into(),
             ..Default::default()
         };
-        ui.global::<AppState>().set_playing(true);
+        ui.player().set_playing(true);
     }
     #[cfg(windows)]
     let media_session = Rc::new(RefCell::new(None));
@@ -626,7 +238,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if audio {
         let session = media_session.clone();
         let weak = ui.as_weak();
-        let tx = service.tx.clone();
+        let tx = worker.tx.clone();
         // Winit creates its HWND when the event loop starts, after show().
         Timer::single_shot(Duration::from_millis(200), move || {
             let Some(ui) = weak.upgrade() else {
@@ -656,16 +268,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     drop(media_session.borrow_mut().take());
     drop(phantom_hotkey);
     drop(tray);
-    let final_settings = settings(&ui);
-    poll.stop();
+    let final_settings = settings_from_ui(&ui);
+    ui_runtime.stop();
     browse.stop();
     settings_timer.stop();
-    drop(poll);
+    drop(ui_runtime);
     drop(browse);
     drop(settings_timer);
-    drop(state);
+
     drop(ui);
-    drop(service);
-    worker::write_json(&directory.join("slint-settings.json"), &final_settings)?;
+    drop(worker);
+    persistence::write_json(&directory.join("slint-settings.json"), &final_settings)?;
     Ok(())
 }

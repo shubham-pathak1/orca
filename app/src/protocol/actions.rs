@@ -40,6 +40,7 @@ impl PlayerAction {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CollectionAction {
     Play,
+    Toggle,
     AddToQueue,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]

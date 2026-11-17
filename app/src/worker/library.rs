@@ -1,7 +1,8 @@
-//! Library service loop owns catalog state, playback coordination and scan scheduling.
+//! Run the service request loop and coordinate catalog, playback and scan state.
 use super::state::{CatalogState, PlaybackState};
-use super::{catalog_letter_index, metadata, read_json, shutdown_volume, write_json};
+use super::{catalog_letter_index, metadata, shutdown_state};
 use crate::jobs::LatestJob;
+use crate::persistence::{read_json, write_json};
 use crate::{
     operation_dispatch,
     persistence::{read_session, Session, SessionWriter},
@@ -14,7 +15,6 @@ use orca_services::{
     types::{PlaybackCommand, Track},
 };
 use std::{
-    collections::VecDeque,
     fs,
     path::PathBuf,
     sync::{
@@ -37,7 +37,7 @@ pub(super) struct LibraryWorker {
     pub analysis_jobs: LatestJob<(u64, String, bool)>,
     pub lyrics_jobs: LatestJob<(u64, String, bool)>,
 }
-pub(super) fn run(worker: LibraryWorker) {
+pub(super) fn run_library_loop(worker: LibraryWorker) {
     let LibraryWorker {
         directory,
         audio,
@@ -51,14 +51,22 @@ pub(super) fn run(worker: LibraryWorker) {
         analysis_jobs,
         lyrics_jobs,
     } = worker;
-    let Ok(mut backend) = new_backend(&directory.to_string_lossy(), audio) else {
-        let _ = events.send(Event::Error(
-            "Cannot open the Slint library database".into(),
-        ));
-        return;
+    let mut backend = match new_backend(&directory.to_string_lossy(), audio) {
+        Ok(backend) => backend,
+        Err(error) => {
+            let _ = events.send(Event::Error(format!(
+                "Cannot open the library database: {error}"
+            )));
+            return;
+        }
     };
     let mut settings: Settings =
         read_json(&directory.join("slint-settings.json")).unwrap_or_default();
+    // Collection membership is resolved only when playback/context changes, never
+    // on each position tick or on the UI thread.
+    let mut collection_path = String::new();
+    let mut collection_query = None;
+    let mut collection_cleared = false;
     auto_artwork.store(settings.auto_artwork, Ordering::Relaxed);
     let mut session = read_session(&directory.join("slint-session.json")).unwrap_or_default();
     if !session.navigation.order.is_empty() {
@@ -102,6 +110,9 @@ pub(super) fn run(worker: LibraryWorker) {
         1.0
     };
     if audio {
+        if let Err(error) = backend.set_output_preference(&settings.output) {
+            let _ = events.send(Event::Error(error));
+        }
         if let Err(error) =
             backend.playback_command(PlaybackCommand::ReplayGain(settings.replaygain))
         {
@@ -164,40 +175,12 @@ pub(super) fn run(worker: LibraryWorker) {
                         }
                     }
                     Request::Page(at, offset) => {
-                        let mut pages = VecDeque::from([(at, offset)]);
-                        let mut skipped = Vec::new();
-                        while let Ok(next) = requests.try_recv() {
-                            match next {
-                                Request::Page(page_at, page_offset) => {
-                                    if !pages.contains(&(page_at, page_offset)) {
-                                        pages.push_back((page_at, page_offset));
-                                    }
-                                    if pages.len() > 2 {
-                                        if let Some(old) = pages.pop_front() {
-                                            skipped.push(old);
-                                        }
-                                    }
-                                }
-                                other => {
-                                    deferred_request = Some(other);
-                                    break;
-                                }
-                            }
+                        let batch = super::catalog::page_batch((at, offset), &requests);
+                        deferred_request = batch.deferred;
+                        for (generation, offsets) in batch.skipped {
+                            let _ = events.send(Event::PagesSkipped(generation, offsets));
                         }
-                        if deferred_request.is_some() {
-                            skipped.extend(pages.drain(..));
-                        }
-                        if !skipped.is_empty() {
-                            let mut by_generation =
-                                std::collections::HashMap::<u64, Vec<u32>>::new();
-                            for (page_at, page_offset) in skipped {
-                                by_generation.entry(page_at).or_default().push(page_offset);
-                            }
-                            for (generation, offsets) in by_generation {
-                                let _ = events.send(Event::PagesSkipped(generation, offsets));
-                            }
-                        }
-                        for (page_at, page_offset) in pages {
+                        for (page_at, page_offset) in batch.pages {
                             catalog.page(
                                 &backend,
                                 &events,
@@ -390,7 +373,7 @@ pub(super) fn run(worker: LibraryWorker) {
                         }
                     }
                     Request::Metadata(request) => {
-                        let edited = metadata::handle(&backend, &events, request);
+                        let edited = metadata::handle_metadata_request(&backend, &events, request);
                         if edited.as_deref() == Some(playback.path.as_str()) {
                             if let Ok(track) = backend.track(&playback.path) {
                                 let _ = events.send(Event::Now(track));
@@ -443,6 +426,9 @@ pub(super) fn run(worker: LibraryWorker) {
                         let _ = events.send(Event::PlaylistChanged(action));
                     }
                     Request::Settings(value) => {
+                        if audio && settings.output != value.output {
+                            backend.set_output_preference(&value.output)?;
+                        }
                         if audio && settings.replaygain != value.replaygain {
                             backend
                                 .playback_command(PlaybackCommand::ReplayGain(value.replaygain))?;
@@ -463,6 +449,30 @@ pub(super) fn run(worker: LibraryWorker) {
                         settings = value;
                         auto_artwork.store(settings.auto_artwork, Ordering::Relaxed);
                         write_json(&directory.join("slint-settings.json"), &settings)?;
+                    }
+                    Request::OutputDevices => {
+                        // Endpoint discovery can enter a driver. Keep one in flight
+                        // and never stall catalog/navigation or join a stuck driver.
+                        static ENUMERATING: AtomicBool = AtomicBool::new(false);
+                        if !ENUMERATING.swap(true, Ordering::AcqRel) {
+                            let events = events.clone();
+                            let stop = worker_stop.clone();
+                            let result = std::thread::Builder::new()
+                                .name("orca-output-devices".into())
+                                .spawn(move || {
+                                    let result = orca_services::available_outputs();
+                                    if !stop.load(Ordering::Acquire) {
+                                        let _ = events.send(Event::OutputDevices(result));
+                                    }
+                                    ENUMERATING.store(false, Ordering::Release);
+                                });
+                            if result.is_err() {
+                                ENUMERATING.store(false, Ordering::Release);
+                            }
+                        }
+                    }
+                    Request::RetryOutput if audio => {
+                        backend.set_output_preference(&settings.output)?;
                     }
                     Request::Font(font_path) => {
                         let bytes = fs::read(&font_path).map_err(|e| e.to_string())?;
@@ -779,6 +789,21 @@ pub(super) fn run(worker: LibraryWorker) {
                     }
                     saved = Instant::now();
                 }
+                if collection_path != snapshot.path
+                    || collection_query != playback.navigation.context_query
+                    || collection_cleared != playback.navigation.order_cleared
+                {
+                    collection_path = snapshot.path.clone();
+                    collection_query = playback.navigation.context_query.clone();
+                    collection_cleared = playback.navigation.order_cleared;
+                    let active = backend
+                        .id_for_path(&snapshot.path)
+                        .ok()
+                        .flatten()
+                        .and_then(|id| playback.navigation.collection_for_id(id))
+                        .cloned();
+                    let _ = events.send(Event::PlaybackCollection(active));
+                }
                 let _ = events.send(Event::Playback(snapshot));
             }
             Err(error) => {
@@ -786,9 +811,15 @@ pub(super) fn run(worker: LibraryWorker) {
             }
         }
     }
+    // Persist queued preferences without starting audio/device work during shutdown.
+    let (volume, pending_settings) = shutdown_state(&requests, session.volume);
+    if let Some(value) = pending_settings {
+        if let Err(error) = write_json(&directory.join("slint-settings.json"), &value) {
+            eprintln!("Could not save settings on shutdown: {error}");
+        }
+    }
     if audio {
-        // A last slider change may still be queued when the window closes.
-        session.volume = shutdown_volume(&requests, session.volume);
+        session.volume = volume;
         if let Ok(snapshot) = backend.snapshot() {
             session = Session {
                 path: snapshot.path,

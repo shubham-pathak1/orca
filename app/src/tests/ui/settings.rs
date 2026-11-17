@@ -3,69 +3,198 @@ use super::*;
 pub(super) fn verify(case: &mut UiCase) {
     let ui = &case.ui;
     let window = &case.window;
-    let state = ui.global::<AppState>();
+
     let pixels = &mut case.pixels;
     let (font_tx, _font_rx) = std::sync::mpsc::channel();
     controllers::preferences::install(ui, font_tx, Rc::new(Timer::default()));
-    state.set_font_path("".into());
-    state.set_font_family("".into());
-    state.set_view("settings".into());
-    state.set_search("tooltips".into());
+    ui.preferences().set_font_path("".into());
+    ui.preferences().set_font_family("".into());
+    ui.shell().set_view("settings".into());
+    ui.player().set_output_choices(
+        Rc::new(slint::VecModel::from(vec![
+            crate::OutputChoice {
+                id: "".into(),
+                name: "System default".into(),
+            },
+            crate::OutputChoice {
+                id: "test-endpoint".into(),
+                name: "Test headphones".into(),
+            },
+        ]))
+        .into(),
+    );
+    ui.player().invoke_select_output(1);
+    assert_eq!(
+        controllers::preferences::settings_from_ui(ui)
+            .output
+            .device_id,
+        "test-endpoint"
+    );
+    ui.player().set_output_exclusive(true);
+    let output_settings = controllers::preferences::settings_from_ui(ui);
+    ui.player().set_output_exclusive(false);
+    controllers::preferences::apply_settings(ui, output_settings);
+    assert!(ui.player().get_output_exclusive());
+    ui.library().set_search("Output".into());
+    ui.player().set_output_device_name("Test speakers".into());
+    ui.player().set_output_active_exclusive(true);
+    ui.player().set_output_active_unprocessed(false);
+    ui.player().set_output_rate(48000);
+    ui.player().set_output_source_rate(192000);
+    ui.player().set_output_channels(2);
+    ui.player().set_output_sample_format("24-bit Int".into());
+    ui.player().set_output_notice(
+        "The device does not support 192000 Hz in exclusive mode. Using 48000 Hz with resampling."
+            .into(),
+    );
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
-    assert!(state.get_show_tooltips());
+    screenshot(pixels, "audio-output-settings");
+    ui.player().set_output_unprocessed(true);
+    let unprocessed_settings = controllers::preferences::settings_from_ui(ui);
+    ui.player().set_output_unprocessed(false);
+    controllers::preferences::apply_settings(ui, unprocessed_settings);
+    assert!(ui.player().get_output_unprocessed());
+    ui.player().set_output_active_unprocessed(true);
+    ui.player().set_output_rate(44100);
+    ui.player().set_output_source_rate(44100);
+    ui.player().set_output_sample_format("32-bit Int".into());
+    ui.player()
+        .set_output_notice("Use your device's volume control.".into());
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    screenshot(pixels, "unprocessed-output-settings");
+    ui.player().set_output_unprocessed(false);
+    ui.player().set_output_notice("".into());
+    ui.player().set_output_exclusive(false);
+    ui.player().set_output_device_id("".into());
+    ui.player().set_output_active_exclusive(false);
+    ui.player().set_output_active_unprocessed(false);
+    ui.library().set_search("tooltips".into());
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    assert!(ui.preferences().get_show_tooltips());
     screenshot(pixels, "tooltips-setting");
     click(window, 875.0, 192.0);
-    assert!(!state.get_show_tooltips());
-    let saved_tooltips = controllers::preferences::settings(ui);
+    assert!(!ui.preferences().get_show_tooltips());
+    let saved_tooltips = controllers::preferences::settings_from_ui(ui);
     assert!(!saved_tooltips.show_tooltips);
-    state.set_show_tooltips(true);
+    ui.preferences().set_show_tooltips(true);
     controllers::preferences::apply_settings(ui, saved_tooltips);
-    assert!(!state.get_show_tooltips());
+    assert!(!ui.preferences().get_show_tooltips());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     click(window, 875.0, 192.0);
-    assert!(state.get_show_tooltips());
-    state.set_search("Lyrics alignment".into());
+    assert!(ui.preferences().get_show_tooltips());
+    ui.library().set_search("Lyrics alignment".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "lyrics-alignment-setting");
+    ui.library().set_search("Romanize lyrics".into());
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    screenshot(pixels, "romanization-setting");
+    assert_eq!(ui.preferences().get_romanization_mode(), 0);
+    ui.preferences().set_romanization_mode(2);
+    ui.preferences()
+        .invoke_romanization_language("ja".into(), true);
+    ui.preferences()
+        .invoke_romanization_language("ko".into(), true);
+    assert_eq!(ui.preferences().get_romanization_selected_count(), 2);
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    screenshot(pixels, "romanization-language-picker");
+    // Exercise the native checkbox and the picker's own search field, rather
+    // than relying only on the controller callback and saved model.
+    click(window, 84.0, 355.0);
+    assert_eq!(ui.preferences().get_romanization_selected_count(), 3);
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    click(window, 84.0, 355.0);
+    assert_eq!(ui.preferences().get_romanization_selected_count(), 2);
+    click(window, 200.0, 310.0);
+    for letter in "Japanese".chars() {
+        let text: slint::SharedString = letter.to_string().into();
+        window.dispatch_event(WindowEvent::KeyPressed { text: text.clone() });
+        window.dispatch_event(WindowEvent::KeyReleased { text });
+    }
+    assert_eq!(ui.library().get_search(), "Romanize lyrics");
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    click(window, 84.0, 355.0);
+    assert_eq!(ui.preferences().get_romanization_selected_count(), 1);
+    assert_eq!(
+        controllers::preferences::settings_from_ui(ui).romanization_languages,
+        ["ko"]
+    );
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    click(window, 84.0, 355.0);
+    assert_eq!(ui.preferences().get_romanization_selected_count(), 2);
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    screenshot(pixels, "romanization-language-filtered");
+
+    let saved = controllers::preferences::settings_from_ui(ui);
+    assert_eq!(saved.romanization_languages, ["ja", "ko"]);
+    ui.preferences().set_romanization_mode(0);
+    ui.preferences()
+        .invoke_romanization_language("ja".into(), false);
+    controllers::preferences::apply_settings(ui, saved);
+    assert_eq!(ui.preferences().get_romanization_mode(), 2);
+    assert_eq!(ui.preferences().get_romanization_selected_count(), 2);
+    ui.preferences().set_romanization_mode(0);
+    ui.preferences()
+        .invoke_romanization_language("ja".into(), false);
+    ui.preferences()
+        .invoke_romanization_language("ko".into(), false);
     let bulk_actions = Rc::new(RefCell::new(Vec::new()));
     let observed_bulk = bulk_actions.clone();
-    state.on_artwork_bulk(move |action| observed_bulk.borrow_mut().push(action.to_string()));
-    state.set_search("bulk".into());
-    state.set_artwork_bulk_started(true);
-    state.set_artwork_bulk_running(true);
-    state.set_artwork_bulk_progress("Fetching · 12 lookups · 4 images found".into());
+    ui.library()
+        .on_artwork_bulk(move |action| observed_bulk.borrow_mut().push(action.to_string()));
+    ui.library().set_search("bulk".into());
+    ui.library().set_artwork_bulk_started(true);
+    ui.library().set_artwork_bulk_running(true);
+    ui.library()
+        .set_artwork_bulk_progress("Fetching · 12 lookups · 4 images found".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "bulk-artwork-setting");
-    click(window, 800.0, 212.0);
+    click(window, 800.0, 188.0);
     assert_eq!(
         bulk_actions.borrow().last().map(String::as_str),
         Some("pause")
     );
-    state.set_artwork_bulk_running(false);
+    ui.library().set_artwork_bulk_running(false);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
-    click(window, 800.0, 212.0);
+    click(window, 800.0, 188.0);
     assert_eq!(
         bulk_actions.borrow().last().map(String::as_str),
         Some("resume")
     );
-    state.set_artwork_bulk_started(false);
-    state.set_search("Font preset".into());
+    ui.library().set_artwork_bulk_started(false);
+    ui.library().set_search("Font preset".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
-    state.set_font_path("C:/Fonts/My Font.ttf".into());
-    state.set_custom_font_family("My Font".into());
-    state.set_font_family("My Font".into());
+    ui.preferences()
+        .set_font_path("C:/Fonts/My Font.ttf".into());
+    ui.preferences().set_custom_font_family("My Font".into());
+    ui.preferences().set_font_family("My Font".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
@@ -89,28 +218,28 @@ pub(super) fn verify(case: &mut UiCase) {
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
-    assert_eq!(state.get_font_family(), "My Font");
-    assert_eq!(state.get_font_path(), "C:/Fonts/My Font.ttf");
-    state.invoke_font_action("system".into());
-    assert_eq!(state.get_font_family(), "");
-    assert_eq!(state.get_custom_font_family(), "My Font");
-    assert_eq!(state.get_font_path(), "C:/Fonts/My Font.ttf");
-    let saved = controllers::preferences::settings(ui);
+    assert_eq!(ui.preferences().get_font_family(), "My Font");
+    assert_eq!(ui.preferences().get_font_path(), "C:/Fonts/My Font.ttf");
+    ui.preferences().invoke_font_action("system".into());
+    assert_eq!(ui.preferences().get_font_family(), "");
+    assert_eq!(ui.preferences().get_custom_font_family(), "My Font");
+    assert_eq!(ui.preferences().get_font_path(), "C:/Fonts/My Font.ttf");
+    let saved = controllers::preferences::settings_from_ui(ui);
     assert_eq!(saved.font_family, "");
     assert_eq!(saved.font_path, "C:/Fonts/My Font.ttf");
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "system-font-with-custom-option");
-    state.invoke_font_action("custom".into());
-    assert_eq!(state.get_font_family(), "My Font");
-    state.invoke_font_action("preset".into());
-    assert_eq!(state.get_font_family(), "Plus Jakarta Sans");
-    assert_eq!(state.get_font_path(), "C:/Fonts/My Font.ttf");
-    state.invoke_font_action("remove".into());
-    assert_eq!(state.get_font_family(), "Plus Jakarta Sans");
-    assert_eq!(state.get_font_path(), "");
-    assert_eq!(state.get_custom_font_family(), "");
+    ui.preferences().invoke_font_action("custom".into());
+    assert_eq!(ui.preferences().get_font_family(), "My Font");
+    ui.preferences().invoke_font_action("preset".into());
+    assert_eq!(ui.preferences().get_font_family(), "Plus Jakarta Sans");
+    assert_eq!(ui.preferences().get_font_path(), "C:/Fonts/My Font.ttf");
+    ui.preferences().invoke_font_action("remove".into());
+    assert_eq!(ui.preferences().get_font_family(), "Plus Jakarta Sans");
+    assert_eq!(ui.preferences().get_font_path(), "");
+    assert_eq!(ui.preferences().get_custom_font_family(), "");
     let font_file =
         std::env::temp_dir().join(format!("orca-font-setting-{}.ttf", std::process::id()));
     std::fs::write(
@@ -118,43 +247,64 @@ pub(super) fn verify(case: &mut UiCase) {
         include_bytes!("../../../ui/assets/fonts/PlusJakartaSans-Bold.ttf"),
     )
     .unwrap();
-    let mut persisted = controllers::preferences::settings(ui);
+    let mut persisted = controllers::preferences::settings_from_ui(ui);
     persisted.font_family = "".into();
     persisted.font_path = font_file.to_string_lossy().into_owned();
     controllers::preferences::apply_settings(ui, persisted);
-    assert_eq!(state.get_font_family(), "");
-    assert_eq!(state.get_custom_font_family(), "Plus Jakarta Sans");
-    assert_eq!(state.get_font_path(), font_file.to_string_lossy());
-    state.invoke_font_action("remove".into());
+    assert_eq!(ui.preferences().get_font_family(), "");
+    assert_eq!(
+        ui.preferences().get_custom_font_family(),
+        "Plus Jakarta Sans"
+    );
+    assert_eq!(
+        ui.preferences().get_font_path(),
+        font_file.to_string_lossy()
+    );
+    ui.preferences().invoke_font_action("remove".into());
     std::fs::remove_file(font_file).unwrap();
-    state.invoke_font_action("preset".into());
-    state.set_search("".into());
-    let current = controllers::preferences::settings(ui);
+    ui.preferences().invoke_font_action("preset".into());
+    ui.library().set_search("".into());
+    let current = controllers::preferences::settings_from_ui(ui);
     let older = serde_json::from_str(r#"{"blurred_background":false}"#).unwrap();
     controllers::preferences::apply_settings(ui, older);
-    assert_eq!(state.get_full_player_background(), "off");
-    assert!(!state.get_lyrics_left_aligned());
+    assert_eq!(ui.preferences().get_full_player_background(), "off");
+    assert!(!ui.preferences().get_lyrics_left_aligned());
     assert!(
-        !state.get_replaygain(),
+        !ui.preferences().get_replaygain(),
         "older settings should keep ReplayGain off"
     );
     controllers::preferences::apply_settings(ui, current.clone());
-    state.set_replaygain(true);
-    assert!(controllers::preferences::settings(ui).replaygain);
-    state.set_lyrics_left_aligned(true);
-    let saved = controllers::preferences::settings(ui);
+    controllers::preferences::apply_settings(ui, current.clone());
+    ui.preferences().set_replaygain(true);
+    assert!(controllers::preferences::settings_from_ui(ui).replaygain);
+    ui.preferences().set_lyrics_left_aligned(true);
+    let saved = controllers::preferences::settings_from_ui(ui);
     assert!(saved.lyrics_left_aligned);
-    state.set_lyrics_left_aligned(false);
+    ui.preferences().set_lyrics_left_aligned(false);
     controllers::preferences::apply_settings(ui, saved);
-    assert!(state.get_lyrics_left_aligned());
+    assert!(ui.preferences().get_lyrics_left_aligned());
     controllers::preferences::apply_settings(ui, current);
-    state.set_light_theme(false);
-    state.set_view("settings".into());
+    ui.preferences().set_light_theme(false);
+    ui.shell().set_view("settings".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "settings-smoke");
-    state.set_search("Dynamic cover accent".into());
+    ui.library().set_search("Playback gapless".into());
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    let heading_pixels = (156..230)
+        .flat_map(|y| (76..260).map(move |x| y * 1280 + x))
+        .filter(|&i| pixels[i].r > 200 && pixels[i].g > 200 && pixels[i].b > 200)
+        .count();
+    assert!(
+        heading_pixels > 25,
+        "settings section headings must align with the left edge of their rows"
+    );
+    screenshot(pixels, "settings-playback-section-spacing");
+
+    ui.library().set_search("Dynamic cover accent".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
@@ -166,56 +316,56 @@ pub(super) fn verify(case: &mut UiCase) {
         toggle_pixels > 100,
         "settings toggle must remain inside its control column"
     );
-    state.set_search("Full player background".into());
+    ui.library().set_search("Full player background".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "full-player-background-setting");
-    state.set_search("Visuals".into());
+    ui.library().set_search("Visuals".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     click(window, 230.0, 228.0);
     assert!(
-        !state.get_browse_artwork()
-            && !state.get_compact_artwork()
-            && !state.get_full_artwork()
-            && !state.get_blurred_background()
-            && state.get_full_player_background() == "off"
+        !ui.preferences().get_browse_artwork()
+            && !ui.preferences().get_compact_artwork()
+            && !ui.preferences().get_full_artwork()
+            && !ui.preferences().get_blurred_background()
+            && ui.preferences().get_full_player_background() == "off"
     );
-    assert!(!state.get_grid());
+    assert!(!ui.preferences().get_grid());
     assert_eq!(
-        state.get_font_family(),
+        ui.preferences().get_font_family(),
         "Plus Jakarta Sans",
         "Minimal must preserve the user's font"
     );
-    state.set_view("songs".into());
-    state.set_search("".into());
+    ui.shell().set_view("songs".into());
+    ui.library().set_search("".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "minimal-library-smoke");
-    state.set_view("settings".into());
-    state.set_search("Visuals".into());
+    ui.shell().set_view("settings".into());
+    ui.library().set_search("Visuals".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     click(window, 120.0, 228.0);
     assert!(
-        state.get_browse_artwork()
-            && state.get_compact_artwork()
-            && state.get_full_artwork()
-            && state.get_blurred_background()
-            && state.get_full_player_background() == "artwork"
+        ui.preferences().get_browse_artwork()
+            && ui.preferences().get_compact_artwork()
+            && ui.preferences().get_full_artwork()
+            && !ui.preferences().get_blurred_background()
+            && ui.preferences().get_full_player_background() == "artwork"
     );
-    state.set_search("Keyboard shortcuts".into());
+    ui.library().set_search("Keyboard shortcuts".into());
     click(window, 210.0, 102.0);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "shortcuts-smoke");
-    state.set_search("".into());
-    state.set_group_grid(
+    ui.library().set_search("".into());
+    ui.library().set_group_grid(
         Rc::new(VecModel::from(vec![Rc::new(VecModel::from(vec![
             CatalogGroup {
                 key: "fixture".into(),
@@ -234,15 +384,15 @@ pub(super) fn verify(case: &mut UiCase) {
         .into(),
     );
     for view in ["artists", "albums", "genres", "playlists"] {
-        state.set_view(view.into());
+        ui.shell().set_view(view.into());
         window.draw_if_needed(|renderer| {
             renderer.render(pixels, 1280);
         });
         screenshot(pixels, &format!("{view}-catalog-smoke"));
     }
     // Folder pages share indexed song rows, but have their own directory navigation.
-    state.set_view("folders".into());
-    state.set_group_grid(
+    ui.shell().set_view("folders".into());
+    ui.library().set_group_grid(
         Rc::new(VecModel::from(vec![Rc::new(VecModel::from(vec![
             CatalogGroup {
                 key: "C:/Music/Artist".into(),
@@ -263,27 +413,29 @@ pub(super) fn verify(case: &mut UiCase) {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "folders-root-smoke");
-    state.set_folder_grid(false);
+    ui.preferences().set_folder_grid(false);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "folders-list-smoke");
-    state.set_folder_grid(true);
-    let saved_groups = state.get_group_grid();
-    state.set_search("missing".into());
-    state.set_group_grid(Rc::new(VecModel::<slint::ModelRc<CatalogGroup>>::default()).into());
+    ui.preferences().set_folder_grid(true);
+    let saved_groups = ui.library().get_group_grid();
+    ui.library().set_search("missing".into());
+    ui.library()
+        .set_group_grid(Rc::new(VecModel::<slint::ModelRc<CatalogGroup>>::default()).into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "folders-search-empty-smoke");
-    state.set_search("".into());
-    state.set_group_grid(saved_groups);
+    ui.library().set_search("".into());
+    ui.library().set_group_grid(saved_groups);
 
-    state.set_detail_key("C:/Music".into());
-    state.set_detail_secondary("".into());
-    state.set_detail_title("Music".into());
-    state.set_detail_cover_missing(true);
-    state.set_detail_summary("3 songs, including subfolders".into());
+    ui.library().set_detail_key("C:/Music".into());
+    ui.library().set_detail_secondary("".into());
+    ui.library().set_detail_title("Music".into());
+    ui.library().set_detail_cover_missing(true);
+    ui.library()
+        .set_detail_summary("3 songs, including subfolders".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
@@ -295,25 +447,26 @@ pub(super) fn verify(case: &mut UiCase) {
     };
     assert_eq!(folder_query.kind, "folders");
     assert_eq!(folder_query.key, "C:/Music");
-    state.set_detail_key("".into());
-    state.set_scale(1.2);
-    state.set_view("songs".into());
-    state.set_now(Song {
+    ui.library().set_detail_key("".into());
+    ui.preferences().set_scale(1.2);
+    ui.shell().set_view("songs".into());
+    ui.player().set_now(Song {
         title: "hours".into(),
         artist: "again&again".into(),
         album: "hours".into(),
         quality: "FLAC | 44.1 KHZ | 905 KBPS".into(),
         ..Default::default()
     });
-    state.set_blurred_background(true);
+    ui.preferences().set_blurred_background(true);
     let gradient = image::RgbaImage::from_fn(1280, 820, |x, _| {
         image::Rgba([(x * 200 / 1279) as u8, 30, 80, 255])
     });
-    state.set_backdrop(slint::Image::from_rgba8(slint::SharedPixelBuffer::<
-        slint::Rgba8Pixel,
-    >::clone_from_slice(
-        gradient.as_raw(), 1280, 820
-    )));
+    ui.player()
+        .set_backdrop(slint::Image::from_rgba8(slint::SharedPixelBuffer::<
+            slint::Rgba8Pixel,
+        >::clone_from_slice(
+            gradient.as_raw(), 1280, 820
+        )));
     for _ in 0..14 {
         std::thread::sleep(Duration::from_millis(33));
         slint::platform::update_timers_and_animations();
@@ -343,8 +496,8 @@ pub(super) fn verify(case: &mut UiCase) {
             renderer.set_repaint_buffer_type(RepaintBufferType::ReusedBuffer);
             renderer.render(pixels, 1280);
         });
-        state.set_view(view.into());
-        state.set_now(Song {
+        ui.shell().set_view(view.into());
+        ui.player().set_now(Song {
             title: title.into(),
             artist: "Another artist".into(),
             album: "Another album".into(),
@@ -370,4 +523,75 @@ pub(super) fn verify(case: &mut UiCase) {
             "dirty repaint must match a complete repaint after {view} navigation"
         );
     }
+}
+
+pub(super) fn verify_optional_sidebar(case: &mut UiCase) {
+    let saved = controllers::preferences::settings_from_ui(&case.ui);
+    case.ui.shell().set_view("songs".into());
+    case.ui.player().set_full_player(false);
+    case.ui.library().set_detail_key("".into());
+    case.ui.library().set_search("".into());
+    case.ui.preferences().set_sidebar_composers(true);
+    case.ui.preferences().set_sidebar_years(true);
+    case.window.draw_if_needed(|renderer| {
+        renderer.render(&mut case.pixels, 1280);
+    });
+    click(&case.window, 28.0, 348.0);
+    assert_eq!(case.ui.shell().get_view(), "composers");
+    click(&case.window, 28.0, 392.0);
+    assert_eq!(case.ui.shell().get_view(), "years");
+    case.ui.preferences().set_sidebar_songs(false);
+    case.ui.preferences().set_sidebar_artists(false);
+    case.ui.preferences().set_sidebar_albums(false);
+    case.ui.preferences().set_sidebar_genres(false);
+    case.ui.preferences().set_sidebar_playlists(false);
+    case.ui.preferences().set_sidebar_folders(false);
+    case.ui.preferences().set_sidebar_composers(false);
+    case.ui.preferences().set_sidebar_years(false);
+    case.window.draw_if_needed(|renderer| {
+        renderer.render(&mut case.pixels, 1280);
+    });
+    click(&case.window, 28.0, 84.0);
+    assert_eq!(
+        case.ui.shell().get_view(),
+        "settings",
+        "Settings must remain accessible when every optional shortcut is hidden"
+    );
+    controllers::preferences::apply_settings(&case.ui, saved);
+    case.ui.shell().set_view("songs".into());
+}
+
+#[test]
+fn wide_settings_categories_stay_at_the_left_edge() {
+    let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
+    slint::platform::set_platform(Box::new(OffscreenPlatform(window.clone()))).unwrap();
+    let ui = OrcaWindow::new().unwrap();
+    ui.preferences().set_icon_sidebar(true);
+    ui.preferences().set_blurred_background(false);
+    ui.shell().set_view("settings".into());
+    ui.show().unwrap();
+    for dpr in [1.0_f32, 1.25, 1.5, 2.0] {
+        window.dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor: dpr });
+        ui.shell().set_display_dpr(dpr);
+        let width = (1280.0 * dpr) as usize;
+        let height = (820.0 * dpr) as usize;
+        window.set_size(slint::PhysicalSize::new(width as u32, height as u32));
+        let mut pixels = vec![slint::Rgb8Pixel::default(); width * height];
+        // Select Appearance, then Interface, from the fixed left category column.
+        click(&window, 110.0, 104.0);
+        window.draw_if_needed(|renderer| {
+            renderer.render(&mut pixels, width);
+        });
+        let index = (140.0 * dpr) as usize * width + (84.0 * dpr) as usize;
+        let before = pixels[index];
+        click(&window, 110.0, 148.0);
+        window.draw_if_needed(|renderer| {
+            renderer.render(&mut pixels, width);
+        });
+        assert_ne!(
+            pixels[index], before,
+            "Interface category must be selectable at the left edge at {dpr}"
+        );
+    }
+    ui.hide().unwrap();
 }

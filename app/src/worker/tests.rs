@@ -1,4 +1,5 @@
 use super::*;
+use crate::persistence::{read_json, write_json};
 use orca_services::types::Snapshot;
 
 #[test]
@@ -14,7 +15,7 @@ fn folder_review_defers_first_scan_and_persists_rules_before_registration() {
     let root = directory.join("music");
     let child = root.join("skip");
     fs::create_dir_all(&child).unwrap();
-    let service = Service::start(directory.clone(), false);
+    let service = AppWorker::start(directory.clone(), false);
     let root = root.canonicalize().unwrap().to_string_lossy().into_owned();
     let child = child.canonicalize().unwrap().to_string_lossy().into_owned();
     service
@@ -100,7 +101,7 @@ fn metadata_failure_keeps_its_editor_generation_and_never_reports_success() {
         "../target/slint/metadata-failure-{}",
         std::process::id()
     ));
-    let service = Service::start(directory, false);
+    let service = AppWorker::start(directory, false);
     service
         .tx
         .send(Request::Metadata(crate::protocol::MetadataRequest::Load {
@@ -135,7 +136,7 @@ fn failed_operation_is_reported_as_failure_without_success_event() {
         std::process::id()
     ));
     fs::create_dir_all(&directory).unwrap();
-    let service = Service::start(directory, false);
+    let service = AppWorker::start(directory, false);
     let request=OperationRequest::from_value(serde_json::json!({"action":"collection-edit","kind":"albums","key":"Missing","name":"Changed"})).unwrap();
     service
         .tx
@@ -166,7 +167,10 @@ fn audio_errors_report_once_per_attempt_and_reappear_after_recovery() {
     let mut snapshot = Snapshot {
         playback_error: "playback:play:bad file".into(),
         playback_error_revision: 1,
-        output_status: r#"{"error":"no device"}"#.into(),
+        output: orca_services::types::OutputStatus {
+            error: "no device".into(),
+            ..Default::default()
+        },
         ..Default::default()
     };
     assert_eq!(reporter.collect(&snapshot).len(), 2);
@@ -174,9 +178,15 @@ fn audio_errors_report_once_per_attempt_and_reappear_after_recovery() {
     snapshot.playback_error_revision = 2;
     assert_eq!(reporter.collect(&snapshot), ["playback:play:bad file"]);
     snapshot.playback_error.clear();
-    snapshot.output_status = r#"{"error":""}"#.into();
+    snapshot.output.error.clear();
     assert!(reporter.collect(&snapshot).is_empty());
-    snapshot.output_status = r#"{"error":"no device"}"#.into();
+    snapshot.output.error = "no device".into();
+    assert_eq!(reporter.collect(&snapshot), ["output:no device"]);
+    snapshot.output.error.clear();
+    reporter.collect(&snapshot);
+    snapshot.playback_error = "output:no device".into();
+    snapshot.playback_error_revision += 1;
+    snapshot.output.error = "no device".into();
     assert_eq!(reporter.collect(&snapshot), ["output:no device"]);
 }
 #[test]
@@ -222,8 +232,11 @@ fn newest_analysis_request_replaces_pending_older_requests() {
     jobs.submit((1, "first"));
     jobs.submit((2, "second"));
     jobs.submit((3, "latest"));
-    assert_eq!(receiver.receive(), Some((3, "latest")));
-    assert!(receiver.pending.lock().unwrap().is_none());
+    assert_eq!(
+        receiver.receive(&AtomicBool::new(false)),
+        Some((3, "latest"))
+    );
+    assert!(receiver.try_receive().is_none());
 }
 #[test]
 fn watched_library_reconciles_offline_deletions_live_restores_and_source_removal() {
@@ -266,8 +279,8 @@ fn watched_library_reconciles_offline_deletions_live_restores_and_source_removal
         backend.shutdown();
     }
     fs::remove_file(&song).unwrap();
-    let service = Service::start(directory.clone(), false);
-    fn wait(service: &Service, wanted: u64) {
+    let service = AppWorker::start(directory.clone(), false);
+    fn wait(service: &AppWorker, wanted: u64) {
         let deadline = Instant::now() + Duration::from_secs(8);
         loop {
             assert!(
@@ -322,8 +335,12 @@ fn watched_library_reconciles_offline_deletions_live_restores_and_source_removal
 #[test]
 fn collection_page_and_header_are_delivered_without_playback() {
     let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
-        "../target/slint/header-service-test-{}",
-        std::process::id()
+        "../target/slint/header-service-test-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
     ));
     fs::create_dir_all(&directory).unwrap();
     let backend = new_backend(directory.to_str().unwrap(), false).unwrap();
@@ -342,7 +359,7 @@ fn collection_page_and_header_are_delivered_without_playback() {
         .unwrap();
     backend.operation(&serde_json::json!({"action":"collection-edit","kind":"playlists","key":group.key,"cover":cover}).to_string()).unwrap();
     drop(backend);
-    let service = Service::start(directory.clone(), false);
+    let service = AppWorker::start(directory.clone(), false);
     service.latest_query.store(1, Ordering::Relaxed);
     service
         .tx
@@ -398,7 +415,7 @@ fn no_audio_service_queries_and_shuts_down_without_audio_device_access() {
         std::process::id()
     ));
     fs::create_dir_all(&directory).unwrap();
-    let service = Service::start(directory.clone(), false);
+    let service = AppWorker::start(directory.clone(), false);
     let deadline = Instant::now() + Duration::from_secs(8);
     loop {
         assert!(Instant::now() < deadline, "service did not initialize");
@@ -513,6 +530,7 @@ fn catalog_letters_find_collection_titles_in_display_order() {
     let groups: Vec<_> = ["Zulu", "Alpha", "beta", "Delta"]
         .into_iter()
         .map(|title| Group {
+            year: None,
             title: title.into(),
             ..Default::default()
         })
@@ -530,6 +548,11 @@ fn older_settings_keep_visual_defaults_and_minimal_options_round_trip() {
     assert!(old.browse_artwork && old.compact_artwork && old.full_artwork);
     assert!(!old.light_theme);
     assert!(old.show_liked_songs);
+    assert!(!old.auto_hide_player_controls);
+    assert!(!old
+        .sidebar_pages
+        .iter()
+        .any(|page| matches!(page.as_str(), "composers" | "years")));
     assert_eq!(old.font_family, "Custom");
     let mut minimal = old;
     minimal.browse_artwork = false;
@@ -538,6 +561,9 @@ fn older_settings_keep_visual_defaults_and_minimal_options_round_trip() {
     minimal.blurred_background = false;
     minimal.light_theme = true;
     minimal.show_liked_songs = false;
+    minimal.sidebar_pages = vec!["years".into()];
+    minimal.auto_hide_player_controls = true;
+    minimal.full_player_background = "image".into();
     let restored: Settings =
         serde_json::from_str(&serde_json::to_string(&minimal).unwrap()).unwrap();
     assert!(
@@ -549,6 +575,9 @@ fn older_settings_keep_visual_defaults_and_minimal_options_round_trip() {
     assert_eq!(restored.font_family, "Custom");
     assert!(restored.light_theme);
     assert!(!restored.show_liked_songs);
+    assert!(restored.auto_hide_player_controls);
+    assert_eq!(restored.sidebar_pages, vec!["years".to_owned()]);
+    assert_eq!(restored.full_player_background, "image");
     assert!(serde_json::to_value(&restored)
         .unwrap()
         .get("animated_lyrics")
@@ -604,8 +633,8 @@ fn closing_before_slider_commands_are_processed_saves_the_last_valid_volume() {
     tx.send(Request::Volume(0.2)).unwrap();
     tx.send(Request::Shutdown).unwrap();
     tx.send(Request::Volume(f64::NAN)).unwrap();
-    assert_eq!(shutdown_volume(&rx, 1.0), 0.2);
-    assert_eq!(shutdown_volume(&rx, 0.2), 0.2);
+    assert_eq!(shutdown_state(&rx, 1.0).0, 0.2);
+    assert_eq!(shutdown_state(&rx, 0.2).0, 0.2);
 }
 #[test]
 fn settings_updates_replace_existing_file() {
@@ -619,4 +648,160 @@ fn settings_updates_replace_existing_file() {
     };
     write_json(&path, &settings).unwrap();
     assert!(!read_json::<Settings>(&path).unwrap().grid);
+}
+
+#[test]
+fn last_settings_survive_immediate_shutdown_and_restart_without_audio() {
+    let directory = std::env::temp_dir().join(format!(
+        "orca-settings-restart-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let expected = Settings {
+        light_theme: true,
+        browse_artwork: false,
+        compact_artwork: false,
+        full_artwork: false,
+        grid: false,
+        folder_grid: false,
+        sort: "duration-desc".into(),
+        scale: 1.1,
+        quality_info: false,
+        lyrics_left_aligned: true,
+        blur_unfocused_lyrics: true,
+        lyrics_blur_strength: 75,
+        romanization_mode: orca_services::types::RomanizationMode::Selected,
+        romanization_languages: vec!["ja".into(), "ko".into()],
+        show_tooltips: false,
+        show_liked_songs: false,
+        dynamic_accent: false,
+        blurred_background: false,
+        full_player_background: "color".into(),
+        auto_hide_player_controls: true,
+        sidebar_pages: vec!["songs".into(), "years".into()],
+        gapless: false,
+        replaygain: true,
+        auto_artwork: true,
+        icon_sidebar: false,
+        seek_style: "classic".into(),
+        font_family: String::new(),
+        font_path: String::new(),
+        output: orca_services::types::OutputPreference {
+            device_id: "saved-device".into(),
+            exclusive: true,
+            unprocessed: true,
+        },
+    };
+    let service = AppWorker::start(directory.clone(), false);
+    service
+        .tx
+        .send(Request::Settings(Settings::default()))
+        .unwrap();
+    service
+        .tx
+        .send(Request::Settings(expected.clone()))
+        .unwrap();
+    drop(service);
+    let path = directory.join("slint-settings.json");
+    let saved: Settings = read_json(&path).unwrap();
+    assert_eq!(
+        serde_json::to_value(&saved).unwrap(),
+        serde_json::to_value(&expected).unwrap()
+    );
+    let restarted = AppWorker::start(directory.clone(), false);
+    drop(restarted);
+    let restored: Settings = read_json(&path).unwrap();
+    assert_eq!(
+        serde_json::to_value(&restored).unwrap(),
+        serde_json::to_value(&expected).unwrap()
+    );
+}
+
+#[test]
+fn newest_romanization_language_selection_replaces_pending_work() {
+    use orca_services::types::{RomanizationMode, RomanizationPolicy};
+    let (mut service, _, _) = AppWorker::test_channels();
+    let (jobs, receiver) = latest_channel();
+    service.romanization_jobs = jobs;
+    service.romanize(
+        vec!["first".into()],
+        RomanizationPolicy {
+            mode: RomanizationMode::Selected,
+            languages: vec!["ja".into()],
+        },
+    );
+    let first = service.romanization_generation.load(Ordering::Relaxed);
+    service.romanize(
+        vec!["latest".into()],
+        RomanizationPolicy {
+            mode: RomanizationMode::Selected,
+            languages: vec!["ko".into()],
+        },
+    );
+    let (generation, lines, policy) = receiver.try_receive().unwrap();
+    assert!(generation > first);
+    assert_eq!(lines, ["latest"]);
+    assert_eq!(policy.languages, ["ko"]);
+    service.romanize(Vec::new(), RomanizationPolicy::default());
+    assert!(service.romanization_generation.load(Ordering::Relaxed) > generation);
+}
+
+#[test]
+fn page_bursts_are_bounded_and_playback_commands_keep_their_order() {
+    let (tx, rx) = mpsc::channel();
+    for offset in 1..=100 {
+        tx.send(Request::Page(7, offset * 128)).unwrap();
+    }
+    tx.send(Request::Command(PlayerAction::Next)).unwrap();
+    let first = super::catalog::page_batch((7, 0), &rx);
+    assert!(first.deferred.is_none());
+    assert_eq!(
+        first.pages.iter().copied().collect::<Vec<_>>(),
+        [(7, 62 * 128), (7, 63 * 128)]
+    );
+    assert_eq!(first.skipped.get(&7).unwrap().len(), 62);
+    let Request::Page(at, offset) = rx.try_recv().unwrap() else {
+        panic!("unprocessed pages must remain queued")
+    };
+    let next = super::catalog::page_batch((at, offset), &rx);
+    assert!(matches!(
+        next.deferred,
+        Some(Request::Command(PlayerAction::Next))
+    ));
+    assert!(
+        next.pages.is_empty(),
+        "playback commands must preempt pending page reads"
+    );
+    assert_eq!(next.skipped.get(&7).unwrap().len(), 37);
+    assert!(rx.try_recv().is_err());
+}
+#[test]
+fn startup_failure_preserves_its_diagnostic_and_shuts_down_without_audio() {
+    let file = std::env::temp_dir().join(format!(
+        "orca-invalid-profile-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::write(&file, b"not a profile directory").unwrap();
+    let worker = AppWorker::start(file.clone(), false);
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        assert!(
+            Instant::now() < deadline,
+            "startup failure was not reported"
+        );
+        if let Ok(Event::Error(error)) = worker.rx.recv_timeout(Duration::from_millis(100)) {
+            assert!(error.starts_with("Cannot open the library database: "));
+            assert!(error.len() > "Cannot open the library database: ".len());
+            break;
+        }
+    }
+    drop(worker);
+    fs::remove_file(file).unwrap();
 }

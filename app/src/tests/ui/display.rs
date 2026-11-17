@@ -3,7 +3,7 @@ use super::*;
 pub(super) fn verify(case: &mut UiCase) {
     let ui = &case.ui;
     let window = &case.window;
-    let state = ui.global::<AppState>();
+
     let pixels = &mut case.pixels;
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
@@ -11,31 +11,38 @@ pub(super) fn verify(case: &mut UiCase) {
     screenshot(pixels, "ui-smoke");
     // Nonempty high-DPI fixtures catch intrinsic image sizing: a bitmap's
     // physical dimensions must never become the delegate's logical geometry.
-    state.set_metadata_open(false);
-    state.set_collection_dialog(true);
-    assert!(!state.invoke_keyboard("q".into(), false));
-    assert!(!state.invoke_keyboard("l".into(), false));
-    assert!(!state.invoke_keyboard("focus-search".into(), false));
-    assert!(state.invoke_keyboard(slint::platform::Key::Escape.into(), false));
-    assert!(!state.get_collection_dialog());
-    state.set_full_player(true);
-    state.set_lyrics_open(false);
-    state.set_blurred_background(true);
-    state.set_light_theme(false);
+    ui.dialogs().set_metadata_open(false);
+    ui.dialogs().set_collection_dialog(true);
+    assert!(!ui.shell().invoke_keyboard("q".into(), false));
+    assert!(!ui.shell().invoke_keyboard("l".into(), false));
+    assert!(!ui.shell().invoke_keyboard("focus-search".into(), false));
+    assert!(ui
+        .shell()
+        .invoke_keyboard(slint::platform::Key::Escape.into(), false));
+    assert!(!ui.dialogs().get_collection_dialog());
+    ui.player().set_full_player(true);
+    ui.lyrics().set_lyrics_open(false);
+    ui.preferences().set_blurred_background(true);
+    ui.preferences().set_light_theme(false);
     let solid = |width, height, rgba: [u8; 4]| {
         let bytes = rgba.repeat((width * height) as usize);
         slint::Image::from_rgba8(
             slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(&bytes, width, height),
         )
     };
-    state.set_backdrop(solid(160, 160, [200, 0, 0, 255]));
-    state.set_full_backdrop(solid(1024, 820, [200, 0, 0, 255]));
-    state.set_original_cover(solid(500, 500, [0, 200, 0, 255]));
-    state.set_waveform(solid(720, 48, [255, 255, 255, 255]));
-    state.set_accent(slint::Color::from_rgb_u8(0, 200, 255));
-    state.set_player_accent(slint::Color::from_rgb_u8(0, 200, 255));
-    state.set_duration(100.0);
-    state.set_position(50.0);
+    ui.player().set_backdrop(solid(160, 160, [200, 0, 0, 255]));
+    ui.player()
+        .set_full_backdrop(solid(1024, 820, [200, 0, 0, 255]));
+    ui.player()
+        .set_original_cover(solid(500, 500, [0, 200, 0, 255]));
+    ui.player()
+        .set_waveform(solid(720, 48, [255, 255, 255, 255]));
+    ui.preferences()
+        .set_accent(slint::Color::from_rgb_u8(0, 200, 255));
+    ui.player()
+        .set_player_accent(slint::Color::from_rgb_u8(0, 200, 255));
+    ui.player().set_duration(100.0);
+    ui.player().set_position(50.0);
     window.dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor: 1.25 });
     window.set_size(slint::PhysicalSize::new(1600, 1025));
     let mut hidpi = vec![slint::Rgb8Pixel::default(); 1600 * 1025];
@@ -53,8 +60,9 @@ pub(super) fn verify(case: &mut UiCase) {
             "backdrop must fill the full window at high DPI"
         );
     }
-    state.set_full_player_background("color".into());
-    state.set_background_accent(slint::Color::from_rgb_u8(0, 60, 255));
+    ui.preferences().set_full_player_background("color".into());
+    ui.player()
+        .set_background_accent(slint::Color::from_rgb_u8(0, 60, 255));
     window.draw_if_needed(|renderer| {
         renderer.render(&mut hidpi, 1600);
     });
@@ -75,7 +83,8 @@ pub(super) fn verify(case: &mut UiCase) {
         )
         .unwrap();
     }
-    state.set_full_player_background("artwork".into());
+    ui.preferences()
+        .set_full_player_background("artwork".into());
     let green: Vec<_> = hidpi
         .iter()
         .enumerate()
@@ -118,11 +127,11 @@ pub(super) fn verify(case: &mut UiCase) {
     .unwrap();
     // A padded second grid cell is spacing, never an empty album card.
     window.set_size(slint::PhysicalSize::new(1920, 1080));
-    state.set_full_player(false);
-    state.set_blurred_background(false);
-    state.set_view("artists".into());
-    state.set_detail_key("Artist".into());
-    state.set_related_albums(
+    ui.player().set_full_player(false);
+    ui.preferences().set_blurred_background(false);
+    ui.shell().set_view("artists".into());
+    ui.library().set_detail_key("Artist".into());
+    ui.library().set_related_albums(
         Rc::new(VecModel::from(vec![Rc::new(VecModel::from(vec![
             CatalogGroup {
                 key: "One album".into(),
@@ -148,17 +157,18 @@ pub(super) fn verify(case: &mut UiCase) {
         "padded album cells must draw neither artwork nor a card background"
     );
     // Full-player lyric updates must preserve a nonuniform backdrop in reused buffers.
-    state.set_full_player(true);
-    state.set_lyrics_open(true);
-    state.set_blurred_background(true);
+    ui.player().set_full_player(true);
+    ui.lyrics().set_lyrics_open(true);
+    ui.preferences().set_blurred_background(true);
     let wash = image::RgbaImage::from_fn(1920, 1080, |x, _| {
         image::Rgba([(20 + x * 40 / 1919) as u8, 24, 28, 255])
     });
-    state.set_full_backdrop(slint::Image::from_rgba8(slint::SharedPixelBuffer::<
-        slint::Rgba8Pixel,
-    >::clone_from_slice(
-        wash.as_raw(), 1920, 1080
-    )));
+    ui.player()
+        .set_full_backdrop(slint::Image::from_rgba8(slint::SharedPixelBuffer::<
+            slint::Rgba8Pixel,
+        >::clone_from_slice(
+            wash.as_raw(), 1920, 1080
+        )));
     for _ in 0..14 {
         std::thread::sleep(Duration::from_millis(33));
         slint::platform::update_timers_and_animations();
@@ -173,7 +183,7 @@ pub(super) fn verify(case: &mut UiCase) {
             renderer.set_repaint_buffer_type(RepaintBufferType::ReusedBuffer);
             renderer.render(&mut wide, 1920);
         });
-        state.set_active_line(line);
+        ui.lyrics().set_active_line(line);
         window.draw_if_needed(|renderer| {
             renderer.render(&mut wide, 1920);
         });
@@ -190,15 +200,16 @@ pub(super) fn verify(case: &mut UiCase) {
         );
     }
     window.set_size(slint::PhysicalSize::new(2400, 1350));
-    state.set_full_artwork(true);
-    state.set_full_player_background("color".into());
-    state.set_background_accent(slint::Color::from_rgb_u8(96, 42, 45));
+    ui.preferences().set_full_artwork(true);
+    ui.preferences().set_full_player_background("color".into());
+    ui.player()
+        .set_background_accent(slint::Color::from_rgb_u8(96, 42, 45));
     let mut spacious = vec![slint::Rgb8Pixel::default(); 2400 * 1350];
     window.draw_if_needed(|renderer| {
         renderer.render(&mut spacious, 2400);
     });
     assert!(
-        state.get_player_cover_size() >= 400.0,
+        ui.player().get_player_cover_size() >= 400.0,
         "wide lyric layout must give the artwork room to grow"
     );
     if std::env::var_os("ORCA_TEST_SCREENSHOTS").is_some() {
@@ -214,4 +225,66 @@ pub(super) fn verify(case: &mut UiCase) {
         .unwrap();
     }
     window.set_size(slint::PhysicalSize::new(1920, 1080));
+}
+
+// A short title in the wrapping full-player layout must keep its badge nearby.
+pub(super) fn verify_explicit_badge(case: &mut UiCase) {
+    let saved_now = case.ui.player().get_now();
+    let saved_art = case.ui.preferences().get_full_artwork();
+    let saved_background = case.ui.preferences().get_full_player_background();
+    let saved_quality = case.ui.preferences().get_quality_info();
+    case.ui.player().set_full_player(true);
+    case.ui.preferences().set_full_artwork(false);
+    case.ui
+        .preferences()
+        .set_full_player_background("off".into());
+    case.ui.preferences().set_quality_info(false);
+    let mut song = Song {
+        title: "I Love You, I'm Sorry".into(),
+        ..Default::default()
+    };
+    case.ui.player().set_now(song.clone());
+    case.window.draw_if_needed(|renderer| {
+        renderer.render(&mut case.pixels, 1280);
+    });
+    let before = case.pixels.clone();
+    song.explicit = true;
+    case.ui.player().set_now(song);
+    case.window.draw_if_needed(|renderer| {
+        renderer.render(&mut case.pixels, 1280);
+    });
+    let mut badge_edges = Vec::new();
+    for y in 200..600 {
+        let mut start = None;
+        for x in 640..940 {
+            let index = y * 1280 + x;
+            let p = case.pixels[index];
+            let badge = p != before[index]
+                && (35..=70).contains(&p.r)
+                && p.r.abs_diff(p.g) <= 4
+                && p.g.abs_diff(p.b) <= 4;
+            if badge {
+                start.get_or_insert(x);
+            } else if let Some(left) = start.take() {
+                if (14..=18).contains(&(x - left)) {
+                    badge_edges.push(left);
+                }
+            }
+        }
+    }
+    assert!(
+        !badge_edges.is_empty(),
+        "explicit badge must be visible beside the title"
+    );
+    assert!(
+        badge_edges.iter().all(|x| *x < 840),
+        "short-title badge must not float at the far edge: {badge_edges:?}"
+    );
+    case.ui.player().set_now(saved_now);
+    case.ui.preferences().set_full_artwork(saved_art);
+    case.ui
+        .preferences()
+        .set_full_player_background(saved_background);
+    case.ui.preferences().set_quality_info(saved_quality);
+    case.ui.player().set_full_player(false);
 }

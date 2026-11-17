@@ -1,0 +1,129 @@
+import { ScrollView } from "std-widgets.slint";
+import { PlayerState, PreferencesState, DialogState } from "state.slint";
+import { Icons } from "icons.slint";
+import { IconButton } from "controls.slint";
+component AudioStage inherits HorizontalLayout {
+    in property<image> icon;
+    in property<string> title;
+    in property<string> detail;
+    in property<string> note;
+    spacing: 12px;
+    Rectangle {
+        width: 24px;
+        Image {
+            x: 0px;
+            y: 2px;
+            width: 20px;
+            height: 20px;
+            source: root.icon;
+            colorize: PreferencesState.secondary-ink;
+        }
+    }
+    VerticalLayout {
+        spacing: 4px;
+        Text {
+            text: root.title;
+            color: PreferencesState.secondary-ink;
+            font-size: 12px*PreferencesState.scale;
+            font-weight: 600;
+        }
+        Text {
+            text: root.detail;
+            color: PreferencesState.ink;
+            font-size: 14px*PreferencesState.scale;
+            wrap: word-wrap;
+        }
+        if root.note!="": Text {
+            text: root.note;
+            color: PreferencesState.secondary-ink;
+            font-size: 12px*PreferencesState.scale;
+            wrap: word-wrap;
+        }
+    }
+}
+
+export component AudioInfo inherits Rectangle {
+    preferred-height: details.preferred-height+84px;
+    init=>{
+        close.focus();
+    }
+    background: PreferencesState.panel;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: PreferencesState.ink.with-alpha(0.12);
+    TouchArea {
+    }
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+        HorizontalLayout {
+            height: 32px;
+            Text {
+                text: "Audio path";
+                color: PreferencesState.ink;
+                font-size: 20px*PreferencesState.scale;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+            close:=IconButton {
+                dialog-control: true;
+                label: "Close audio details";
+                icon: Icons.close;
+                width: 32px;
+                height: 32px;
+                clicked=>{
+                    DialogState.audio-info-open=false;
+                }
+            }
+        }
+        ScrollView {
+            horizontal-scrollbar-policy: always-off;
+            details:=VerticalLayout {
+                spacing: 12px;
+                alignment: start;
+                AudioStage {
+                    icon: Icons.file;
+                    title: "Source";
+                    detail: (PlayerState.now.quality=="" ? "Nothing loaded" : PlayerState.now.quality)+(PlayerState.now.bit-depth>0 ? "\n"+PlayerState.now.bit-depth+"-bit source" : "");
+                }
+                Rectangle {
+                    height: 1px;
+                    background: PreferencesState.ink.with-alpha(0.1);
+                }
+                if PlayerState.output-open: AudioStage {
+                    icon: Icons.settings;
+                    title: "Processing";
+                    detail: PlayerState.processing-summary+"\n"+PlayerState.output-rate-path+"\n"+PlayerState.processing-controls;
+                }
+                if PlayerState.output-open: Rectangle {
+                    height: 1px;
+                    background: PreferencesState.ink.with-alpha(0.1);
+                }
+                AudioStage {
+                    icon: Icons.volume;
+                    title: "Opened output";
+                    detail: PlayerState.output-mode-label+(PlayerState.output-open ? "\n"+PlayerState.output-format-label+"\n"+PlayerState.output-device-name : "");
+                    note: "Requested: "+PlayerState.output-requested-mode-label;
+                }
+                if PlayerState.output-open && PlayerState.output-notice!="" && PlayerState.output-notice!="Use your device's volume control.": Text {
+                    text: PlayerState.output-notice;
+                    color: PreferencesState.secondary-ink;
+                    font-size: 12px*PreferencesState.scale;
+                    wrap: word-wrap;
+                }
+                if PlayerState.output-error!="": Text {
+                    text: PlayerState.output-error;
+                    color: PreferencesState.ink;
+                    font-size: 12px*PreferencesState.scale;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: "Format shown is the PCM stream sent to Windows.";
+                    color: PreferencesState.secondary-ink;
+                    font-size: 12px*PreferencesState.scale;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+}

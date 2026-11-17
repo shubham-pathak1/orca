@@ -3,27 +3,27 @@ use super::*;
 pub(super) fn verify_narrow_details(case: &mut UiCase) {
     let ui = &case.ui;
     let window = &case.window;
-    let state = ui.global::<AppState>();
+
     window.dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor: 1.0 });
     window.set_size(slint::PhysicalSize::new(800, 820));
-    state.set_scale(1.0);
-    state.set_display_dpr(1.0);
-    state.set_full_player(false);
-    state.set_metadata_open(false);
-    state.set_collection_dialog(false);
-    state.set_playlist_dialog(false);
-    state.set_queue_open(false);
-    state.set_lyrics_open(false);
-    state.set_menu_open(false);
-    state.set_collection_menu_open(false);
-    state.set_light_theme(false);
-    state.set_blurred_background(false);
-    state.set_browse_artwork(true);
-    state.set_compact_artwork(true);
-    state.set_quality_info(true);
-    state.set_view("artists".into());
-    state.set_detail_key("Artist".into());
-    state.set_songs(
+    ui.preferences().set_scale(1.0);
+    ui.shell().set_display_dpr(1.0);
+    ui.player().set_full_player(false);
+    ui.dialogs().set_metadata_open(false);
+    ui.dialogs().set_collection_dialog(false);
+    ui.dialogs().set_playlist_dialog(false);
+    ui.player().set_queue_open(false);
+    ui.lyrics().set_lyrics_open(false);
+    ui.dialogs().set_menu_open(false);
+    ui.dialogs().set_collection_menu_open(false);
+    ui.preferences().set_light_theme(false);
+    ui.preferences().set_blurred_background(false);
+    ui.preferences().set_browse_artwork(true);
+    ui.preferences().set_compact_artwork(true);
+    ui.preferences().set_quality_info(true);
+    ui.shell().set_view("artists".into());
+    ui.library().set_detail_key("Artist".into());
+    ui.library().set_songs(
         Rc::new(VecModel::from(
             (0..20)
                 .map(|index| Song {
@@ -65,25 +65,25 @@ pub(super) fn verify_narrow_details(case: &mut UiCase) {
         ))
         .into()
     };
-    state.set_related_columns(4);
-    state.set_related_albums(album_rows(4));
+    ui.library().set_related_columns(4);
+    ui.library().set_related_albums(album_rows(4));
     let opened = Rc::new(RefCell::new(Vec::new()));
     let observed = opened.clone();
-    state.on_open_group(move |key, secondary, _| {
+    ui.library().on_open_group(move |key, secondary, _| {
         observed
             .borrow_mut()
             .push((key.to_string(), secondary.to_string()))
     });
     let mut pixels = vec![slint::Rgb8Pixel::default(); 800 * 820];
-    let mut now = state.get_now();
+    let mut now = ui.player().get_now();
     now.quality = "".into();
-    state.set_now(now.clone());
+    ui.player().set_now(now.clone());
     window.draw_if_needed(|renderer| {
         renderer.render(&mut pixels, 800);
     });
     let without_quality = pixels.clone();
     now.quality = "FLAC | 44.1 KHZ | 777 KBPS".into();
-    state.set_now(now);
+    ui.player().set_now(now);
     window.draw_if_needed(|renderer| {
         renderer.render(&mut pixels, 800);
     });
@@ -121,13 +121,13 @@ pub(super) fn verify_narrow_details(case: &mut UiCase) {
         Some(&("Album 4".into(), "Various Artists".into())),
         "the multi-column grid must expose albums past the songs"
     );
-    state.set_view("artists".into());
-    let mut now = state.get_now();
+    ui.shell().set_view("artists".into());
+    let mut now = ui.player().get_now();
     now.path = "".into();
-    state.set_now(now);
-    state.set_lyrics_open(true);
-    state.set_related_columns(2);
-    state.set_related_albums(album_rows(2));
+    ui.player().set_now(now);
+    ui.lyrics().set_lyrics_open(true);
+    ui.library().set_related_columns(2);
+    ui.library().set_related_albums(album_rows(2));
     window.dispatch_event(WindowEvent::PointerScrolled {
         position: slint::LogicalPosition::new(350.0, 480.0),
         delta_x: 0.0,
@@ -145,6 +145,22 @@ pub(super) fn verify_narrow_details(case: &mut UiCase) {
         opened.borrow().last(),
         Some(&("Album 5".into(), "Various Artists".into())),
         "the horizontal album shelf must expose albums beyond the visible width"
+    );
+    for delta in [9999.0, -9999.0] {
+        window.dispatch_event(WindowEvent::PointerScrolled {
+            position: slint::LogicalPosition::new(650.0, 500.0),
+            delta_x: delta,
+            delta_y: 0.0,
+        });
+        window.draw_if_needed(|renderer| {
+            renderer.render(&mut pixels, 800);
+        });
+    }
+    click(window, 650.0, 500.0);
+    assert_eq!(
+        opened.borrow().last(),
+        Some(&("Album 5".into(), "Various Artists".into())),
+        "native horizontal scrolling must expose and select recycled shelf cards"
     );
     window.set_size(slint::PhysicalSize::new(1400, 820));
     pixels.resize(1400 * 820, slint::Rgb8Pixel::default());
@@ -166,9 +182,9 @@ pub(super) fn verify_narrow_details(case: &mut UiCase) {
         image::ColorType::Rgb8,
     )
     .unwrap();
-    state.set_lyrics_open(false);
-    state.set_related_columns(2);
-    state.set_related_albums(album_rows(2));
+    ui.lyrics().set_lyrics_open(false);
+    ui.library().set_related_columns(2);
+    ui.library().set_related_albums(album_rows(2));
     window.draw_if_needed(|renderer| {
         renderer.render(&mut pixels, 1400);
     });
@@ -211,10 +227,10 @@ pub(super) fn verify_narrow_details(case: &mut UiCase) {
     );
     window.set_size(slint::PhysicalSize::new(1400, 820));
     pixels.resize(1400 * 820, slint::Rgb8Pixel::default());
-    state.set_view("folders".into());
-    state.set_detail_key("Music".into());
-    state.set_related_albums(Default::default());
-    state.set_group_grid(
+    ui.shell().set_view("folders".into());
+    ui.library().set_detail_key("Music".into());
+    ui.library().set_related_albums(Default::default());
+    ui.library().set_group_grid(
         Rc::new(VecModel::from(vec![Rc::new(VecModel::from(vec![
             CatalogGroup {
                 key: "Music/Child".into(),
@@ -250,7 +266,7 @@ pub(super) fn verify_narrow_details(case: &mut UiCase) {
         before + 1,
         "narrow folder tab must expose children without scrolling past songs"
     );
-    state.set_detail_key("Music/Next".into());
+    ui.library().set_detail_key("Music/Next".into());
     window.draw_if_needed(|renderer| {
         renderer.render(&mut pixels, 800);
     });
@@ -275,20 +291,22 @@ pub(super) fn verify_narrow_details(case: &mut UiCase) {
 pub(super) fn verify(case: &mut UiCase) {
     let ui = &case.ui;
     let window = &case.window;
-    let state = ui.global::<AppState>();
+
     let pixels = &mut case.pixels;
-    state.set_full_player(false);
-    state.set_view("artists".into());
-    state.set_detail_key("Artist".into());
-    state.set_detail_title("Artist".into());
-    state.set_detail_summary("2 albums · 14 songs · 38 mins".into());
+    ui.player().set_full_player(false);
+    ui.shell().set_view("artists".into());
+    ui.library().set_detail_key("Artist".into());
+    ui.library().set_detail_title("Artist".into());
+    ui.library()
+        .set_detail_summary("2 albums · 14 songs · 38 mins".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "artist-smoke");
     let edits = Rc::new(RefCell::new(Vec::new()));
     let observed = edits.clone();
-    state.on_collection_action(move |action| observed.borrow_mut().push(action.to_string()));
+    ui.dialogs()
+        .on_collection_action(move |action| observed.borrow_mut().push(action.to_string()));
     window.dispatch_event(WindowEvent::PointerMoved {
         position: slint::LogicalPosition::new(120.0, 150.0),
     });
@@ -320,7 +338,7 @@ pub(super) fn verify(case: &mut UiCase) {
 
     let queued = Rc::new(Cell::new(false));
     let observed = queued.clone();
-    state.on_command(move |action, _| {
+    ui.player().on_command(move |action, _| {
         if action == "queue-context" {
             observed.set(true);
         }
@@ -331,23 +349,23 @@ pub(super) fn verify(case: &mut UiCase) {
         "artist queue button must issue an add-context command"
     );
     assert!(
-        state.get_queue_open(),
+        ui.player().get_queue_open(),
         "artist queue button should show its result"
     );
-    state.set_queue_open(false);
+    ui.player().set_queue_open(false);
 
     let (catalog_query, _) = query(ui);
     assert_eq!(catalog_query.kind, "artists");
     assert_eq!(catalog_query.key, "Artist");
-    state.set_detail_key("".into());
+    ui.library().set_detail_key("".into());
     let changes = Rc::new(RefCell::new(Vec::new()));
     let observed = changes.clone();
-    state.on_queue_action(move |action, source, target| {
+    ui.player().on_queue_action(move |action, source, target| {
         observed
             .borrow_mut()
             .push((action.to_string(), source.to_string(), target.to_string()))
     });
-    state.set_queue(
+    ui.player().set_queue(
         Rc::new(VecModel::from(
             ["a", "b", "c"]
                 .into_iter()
@@ -360,7 +378,7 @@ pub(super) fn verify(case: &mut UiCase) {
         ))
         .into(),
     );
-    state.set_queue_open(true);
+    ui.player().set_queue_open(true);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
@@ -372,6 +390,14 @@ pub(super) fn verify(case: &mut UiCase) {
     window.dispatch_event(WindowEvent::PointerMoved {
         position: slint::LogicalPosition::new(1000.0, 247.0),
     });
+    assert!(
+        changes.borrow().is_empty(),
+        "dragging must not send queue updates before release"
+    );
+    window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    });
+    screenshot(pixels, "queue-live-drag");
     window.dispatch_event(WindowEvent::PointerReleased {
         position: slint::LogicalPosition::new(1000.0, 247.0),
         button: PointerEventButton::Left,
@@ -383,27 +409,27 @@ pub(super) fn verify(case: &mut UiCase) {
             .any(|(action, source, target)| action == "move" && source == "b" && target == "c"),
         "queue drag should request a move without resetting playback"
     );
-    state.set_queue_open(false);
-    state.set_full_player(false);
+    ui.player().set_queue_open(false);
+    ui.player().set_full_player(false);
     // Leaving any detail page must clear its context and destroy its controls.
     let detail_commands = Rc::new(Cell::new(0));
     let observed = detail_commands.clone();
-    state.on_command(move |action, _| {
+    ui.player().on_command(move |action, _| {
         if action == "play-context" {
             observed.set(observed.get() + 1);
         }
     });
     for kind in ["artists", "albums", "genres", "playlists"] {
-        state.set_view(kind.into());
-        state.set_detail_key("Old detail".into());
+        ui.shell().set_view(kind.into());
+        ui.library().set_detail_key("Old detail".into());
         window.draw_if_needed(|renderer| {
             renderer.render(pixels, 1280);
         });
-        state.set_view("settings".into());
+        ui.shell().set_view("settings".into());
         window.draw_if_needed(|renderer| {
             renderer.render(pixels, 1280);
         });
-        assert!(state.get_detail_key().is_empty());
+        assert!(ui.library().get_detail_key().is_empty());
         assert!(query(ui).0.kind.is_empty());
         click(window, 286.0, 230.0);
     }

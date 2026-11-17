@@ -90,11 +90,21 @@ impl GroupGrid {
     }
     fn group(&self, group: &Group) -> CatalogGroup {
         CatalogGroup {
+            year: group.year.unwrap_or_default(),
             key: group.key.clone().into(),
             secondary: group.secondary.clone().into(),
             title: group.title.clone().into(),
             subtitle: group.subtitle.clone().into(),
             count: group.count as i32,
+            // Reuse the decode cache's palette; never decode artwork during model reads.
+            accent: {
+                let [r, g, b] = self
+                    .cache
+                    .borrow()
+                    .accent(&group.artwork)
+                    .unwrap_or([245; 3]);
+                slint::Color::from_rgb_u8(r / 2 + 127, g / 2 + 127, b / 2 + 127)
+            },
             cover_missing: group.artwork.is_empty() && group.artwork_tiles.is_empty()
                 || self.cache.borrow().failed(&group.artwork),
             cover: if !self.artwork.get() {
@@ -183,5 +193,71 @@ impl Model for GroupGrid {
 
     fn model_tracker(&self) -> &dyn ModelTracker {
         &self.notify
+    }
+}
+
+/// A virtualized playlist menu: cover decoding starts only for requested rows.
+pub struct PlaylistMenu {
+    pub groups: Vec<Group>,
+    pub cache: Rc<RefCell<ArtworkCache>>,
+    pub edge: u32,
+    pub notify: ModelNotify,
+    pub recent: RefCell<std::collections::VecDeque<usize>>,
+}
+impl PlaylistMenu {
+    pub fn artwork_changed(&self, keys: &[Key]) {
+        let changed: Vec<_> = self
+            .recent
+            .borrow()
+            .iter()
+            .copied()
+            .filter(|&index| {
+                self.groups.get(index).is_some_and(|group| {
+                    keys.iter().any(|key| {
+                        key.path == group.artwork
+                            || key.tiles == group.artwork_tiles && !key.tiles.is_empty()
+                    })
+                })
+            })
+            .collect();
+        for index in changed {
+            self.notify.row_changed(index);
+        }
+    }
+}
+impl Model for PlaylistMenu {
+    type Data = CatalogGroup;
+    fn row_count(&self) -> usize {
+        self.groups.len()
+    }
+    fn row_data(&self, index: usize) -> Option<CatalogGroup> {
+        let group = self.groups.get(index)?;
+        let mut recent = self.recent.borrow_mut();
+        recent.retain(|&at| at != index);
+        recent.push_back(index);
+        if recent.len() > 64 {
+            recent.pop_front();
+        }
+        drop(recent);
+        let mut cache = self.cache.borrow_mut();
+        let missing = group.artwork.is_empty() && group.artwork_tiles.is_empty()
+            || cache.failed(&group.artwork);
+        Some(CatalogGroup {
+            year: group.year.unwrap_or_default(),
+            key: group.key.clone().into(),
+            secondary: group.secondary.clone().into(),
+            title: group.title.clone().into(),
+            subtitle: group.subtitle.clone().into(),
+            count: group.count as i32,
+            cover: cache.grid_cover(&group.artwork, &group.artwork_tiles, self.edge, false),
+            cover_missing: missing,
+            ..Default::default()
+        })
+    }
+    fn model_tracker(&self) -> &dyn ModelTracker {
+        &self.notify
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }

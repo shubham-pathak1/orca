@@ -2,7 +2,7 @@
 use crate::{
     metadata,
     protocol::{MetadataAssetKind, MetadataRequest, Request},
-    AppState, OrcaWindow,
+    OrcaWindow,
 };
 use orca_services::operation_types::{CollectionKind, CoverFetch, LyricsFetch, OperationRequest};
 use slint::ComponentHandle;
@@ -10,51 +10,51 @@ use std::sync::mpsc::Sender;
 
 pub(crate) fn install(ui: &OrcaWindow, tx: Sender<Request>) {
     let weak = ui.as_weak();
-    ui.global::<AppState>()
-        .on_metadata_action(move |action, value| {
-            if let Some(ui) = weak.upgrade() {
-                handle_action(&ui, &tx, action.as_str(), value.as_str());
-            }
-        });
+    ui.dialogs().on_metadata_action(move |action, value| {
+        if let Some(ui) = weak.upgrade() {
+            handle_action(&ui, &tx, action.as_str(), value.as_str());
+        }
+    });
 }
 
 fn handle_action(ui: &OrcaWindow, tx: &Sender<Request>, action: &str, value: &str) {
-    let state = ui.global::<AppState>();
-    if state.get_editor_busy() && !matches!(action, "load" | "load-fetch-cover") {
+    if ui.dialogs().get_editor_busy() && !matches!(action, "load" | "load-fetch-cover") {
         return;
     }
-    let draft = state.get_draft();
+    let draft = ui.dialogs().get_draft();
     match action {
         "save" => match metadata::edit(&draft) {
             Ok(value) => {
-                state.set_editor_busy(true);
-                state.set_editor_operation("save".into());
+                ui.dialogs().set_editor_busy(true);
+                ui.dialogs().set_editor_operation("save".into());
                 if tx
                     .send(Request::Metadata(MetadataRequest::Save {
-                        edit: value,
-                        generation: state.get_editor_generation(),
+                        edit: Box::new(value),
+                        generation: ui.dialogs().get_editor_generation(),
                     }))
                     .is_err()
                 {
-                    state.set_editor_busy(false);
-                    state.set_editor_status("Please restart Orca and try again.".into());
+                    ui.dialogs().set_editor_busy(false);
+                    ui.dialogs()
+                        .set_editor_status("Please restart Orca and try again.".into());
                 }
             }
-            Err(error) => state.set_editor_status(error.into()),
+            Err(error) => ui.dialogs().set_editor_status(error.into()),
         },
         "load" | "load-fetch-cover" => {
-            state.set_editor_generation(state.get_editor_generation().wrapping_add(1));
-            state.set_editor_status("".into());
+            ui.dialogs()
+                .set_editor_generation(ui.dialogs().get_editor_generation().wrapping_add(1));
+            ui.dialogs().set_editor_status("".into());
             let _ = tx.send(Request::Metadata(MetadataRequest::Load {
                 path: value.into(),
                 fetch_cover: action == "load-fetch-cover",
-                generation: state.get_editor_generation(),
+                generation: ui.dialogs().get_editor_generation(),
             }));
         }
         "fetch-cover" | "fetch-lyrics" => {
-            state.set_editor_busy(true);
-            state.set_editor_operation(action.into());
-            state.set_editor_status(
+            ui.dialogs().set_editor_busy(true);
+            ui.dialogs().set_editor_operation(action.into());
+            ui.dialogs().set_editor_status(
                 if action == "fetch-cover" {
                     "Searching artwork providers…"
                 } else {
@@ -71,7 +71,7 @@ fn handle_action(ui: &OrcaWindow, tx: &Sender<Request>, action: &str, value: &st
                     title: Some(draft.title.to_string()),
                     track_artist: Some(draft.artist.to_string()),
                     duration_ms: None,
-                    editor_generation: Some(state.get_editor_generation()),
+                    editor_generation: Some(ui.dialogs().get_editor_generation()),
                     editor_path: Some(draft.path.to_string()),
                     collection_draft: false,
                     collection_seed: String::new(),
@@ -84,12 +84,13 @@ fn handle_action(ui: &OrcaWindow, tx: &Sender<Request>, action: &str, value: &st
                     album: Some(draft.album.to_string()),
                     cache: false,
                     editor_path: Some(draft.path.to_string()),
-                    editor_generation: Some(state.get_editor_generation()),
+                    editor_generation: Some(ui.dialogs().get_editor_generation()),
                 })
             };
             if tx.send(Request::Operation(fetch)).is_err() {
-                state.set_editor_busy(false);
-                state.set_editor_status("Please restart Orca and try again :(".into());
+                ui.dialogs().set_editor_busy(false);
+                ui.dialogs()
+                    .set_editor_status("Please restart Orca and try again.".into());
             }
         }
         "remove-cover" => {
@@ -97,16 +98,17 @@ fn handle_action(ui: &OrcaWindow, tx: &Sender<Request>, action: &str, value: &st
             draft.remove_cover = true;
             draft.artwork = "".into();
             draft.cover_to_embed = "".into();
-            state.set_draft(draft);
-            state.set_editor_cover(slint::Image::default());
-            state.set_editor_cover_missing(true);
-            state.set_editor_status("Cover removed - Save metadata to apply it".into());
+            ui.dialogs().set_draft(draft);
+            ui.dialogs().set_editor_cover(slint::Image::default());
+            ui.dialogs().set_editor_cover_missing(true);
+            ui.dialogs()
+                .set_editor_status("Cover removed - Save metadata to apply it".into());
         }
         "pick-cover" | "pick-lyrics" => {
             let tx = tx.clone();
             let cover = action == "pick-cover";
             let target = draft.path.to_string();
-            let generation = state.get_editor_generation();
+            let generation = ui.dialogs().get_editor_generation();
             std::thread::spawn(move || {
                 let dialog = rfd::FileDialog::new();
                 let dialog = if cover {

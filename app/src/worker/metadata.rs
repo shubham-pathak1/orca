@@ -1,10 +1,10 @@
-//! Editor work is local and independent of the network operation queue.
+//! Apply metadata operations and publish their accepted results to the UI.
 use crate::protocol::{Event, MetadataAssetKind, MetadataRequest};
 use orca_services::Backend;
 use std::sync::mpsc::Sender;
 
 /// A committed edit returns its path so playback analysis can be refreshed.
-pub(super) fn handle(
+pub(super) fn handle_metadata_request(
     backend: &Backend,
     events: &Sender<Event>,
     request: MetadataRequest,
@@ -23,7 +23,7 @@ pub(super) fn handle(
             }
             MetadataRequest::Save { edit, generation } => {
                 let path = edit.fields.path.clone();
-                backend.write_metadata(edit)?;
+                backend.write_metadata(*edit)?;
                 let _ = events.send(Event::MetadataSaved(path.clone(), generation));
                 return Ok(Some(path));
             }

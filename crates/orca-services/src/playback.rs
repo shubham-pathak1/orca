@@ -31,7 +31,6 @@ impl Backend {
             ended: self.ended.load(Ordering::Relaxed),
             transitioned: self.transitioned.load(Ordering::Relaxed),
             error: self.scan.error.lock().map_err(|e| e.to_string())?.clone(),
-            output_status: serde_json::to_string(&state.output).map_err(|e| e.to_string())?,
             output_revision: state.output.revision,
             output: crate::types::OutputStatus {
                 unprocessed: state.output.config.unprocessed,

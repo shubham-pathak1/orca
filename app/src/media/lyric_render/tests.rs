@@ -1,6 +1,7 @@
 use super::*;
 fn config(width: u32) -> Config {
     Config {
+        blur_strength: 0,
         left_aligned: false,
         width,
         size: 40,
@@ -20,6 +21,66 @@ fn fonts() -> FontContext {
     fonts
 }
 #[test]
+fn romanization_sits_below_original_and_inherits_its_sweep_timing() {
+    let original = "Original lyric";
+    let mut settings = config(600);
+    settings.left_aligned = true;
+    let prepared = shape(
+        &mut fonts(),
+        &mut LayoutContext::new(),
+        Line {
+            text: original.into(),
+            secondary: "Latin pronunciation".into(),
+            words: vec![Word {
+                start: 0,
+                end: original.len(),
+                time: 1000.0,
+                end_time: 2000.0,
+            }],
+        },
+        &settings,
+    );
+    let rows: Vec<_> = prepared.layout.lines().collect();
+    assert_eq!(rows.len(), 2);
+    assert!(rows[1].metrics().baseline > rows[0].metrics().baseline);
+    assert!(rows[1]
+        .runs()
+        .all(|run| (run.font_size() - 23.2).abs() < 0.1));
+    assert_eq!(prepared.spans.len(), 2);
+    assert!(!prepared.spans[0].caption);
+    assert!(prepared.spans[1].caption);
+    assert_eq!(prepared.spans[1].time, 1000.0);
+    assert_eq!(prepared.spans[1].end_time, 2000.0);
+    assert_eq!(prepared.spans[0].time, 1000.0);
+    assert_eq!(prepared.spans[0].end_time, 2000.0);
+    assert!(prepared.spans[1].y > prepared.spans[0].y);
+    assert!(prepared.spans[0].y + prepared.spans[0].height < rows[1].metrics().baseline);
+    if std::env::var_os("ORCA_TEST_SCREENSHOTS").is_some() {
+        let bitmap = raster(
+            &prepared.layout,
+            settings.width,
+            prepared.height,
+            &mut swash::scale::ScaleContext::new(),
+        );
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../target/slint/test-artifacts/ui/romanized-lyric-row.png");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let pixels: Vec<u8> = bitmap
+            .bytes
+            .chunks_exact(4)
+            .flat_map(|pixel| [pixel[3]; 3])
+            .collect();
+        image::save_buffer(
+            path,
+            &pixels,
+            settings.width,
+            prepared.height,
+            image::ColorType::Rgb8,
+        )
+        .unwrap();
+    }
+}
+#[test]
 fn left_alignment_keeps_wrapped_highlights_on_their_glyphs() {
     let text = "Lovely day with enough words to wrap across several lines";
     let mut settings = config(320);
@@ -28,6 +89,7 @@ fn left_alignment_keeps_wrapped_highlights_on_their_glyphs() {
         &mut fonts(),
         &mut LayoutContext::new(),
         Line {
+            secondary: String::new(),
             text: text.into(),
             words: vec![Word {
                 start: 0,
@@ -62,6 +124,7 @@ fn left_alignment_keeps_wrapped_highlights_on_their_glyphs() {
 #[test]
 fn cached_glyphs_and_highlight_rectangles_share_the_same_coordinates() {
     let line = Line {
+        secondary: String::new(),
         text: "Lovely day".into(),
         words: vec![
             Word {
@@ -169,6 +232,7 @@ fn long_plain_lyrics_are_cached_with_matching_wrapped_row_offsets() {
 #[test]
 fn wrapped_word_rectangles_progress_in_sequence() {
     let line = Line {
+        secondary: String::new(),
         text: "extraordinary".into(),
         words: vec![Word {
             start: 0,
@@ -214,4 +278,238 @@ fn latest_layout_and_pending_rows_survive_rapid_configuration_changes() {
     let shutdown = std::time::Instant::now();
     drop(renderer);
     assert!(shutdown.elapsed() < Duration::from_secs(2));
+}
+
+#[test]
+fn lyrics_blur_strength_softens_alpha_without_changing_sharp_source_or_ink_color() {
+    let mut source = vec![0; 31 * 31 * 4];
+    let center = (15 * 31 + 15) * 4;
+    source[center..center + 4].copy_from_slice(&[255; 4]);
+    let before = source.clone();
+    let light = raster::blur_alpha(&source, 31, 31, 1.0);
+    let strong = raster::blur_alpha(&source, 31, 31, 3.0);
+    assert_eq!(source, before);
+    assert!(light[center + 3] < 255);
+    assert!(strong[center + 3] < light[center + 3]);
+    assert!(light.chunks_exact(4).filter(|p| p[3] > 0).count() > 1);
+    assert!(
+        strong.chunks_exact(4).filter(|p| p[3] > 0).count()
+            > light.chunks_exact(4).filter(|p| p[3] > 0).count()
+    );
+    assert!(strong.chunks_exact(4).all(|p| p[..3] == [255; 3]));
+    assert_eq!(raster::blur_alpha(&source, 31, 31, 0.0), source);
+}
+
+#[test]
+fn lyrics_blur_caches_both_variants_within_the_existing_memory_budget() {
+    let mut renderer = Renderer::new();
+    let lines = crate::lyrics::parse("[00:01.00]Original lyric");
+    renderer.set_romanization(vec!["Latin pronunciation".into()]);
+    let mut settings = config(320);
+    settings.blur_strength = 70;
+    renderer.configure(settings, &lines);
+    let deadline = std::time::Instant::now() + Duration::from_secs(8);
+    loop {
+        renderer.drain();
+        let row = renderer.get(0);
+        if row.bitmap.size().width > 0 {
+            assert_eq!(row.bitmap.size(), row.blurred.size());
+            assert!(row.padding > 0.0);
+            assert_eq!(row.bitmap.size().width, 320 + (row.padding * 2.0) as u32);
+            assert_eq!(
+                row.bitmap.size().height as f32,
+                row.height + row.padding * 2.0
+            );
+            assert_eq!(
+                renderer.bytes,
+                row.bitmap.size().width as usize * row.bitmap.size().height as usize * 8
+            );
+            assert!(renderer.bytes <= BUDGET);
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline);
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[test]
+fn lyrics_blur_padding_preserves_glyph_positions_and_keeps_soft_edges_in_the_canvas() {
+    let mut settings = config(160);
+    settings.left_aligned = true;
+    let prepared = shape(
+        &mut fonts(),
+        &mut LayoutContext::new(),
+        Line {
+            text: "Left edge".into(),
+            secondary: String::new(),
+            words: Vec::new(),
+        },
+        &settings,
+    );
+    let sharp = raster(
+        &prepared.layout,
+        settings.width,
+        prepared.height,
+        &mut swash::scale::ScaleContext::new(),
+    );
+    let padding = 18;
+    let padded = raster::raster_padded(
+        &prepared.layout,
+        settings.width,
+        prepared.height,
+        padding,
+        &mut swash::scale::ScaleContext::new(),
+    );
+    assert!(
+        padded
+            .bytes
+            .chunks_exact(4)
+            .all(|pixel| { pixel[3] == 0 || pixel[..3] == [255, 255, 255] }),
+        "glyph masks must remain white so explicit tinting preserves their pixels"
+    );
+    let width = settings.width + padding * 2;
+    let height = prepared.height + padding * 2;
+    for y in 0..prepared.height {
+        for x in 0..settings.width {
+            assert_eq!(
+                sharp.bytes[((y * settings.width + x) * 4 + 3) as usize],
+                padded.bytes[(((y + padding) * width + x + padding) * 4 + 3) as usize]
+            );
+        }
+    }
+    let blurred = raster::blur_alpha(&padded.bytes, width, height, 6.0);
+    assert!(
+        (0..height).any(|y| (0..padding).any(|x| blurred[((y * width + x) * 4 + 3) as usize] > 0)),
+        "soft edges must extend into the transparent gutter"
+    );
+    assert!(
+        (0..height).all(|y| blurred[(y * width * 4 + 3) as usize] == 0),
+        "blur must fade before the outer clipping edge"
+    );
+}
+
+#[test]
+fn romanization_projection_preserves_holds_pauses_and_wrapped_reading_order() {
+    let prepared = shape(
+        &mut fonts(),
+        &mut LayoutContext::new(),
+        Line {
+            text: "ab cd".into(),
+            secondary: "A longer pronunciation wraps onto several rows".into(),
+            words: vec![
+                Word {
+                    start: 0,
+                    end: 2,
+                    time: 1000.0,
+                    end_time: 2000.0,
+                },
+                Word {
+                    start: 3,
+                    end: 5,
+                    time: 4000.0,
+                    end_time: 4500.0,
+                },
+            ],
+        },
+        &config(140),
+    );
+    let captions: Vec<_> = prepared.spans.iter().filter(|span| span.caption).collect();
+    assert!(captions.len() > 2);
+    assert!(captions.last().unwrap().y > captions[0].y);
+    assert_eq!(captions[0].time, 1000.0);
+    assert!((captions.last().unwrap().end_time - 4500.0).abs() < 0.1);
+    assert!(captions
+        .windows(2)
+        .all(|pair| pair[1].time >= pair[0].end_time - 0.1));
+    assert!(captions
+        .iter()
+        .any(|span| span.time >= 2000.0 && span.end_time <= 4000.0));
+    let progress = |position: f32| {
+        captions
+            .iter()
+            .map(|span| {
+                span.width
+                    * ((position - span.time) / (span.end_time - span.time).max(1.0))
+                        .clamp(0.0, 1.0)
+            })
+            .sum::<f32>()
+    };
+    assert_eq!(progress(900.0), 0.0);
+    assert!(progress(1500.0) < progress(2000.0));
+    assert!(progress(2000.0) < progress(3000.0));
+    assert!(progress(3000.0) < progress(4000.0));
+    assert!(progress(4250.0) < progress(4501.0));
+}
+#[test]
+fn line_timed_romanization_has_no_synthetic_word_sweep() {
+    let prepared = shape(
+        &mut fonts(),
+        &mut LayoutContext::new(),
+        Line {
+            text: "Original".into(),
+            secondary: "Pronunciation".into(),
+            words: vec![],
+        },
+        &config(600),
+    );
+    assert!(prepared.spans.is_empty());
+}
+
+#[test]
+fn romanization_projection_counts_source_characters_instead_of_utf8_bytes() {
+    let line = Line {
+        text: "\u{3042}B".into(),
+        secondary: "abcdef".into(),
+        words: vec![
+            Word {
+                start: 0,
+                end: 3,
+                time: 1000.0,
+                end_time: 2000.0,
+            },
+            Word {
+                start: 3,
+                end: 4,
+                time: 3000.0,
+                end_time: 4000.0,
+            },
+        ],
+    };
+    let clusters = vec![super::projection::Cluster {
+        start: 0.0,
+        end: 1.0,
+        span: Span {
+            caption: true,
+            x: 0.0,
+            y: 0.0,
+            width: 90.0,
+            height: 20.0,
+            time: 0.0,
+            end_time: 0.0,
+            rtl: false,
+        },
+    }];
+    let spans = super::projection::project(&line, &clusters);
+    assert_eq!(spans.len(), 2);
+    assert_eq!(
+        (spans[0].x, spans[0].width, spans[0].time, spans[0].end_time),
+        (0.0, 45.0, 1000.0, 2000.0)
+    );
+    assert_eq!(
+        (spans[1].x, spans[1].width, spans[1].time, spans[1].end_time),
+        (45.0, 45.0, 3000.0, 4000.0)
+    );
+}
+
+#[test]
+fn unused_renderer_shuts_down_without_waiting_for_a_render_job() {
+    let (done, completed) = mpsc::sync_channel(1);
+    let worker = thread::spawn(move || {
+        drop(Renderer::new());
+        done.send(()).unwrap();
+    });
+    completed
+        .recv_timeout(Duration::from_secs(2))
+        .expect("idle renderer must wake for shutdown");
+    worker.join().unwrap();
 }

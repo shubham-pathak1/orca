@@ -1,5 +1,4 @@
-//! Rust-native application service. The frontend owns UI state; this crate owns
-//! database access and joined scan/audio lifecycles; orca-core owns media work.
+//! Application workflows and backend ownership; UI-independent contracts are exported through types.
 mod artwork;
 mod artwork_bulk;
 mod artwork_demand;
@@ -15,12 +14,11 @@ mod playback;
 pub use playback::available_outputs;
 mod scanning;
 pub mod types;
+pub use bootstrap::{import_library, migrate_profile_directory, new_backend, prepare_data_dir};
 pub use media::lyrics::original_lyrics;
 pub use media::romanization::RomanizationCache;
-pub use bootstrap::{import_library, migrate_profile_directory, new_backend, prepare_data_dir};
+pub use orca_core::artist_credits::primary_artists as primary_artist_names;
 pub use orca_core::atomic_file::write as write_state_file;
-// Historical DTO alias; no foreign-function boundary is involved.
-pub use types as ffi;
 #[cfg(test)]
 mod tests;
 

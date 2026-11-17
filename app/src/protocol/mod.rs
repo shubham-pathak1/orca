@@ -42,6 +42,8 @@ pub enum Request {
     LikedStatus(i64),
     ToggleLiked(i64),
     Settings(Settings),
+    OutputDevices,
+    RetryOutput,
     Font(String),
     Shutdown,
 }
@@ -58,6 +60,8 @@ pub enum Event {
         nodes: Vec<FolderNode>,
     },
     Playback(Snapshot),
+    PlaybackCollection(Option<Query>),
+    OutputDevices(Result<Vec<orca_services::types::OutputDevice>, String>),
     Now(Track),
     GroupGone(u64, String, String, String),
     CollectionDraft(String),
@@ -66,6 +70,7 @@ pub enum Event {
     Modes(bool, u8),
     Analysis(u64, String, String, Vec<f32>),
     Lyrics(u64, String, String, bool),
+    Romanized(u64, Vec<String>),
     Metadata(MetadataDocument, bool, i32),
     MetadataAsset(MetadataAssetKind, String, String, i32),
     Context(Track),
@@ -99,13 +104,21 @@ pub struct Settings {
     pub scale: f32,
     pub quality_info: bool,
     pub lyrics_left_aligned: bool,
+    pub blur_unfocused_lyrics: bool,
+    pub lyrics_blur_strength: u8,
+    #[serde(alias = "romanize_lyrics")]
+    pub romanization_mode: orca_services::types::RomanizationMode,
+    pub romanization_languages: Vec<String>,
     pub show_tooltips: bool,
     pub show_liked_songs: bool,
     pub dynamic_accent: bool,
     pub blurred_background: bool,
     pub full_player_background: String,
+    pub auto_hide_player_controls: bool,
+    pub sidebar_pages: Vec<String>,
     pub gapless: bool,
     pub replaygain: bool,
+    pub output: orca_services::types::OutputPreference,
     pub auto_artwork: bool,
     pub icon_sidebar: bool,
     pub seek_style: String,
@@ -125,13 +138,30 @@ impl Default for Settings {
             scale: 1.0,
             quality_info: true,
             lyrics_left_aligned: false,
+            blur_unfocused_lyrics: false,
+            lyrics_blur_strength: 30,
+            romanization_mode: Default::default(),
+            romanization_languages: Vec::new(),
             show_tooltips: true,
             show_liked_songs: true,
             dynamic_accent: true,
-            blurred_background: true,
+            blurred_background: false,
             full_player_background: String::new(),
+            auto_hide_player_controls: false,
+            sidebar_pages: [
+                "songs",
+                "artists",
+                "albums",
+                "genres",
+                "playlists",
+                "folders",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
             gapless: true,
             replaygain: false,
+            output: Default::default(),
             auto_artwork: false,
             icon_sidebar: true,
             seek_style: "waveform".into(),
@@ -144,6 +174,56 @@ impl Default for Settings {
 #[cfg(test)]
 mod settings_tests {
     use super::Settings;
+    #[test]
+    fn romanization_is_opt_in_and_survives_restart() {
+        let mut settings: Settings = serde_json::from_str("{}").unwrap();
+        assert_eq!(
+            settings.romanization_mode,
+            orca_services::types::RomanizationMode::Off
+        );
+        settings.romanization_mode = orca_services::types::RomanizationMode::Selected;
+        settings.romanization_languages = vec!["ja".into(), "ko".into()];
+        let restored: Settings =
+            serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
+        assert_eq!(restored.romanization_mode, settings.romanization_mode);
+        assert_eq!(
+            restored.romanization_languages,
+            settings.romanization_languages
+        );
+        let legacy: Settings = serde_json::from_str(r#"{"romanize_lyrics":true}"#).unwrap();
+        assert_eq!(
+            legacy.romanization_mode,
+            orca_services::types::RomanizationMode::All
+        );
+        let legacy: Settings = serde_json::from_str(r#"{"romanize_lyrics":false}"#).unwrap();
+        assert_eq!(
+            legacy.romanization_mode,
+            orca_services::types::RomanizationMode::Off
+        );
+    }
+    #[test]
+    fn lyrics_blur_is_opt_in_and_strength_survives_restart() {
+        let mut settings: Settings = serde_json::from_str("{}").unwrap();
+        assert!(!settings.blur_unfocused_lyrics);
+        assert_eq!(settings.lyrics_blur_strength, 30);
+        settings.blur_unfocused_lyrics = true;
+        settings.lyrics_blur_strength = 75;
+        let restored: Settings =
+            serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
+        assert!(restored.blur_unfocused_lyrics);
+        assert_eq!(restored.lyrics_blur_strength, 75);
+    }
+    #[test]
+    fn output_defaults_to_shared_and_retains_stable_device_id() {
+        let mut settings: Settings = serde_json::from_str("{}").unwrap();
+        assert!(settings.output.device_id.is_empty());
+        assert!(!settings.output.exclusive);
+        settings.output.device_id = "endpoint-with-stable-id".into();
+        settings.output.exclusive = true;
+        let restored: Settings =
+            serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
+        assert_eq!(restored.output, settings.output);
+    }
 
     #[test]
     fn tooltips_default_on_for_existing_profiles_and_persist_when_disabled() {

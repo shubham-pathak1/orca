@@ -1,20 +1,8 @@
-//! Pure geometry policy shared by resize and DPI updates.
+//! Pure geometry shared by resize and DPI updates; no model reads or image decoding.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct GridGeometry {
     pub columns: usize,
     pub edge: u32,
-}
-pub(super) fn browse_width(width: f32, sidebar: f32, docked_lyrics: bool) -> f32 {
-    let lyrics_width = ((width - 900.0) * 0.6).clamp(300.0, 420.0);
-    (width
-        - sidebar
-        - 40.0
-        - if docked_lyrics {
-            lyrics_width + 16.0
-        } else {
-            0.0
-        })
-    .max(1.0)
 }
 pub(super) fn songs(available: f32, dpr: f32) -> GridGeometry {
     let width = (available - 44.0).max(1.0);
@@ -23,7 +11,7 @@ pub(super) fn songs(available: f32, dpr: f32) -> GridGeometry {
         columns,
         edge: ((width - 16.0 * (columns - 1) as f32) / columns as f32 * dpr)
             .max(48.0)
-            .round() as u32,
+            .floor() as u32,
     }
 }
 pub(super) fn related(available: f32, dpr: f32, shelf: bool) -> GridGeometry {
@@ -50,14 +38,14 @@ pub(super) fn catalog(
     folder_grid: bool,
     has_detail: bool,
 ) -> GridGeometry {
-    let compact = matches!(view, "artists" | "playlists")
+    let compact = matches!(view, "playlists" | "composers" | "years")
         || view == "folders" && (!folder_grid || has_detail);
     let gap = match view {
-        "playlists" => 24.0,
+        "playlists" | "artists" => 24.0,
         "genres" => 16.0,
         _ => 12.0,
     };
-    let usable = (available - 44.0).max(1.0);
+    let usable = (available - if view == "folders" { 0.0 } else { 44.0 }).max(1.0);
     let columns = if view == "folders" && (!folder_grid || has_detail) {
         1
     } else if compact {
@@ -83,9 +71,13 @@ pub(super) fn catalog(
     let edge = if compact {
         crate::models::physical_artwork_edge(44, dpr)
     } else {
-        ((usable - gap * (columns - 1) as f32) / columns as f32 * dpr)
-            .max(48.0)
-            .round() as u32
+        let logical = (usable - gap * (columns - 1) as f32) / columns as f32;
+        let logical = if view == "artists" {
+            logical.min(144.0)
+        } else {
+            logical
+        };
+        (logical * dpr).max(48.0).floor() as u32
     };
     GridGeometry { columns, edge }
 }
@@ -119,17 +111,6 @@ mod tests {
         assert_eq!(
             catalog(1920.0, 1800.0, 1.0, "folders", false, true).columns,
             1
-        );
-    }
-    #[test]
-    fn docked_lyrics_use_the_visible_grid_width() {
-        let normal = browse_width(1920.0, 56.0, false);
-        let docked = browse_width(1920.0, 56.0, true);
-        assert_eq!(normal, 1824.0);
-        assert_eq!(docked, 1388.0);
-        assert!(
-            catalog(1920.0, docked, 1.0, "albums", true, false).columns
-                < catalog(1920.0, normal, 1.0, "albums", true, false).columns
         );
     }
     #[test]

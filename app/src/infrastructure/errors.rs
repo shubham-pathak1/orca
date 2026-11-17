@@ -4,10 +4,10 @@ pub(crate) fn operation(error: &orca_services::operation_types::OperationError) 
     match error {
         OperationError::Busy => "One moment, Orca is busy. Please try again shortly.".into(),
         OperationError::Unavailable(_) => {
-            "Oops, the library worker isn't available. Please restart Orca.".into()
+            "The library worker isn't available. Please restart Orca.".into()
         }
         OperationError::InvalidRequest(_) | OperationError::InvalidResult(_) => {
-            "Oops, this library operation couldn't finish. Please try again :(".into()
+            "This library operation couldn't finish. Please try again.".into()
         }
         OperationError::Failed(message) => friendly(message),
     }
@@ -30,21 +30,24 @@ pub fn friendly(error: &str) -> String {
     } else if lower.starts_with("metadata saved but") {
         "Tags were saved, but the library update failed. Restart Orca to finish updating the library.".into()
     } else if lower.contains("audio file no longer exists") {
-        "Oops, this file is missing. Please check its folder :(".into()
+        "This file is missing. Please check its folder.".into()
+    } else if is_unsupported_source_format(error) {
+        "Device doesn't support this source format. Switch to Shared output to allow conversion."
+            .into()
     } else if lower.starts_with("playback:seek:") {
-        "Oops, this song couldn't seek there. Please try another position.".into()
+        "Couldn't seek to that position. Please try another position.".into()
     } else if lower.starts_with("playback:queue:") {
-        "Oops, the next song couldn't load. Please try another song :(".into()
+        "The next song couldn't load. Please try another song.".into()
     } else if lower.starts_with("playback:") {
-        "Oops, this song couldn't load. It may be damaged or unsupported :(".into()
+        "This song couldn't load. It may be damaged or unsupported.".into()
     } else if lower.starts_with("output:") || lower.contains("audio device unavailable") {
-        "Oops, audio output isn't available. Please check your speakers or headphones.".into()
+        "An audio output error occurred. Please check your speakers or headphones.".into()
     } else if lower.contains("permission denied") || lower.contains("access is denied") {
         "Orca can't access this file. Please check its permissions.".into()
     } else if lower.contains("queue is busy") {
         "One moment, Orca is busy. Please try again shortly.".into()
     } else if lower.contains("cannot open") && lower.contains("database") {
-        "Oops, the library couldn't open. Please restart Orca.".into()
+        "The library couldn't open. Please restart Orca.".into()
     } else if lower.starts_with("artwork lookup timed out") {
         "Artwork search timed out. Please try again.".into()
     } else if lower.starts_with("artwork providers are unavailable") {
@@ -63,9 +66,30 @@ pub fn friendly(error: &str) -> String {
     {
         error.to_string()
     } else {
-        "Oops, that didn't work. Please try again :(".into()
+        "The operation couldn't finish. Please try again.".into()
     }
 }
+
+pub(crate) fn is_unsupported_source_format(error: &str) -> bool {
+    let detail = if let Some(playback) = error.strip_prefix("playback:") {
+        playback
+            .split_once(':')
+            .map_or(playback, |(_, detail)| detail)
+    } else {
+        error.strip_prefix("output:").unwrap_or(error)
+    };
+    detail
+        .trim_start()
+        .starts_with("unsupported-source-format:")
+}
+
+pub(crate) fn is_playback_failure(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.starts_with("playback:")
+        || error.starts_with("output:")
+        || error.contains("audio device unavailable")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,6 +120,17 @@ mod tests {
         assert!(friendly("Audio file no longer exists").contains("folder"));
         assert!(friendly("playback:play: decoder error C:/private/song.flac").contains("damaged"));
         assert!(friendly("playback:seek: unsupported").contains("position"));
+        for prefix in [
+            "",
+            "output:",
+            "output: ",
+            "playback:output:",
+            "playback:unprocessed:",
+        ] {
+            let error = format!("{prefix}unsupported-source-format: private driver detail");
+            assert!(friendly(&error).starts_with("Device doesn't support this source format"));
+            assert!(!friendly(&error).contains("private"));
+        }
         assert!(friendly("output: WASAPI driver 0x123").contains("speakers"));
         assert!(!friendly("output: WASAPI driver 0x123").contains("0x123"));
         assert!(!friendly("SQL error C:/private/orca.db").contains("private"));

@@ -1,8 +1,9 @@
-//! Shape lyrics once per geometry/font change, rasterize only requested rows,
-//! and sweep cached word rectangles without rebuilding glyphs during playback.
+//! Cache lyric layouts and rasterize requested rows off the UI thread.
 mod layout;
+mod projection;
 mod raster;
 use layout::shape;
+#[cfg(test)]
 use raster::raster;
 
 use crate::{LyricLine, LyricRender, LyricSpan};
@@ -23,6 +24,7 @@ const MIN_LYRIC_ROW_HEIGHT: f32 = 68.0;
 
 #[derive(Clone, PartialEq)]
 pub struct Config {
+    pub blur_strength: u8,
     pub left_aligned: bool,
     pub width: u32,
     pub size: u32,
@@ -39,6 +41,7 @@ struct Word {
 }
 struct Line {
     text: String,
+    secondary: String,
     words: Vec<Word>,
 }
 struct Prepare {
@@ -48,6 +51,7 @@ struct Prepare {
 }
 #[derive(Clone)]
 struct Span {
+    caption: bool,
     x: f32,
     y: f32,
     width: f32,
@@ -61,19 +65,40 @@ struct Prepared {
     spans: Vec<Span>,
     height: u32,
 }
-enum ResultRow {
-    Heights(u64, Vec<f32>),
-    Bitmap(u64, usize, u32, u32, Vec<u8>, u32, u32, Vec<Span>),
+enum RenderResult {
+    Heights {
+        generation: u64,
+        heights: Vec<f32>,
+    },
+    Bitmap {
+        generation: u64,
+        index: usize,
+        width: u32,
+        height: u32,
+        padding: u32,
+        bytes: Vec<u8>,
+        blurred: Vec<u8>,
+        ink_top: u32,
+        ink_bottom: u32,
+        spans: Vec<Span>,
+    },
 }
+
+enum Job {
+    Wake,
+    Row(u64, usize),
+}
+
 struct Entry {
     render: LyricRender,
     bytes: usize,
     used: u64,
 }
 pub struct Renderer {
+    romanized: Vec<String>,
     prepare: Arc<Mutex<Option<Prepare>>>,
-    jobs: mpsc::SyncSender<(u64, usize)>,
-    results: mpsc::Receiver<ResultRow>,
+    jobs: mpsc::SyncSender<Job>,
+    results: mpsc::Receiver<RenderResult>,
     generation: Arc<AtomicU64>,
     stop: Arc<AtomicBool>,
     worker: Option<thread::JoinHandle<()>>,
@@ -92,12 +117,16 @@ impl Renderer {
         let prepare = Arc::new(Mutex::new(None::<Prepare>));
         let generation = Arc::new(AtomicU64::new(0));
         let stop = Arc::new(AtomicBool::new(false));
-        let (jobs, rx) = mpsc::sync_channel::<(u64, usize)>(8);
+        let (jobs, rx) = mpsc::sync_channel::<Job>(8);
         let (tx, results) = mpsc::sync_channel(12);
         let work = prepare.clone();
         let epoch = generation.clone();
         let cancelled = stop.clone();
         let worker = thread::spawn(move || {
+            let Ok(first) = rx.recv() else { return };
+            if cancelled.load(Ordering::Relaxed) {
+                return;
+            }
             let mut fonts = FontContext::new();
             fonts.collection.register_fonts(
                 parley::fontique::Blob::new(Arc::new(
@@ -111,7 +140,10 @@ impl Renderer {
             let mut registered_fonts = HashSet::new();
             let mut current = 0;
             let mut config = None;
-            while !cancelled.load(Ordering::Relaxed) {
+            for job in std::iter::once(first).chain(rx) {
+                if cancelled.load(Ordering::Relaxed) {
+                    break;
+                }
                 let next = work.lock().unwrap().take();
                 if let Some(next) = next {
                     current = next.generation;
@@ -138,9 +170,12 @@ impl Renderer {
                             .iter()
                             .map(|line| line.height as f32 / next.config.dpr)
                             .collect();
-                        send(
+                        send_result_cancellable(
                             &tx,
-                            ResultRow::Heights(current, heights),
+                            RenderResult::Heights {
+                                generation: current,
+                                heights,
+                            },
                             &cancelled,
                             &epoch,
                             current,
@@ -148,40 +183,74 @@ impl Renderer {
                     }
                     config = Some(next.config);
                 }
-                let Ok((at, index)) = rx.recv_timeout(Duration::from_millis(20)) else {
+                let Job::Row(request_generation, index) = job else {
                     continue;
                 };
-                if at != current || at != epoch.load(Ordering::Relaxed) {
+                if request_generation != current
+                    || request_generation != epoch.load(Ordering::Relaxed)
+                {
                     continue;
                 }
                 let (Some(line), Some(config)) = (prepared.get(index), config.as_ref()) else {
                     continue;
                 };
-                if config.width as usize * line.height as usize * 4 > BUDGET {
-                    send(
+                let sigma = config.blur_strength.min(100) as f32 * 0.06 * config.dpr;
+                let padding = if config.blur_strength > 0 {
+                    (sigma * 3.0 + config.size as f32 * 0.15).ceil() as u32
+                } else {
+                    0
+                };
+                let width = config.width + padding * 2;
+                let height = line.height + padding * 2;
+                if width as usize * height as usize * 4 > BUDGET {
+                    send_result_cancellable(
                         &tx,
-                        ResultRow::Bitmap(at, index, 0, 0, vec![], 0, 0, vec![]),
+                        RenderResult::Bitmap {
+                            generation: request_generation,
+                            index,
+                            width: 0,
+                            height: 0,
+                            padding: 0,
+                            bytes: vec![],
+                            blurred: vec![],
+                            ink_top: 0,
+                            ink_bottom: 0,
+                            spans: vec![],
+                        },
                         &cancelled,
                         &epoch,
-                        at,
+                        request_generation,
                     );
                 } else {
-                    let bitmap = raster(&line.layout, config.width, line.height, &mut scaler);
-                    send(
+                    let bitmap = raster::raster_padded(
+                        &line.layout,
+                        config.width,
+                        line.height,
+                        padding,
+                        &mut scaler,
+                    );
+                    let blurred = if config.blur_strength > 0 && bitmap.bytes.len() * 2 <= BUDGET {
+                        raster::blur_alpha(&bitmap.bytes, width, height, sigma)
+                    } else {
+                        Vec::new()
+                    };
+                    send_result_cancellable(
                         &tx,
-                        ResultRow::Bitmap(
-                            at,
+                        RenderResult::Bitmap {
+                            generation: request_generation,
                             index,
-                            config.width,
-                            line.height,
-                            bitmap.bytes,
-                            bitmap.ink_top,
-                            bitmap.ink_bottom,
-                            line.spans.clone(),
-                        ),
+                            width,
+                            height,
+                            padding,
+                            bytes: bitmap.bytes,
+                            blurred,
+                            ink_top: bitmap.ink_top,
+                            ink_bottom: bitmap.ink_bottom,
+                            spans: line.spans.clone(),
+                        },
                         &cancelled,
                         &epoch,
-                        at,
+                        request_generation,
                     );
                 }
             }
@@ -196,6 +265,7 @@ impl Renderer {
             config: None,
             entries: HashMap::new(),
             pending: HashSet::new(),
+            romanized: vec![],
             heights: vec![],
             offsets: vec![0.0],
             bytes: 0,
@@ -217,15 +287,22 @@ impl Renderer {
         self.offsets.push(0.0);
         self.bytes = 0;
     }
+    pub fn set_romanization(&mut self, lines: Vec<String>) {
+        if self.romanized != lines {
+            self.romanized = lines;
+            self.invalidate();
+        }
+    }
     pub fn configure(&mut self, config: Config, lines: &[LyricLine]) {
         if self.config.as_ref() == Some(&config) {
             return;
         }
         self.invalidate();
-        let at = self.generation.load(Ordering::Relaxed);
+        let request_generation = self.generation.load(Ordering::Relaxed);
         let lines = lines
             .iter()
-            .map(|line| {
+            .enumerate()
+            .map(|(index, line)| {
                 let mut offset = 0;
                 let words = (0..line.words.row_count())
                     .filter_map(|index| line.words.row_data(index))
@@ -242,15 +319,18 @@ impl Renderer {
                     .collect();
                 Line {
                     text: line.text.to_string(),
+                    secondary: self.romanized.get(index).cloned().unwrap_or_default(),
                     words,
                 }
             })
             .collect();
         *self.prepare.lock().unwrap() = Some(Prepare {
-            generation: at,
+            generation: request_generation,
             config: config.clone(),
             lines,
         });
+        // A full queue already guarantees the worker will observe the latest prepare.
+        let _ = self.jobs.try_send(Job::Wake);
         self.config = Some(config);
     }
     pub fn get_signed(&mut self, index: i32) -> LyricRender {
@@ -276,7 +356,7 @@ impl Renderer {
             && !self.pending.contains(&index)
             && self
                 .jobs
-                .try_send((self.generation.load(Ordering::Relaxed), index))
+                .try_send(Job::Row(self.generation.load(Ordering::Relaxed), index))
                 .is_ok()
         {
             self.pending.insert(index);
@@ -301,7 +381,10 @@ impl Renderer {
         let current = self.generation.load(Ordering::Relaxed);
         while let Ok(result) = self.results.try_recv() {
             match result {
-                ResultRow::Heights(at, heights) if at == current => {
+                RenderResult::Heights {
+                    generation,
+                    heights,
+                } if generation == current => {
                     self.offsets = Vec::with_capacity(heights.len() + 1);
                     self.offsets.push(0.0);
                     for &height in &heights {
@@ -312,11 +395,20 @@ impl Renderer {
                     self.layout_revision = self.layout_revision.wrapping_add(1);
                     changed = true;
                 }
-                ResultRow::Bitmap(at, index, width, height, bytes, ink_top, ink_bottom, spans)
-                    if at == current =>
-                {
+                RenderResult::Bitmap {
+                    generation,
+                    index,
+                    width,
+                    height,
+                    padding,
+                    bytes,
+                    blurred,
+                    ink_top,
+                    ink_bottom,
+                    spans,
+                } if generation == current => {
                     self.pending.remove(&index);
-                    let cost = bytes.len();
+                    let cost = bytes.len() + blurred.len();
                     if cost > BUDGET {
                         continue;
                     }
@@ -339,9 +431,17 @@ impl Renderer {
                             &bytes, width, height,
                         ))
                     };
+                    let blurred = if blurred.is_empty() {
+                        slint::Image::default()
+                    } else {
+                        slint::Image::from_rgba8(SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
+                            &blurred, width, height,
+                        ))
+                    };
                     let spans = spans
                         .into_iter()
                         .map(|span| LyricSpan {
+                            caption: span.caption,
                             x: span.x / dpr,
                             y: span.y / dpr,
                             width: span.width / dpr,
@@ -354,13 +454,15 @@ impl Renderer {
                     self.clock += 1;
                     let render = LyricRender {
                         bitmap,
+                        blurred,
+                        padding: padding as f32 / dpr,
                         height: self
                             .heights
                             .get(index)
                             .copied()
                             .unwrap_or(height as f32 / dpr),
-                        ink_top: ink_top as f32 / dpr,
-                        ink_bottom: ink_bottom as f32 / dpr,
+                        ink_top: (ink_top as f32 - padding as f32) / dpr,
+                        ink_bottom: (ink_bottom as f32 - padding as f32) / dpr,
                         spans: Rc::new(VecModel::from(spans)).into(),
                     };
                     if let Some(old) = self.entries.insert(
@@ -385,14 +487,15 @@ impl Renderer {
 impl Drop for Renderer {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
+        let _ = self.jobs.try_send(Job::Wake);
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }
     }
 }
-fn send(
-    tx: &mpsc::SyncSender<ResultRow>,
-    mut result: ResultRow,
+fn send_result_cancellable(
+    tx: &mpsc::SyncSender<RenderResult>,
+    mut result: RenderResult,
     stop: &AtomicBool,
     generation: &AtomicU64,
     current: u64,

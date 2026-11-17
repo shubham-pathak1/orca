@@ -24,6 +24,64 @@ pub struct SongGrid {
     pub edge: Cell<u32>,
 }
 impl SongGrid {
+    pub fn reset(&self) {
+        self.visible_rows.borrow_mut().clear();
+        self.notify.reset();
+    }
+    pub fn refresh_row(&self, index: usize) {
+        self.read_row(index, true);
+    }
+    fn read_row(&self, index: usize, refresh: bool) -> Option<ModelRc<Song>> {
+        if index >= self.row_count() {
+            return None;
+        }
+        let columns = self.columns.get().max(1);
+        // Live delegates already own these cells; only service updates rebuild them.
+        if !refresh {
+            if let Some(model) = self
+                .visible_rows
+                .borrow()
+                .get(&index)
+                .and_then(Weak::upgrade)
+                .filter(|model| model.row_count() == columns)
+            {
+                return Some(model.into());
+            }
+        }
+        let mut row: Vec<_> = (index * columns
+            ..((index + 1) * columns).min(self.store.count.get()))
+            .map(|at| self.store.row(at, self.edge.get(), true))
+            .collect();
+        // Empty cells keep the last row the same width as every preceding row.
+        row.resize(columns, Song::default());
+        let mut visible = self.visible_rows.borrow_mut();
+        visible.retain(|_, row| row.strong_count() > 0);
+        let model = if let Some(model) = visible
+            .get(&index)
+            .and_then(Weak::upgrade)
+            .filter(|model| model.row_count() == columns)
+        {
+            for (cell, mut song) in row.into_iter().enumerate() {
+                if let Some(old) = model.row_data(cell) {
+                    if old.path == song.path
+                        && old.cover.size().width > 0
+                        && song.cover.size().width == 0
+                        && !song.cover_missing
+                    {
+                        song.cover = old.cover;
+                    }
+                }
+                if model.row_data(cell).as_ref() != Some(&song) {
+                    model.set_row_data(cell, song);
+                }
+            }
+            model
+        } else {
+            Rc::new(VecModel::from(row))
+        };
+        visible.insert(index, Rc::downgrade(&model));
+        Some(model.into())
+    }
     pub fn nearby_range(&self) -> Option<(usize, usize)> {
         let rows = self.visible_rows.borrow();
         let mut live = rows
@@ -70,43 +128,7 @@ impl Model for SongGrid {
         self.store.count.get().div_ceil(self.columns.get().max(1))
     }
     fn row_data(&self, index: usize) -> Option<Self::Data> {
-        if index >= self.row_count() {
-            return None;
-        }
-        let columns = self.columns.get().max(1);
-        let mut row: Vec<_> = (index * columns
-            ..((index + 1) * columns).min(self.store.count.get()))
-            .map(|at| self.store.row(at, self.edge.get(), true))
-            .collect();
-        // Empty cells keep the last row the same width as every preceding row.
-        row.resize(columns, Song::default());
-        let mut visible = self.visible_rows.borrow_mut();
-        visible.retain(|_, row| row.strong_count() > 0);
-        let model = if let Some(model) = visible
-            .get(&index)
-            .and_then(Weak::upgrade)
-            .filter(|model| model.row_count() == columns)
-        {
-            for (cell, mut song) in row.into_iter().enumerate() {
-                if let Some(old) = model.row_data(cell) {
-                    if old.path == song.path
-                        && old.cover.size().width > 0
-                        && song.cover.size().width == 0
-                        && !song.cover_missing
-                    {
-                        song.cover = old.cover;
-                    }
-                }
-                if model.row_data(cell).as_ref() != Some(&song) {
-                    model.set_row_data(cell, song);
-                }
-            }
-            model
-        } else {
-            Rc::new(VecModel::from(row))
-        };
-        visible.insert(index, Rc::downgrade(&model));
-        Some(model.into())
+        self.read_row(index, false)
     }
     fn model_tracker(&self) -> &dyn ModelTracker {
         &self.notify

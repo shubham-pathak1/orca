@@ -1,168 +1,661 @@
 import { LineEdit, ComboBox, Palette } from "std-widgets.slint";
-import { AppState, Song, CatalogGroup, PlaylistChoice, FolderChoice, FolderRuleDraft, LyricLine, LyricWord, LyricSpan, LyricRender, MetadataDraft } from "state.slint";
+import { AppState, LibraryState, PlayerState, LyricsState, PreferencesState, DialogState, Song, SongGridRow, CatalogGroup, SidebarEntry, ArtistCredit, PlaylistChoice, FolderChoice, FolderRuleDraft, LyricLine, LyricWord, LyricSpan, LyricRender, MetadataDraft } from "state.slint";
 import { Icons } from "icons.slint";
 import { SidebarLogos } from "sidebar-logos.slint";
 import { IconButton, TextButton, SearchField, AmbientBackground, ActionFocus } from "controls.slint";
 import { SongsView, CatalogView, CatalogDetails } from "library.slint";
+import { AudioInfo } from "audio-info.slint";
 import { FoldersView } from "folders.slint";
-import { PlayerBar, FullPlayer, QueuePanel, InlineLyricsPanel, PlaylistPicker } from "players.slint";
+import { PlayerBar, FullPlayer, QueuePanel, InlineLyricsPanel, PlaylistPicker, PlayerDragArea } from "players.slint";
 import { SettingsView } from "settings.slint";
 import { FolderReviewDialog } from "folder_review.slint";
 import { MetadataEditor, TrackMenu, PlaylistDialog, CollectionDialog, CollectionMenu, RemoveFolderDialog } from "dialogs.slint";
 import "assets/fonts/PlusJakartaSans-Regular.ttf";
 import "assets/fonts/PlusJakartaSans-SemiBold.ttf";
 import "assets/fonts/PlusJakartaSans-Bold.ttf";
-export { AppState, Song, CatalogGroup, PlaylistChoice, FolderChoice, FolderRuleDraft, LyricLine, LyricWord, LyricSpan, LyricRender, MetadataDraft }
+export {
+    AppState, LibraryState, PlayerState, LyricsState, PreferencesState, DialogState, Song, SongGridRow, CatalogGroup, SidebarEntry, ArtistCredit, PlaylistChoice, FolderChoice, FolderRuleDraft, LyricLine, LyricWord, LyricSpan, LyricRender, MetadataDraft
+}
 
 export component OrcaWindow inherits Window {
-    title:"Orca";icon:SidebarLogos.logo-32;preferred-width:1280px;preferred-height:820px;min-width:500px;min-height:600px;
-    background:AppState.base;default-font-family:AppState.font-family;
-    private property<bool> light-theme:AppState.light-theme;
-    changed light-theme=>{Palette.color-scheme=AppState.light-theme ? ColorScheme.light : ColorScheme.dark;}
-    init => {Palette.color-scheme=AppState.light-theme ? ColorScheme.light : ColorScheme.dark;shell.focus();}
+    title: "Orca";
+    icon: SidebarLogos.logo-32;
+    preferred-width: 1280px;
+    preferred-height: 820px;
+    min-width: 500px;
+    min-height: 600px;
+    background: PreferencesState.base;
+    default-font-family: PreferencesState.font-family;
+    out property<length> browse-width: browse-area.width;
+    private property<bool> light-theme: PreferencesState.light-theme;
+    changed light-theme=>{
+        Palette.color-scheme=PreferencesState.light-theme ? ColorScheme.light : ColorScheme.dark;
+    }
+    init => {
+        Palette.color-scheme=PreferencesState.light-theme ? ColorScheme.light : ColorScheme.dark;
+        shell.focus();
+    }
     callback focus-shell();
-    focus-shell=>{AppState.search-focus-pending=false;AppState.text-input-focused=false;AppState.search-input-focused=false;if AppState.full-player {full-focus.focus();} else {shell.focus();}}
-    private property <length> sidebar-width:AppState.icon-sidebar ? 56px : 132px;
-    private property<string> active-view:AppState.view;
-    changed active-view=>{AppState.menu-open=false;AppState.collection-menu-open=false;if AppState.view=="settings" || AppState.view=="songs" {AppState.detail-key="";}}
-    private property<string> selection-context:AppState.view+":"+AppState.detail-key;
-    changed selection-context=>{AppState.playlist-selection("cancel",0);}
-    private property<bool> dialog-active:AppState.modal-open;
-    changed dialog-active=>{if !AppState.modal-open {root.focus-shell();}}
-    private property<bool> compact:root.width<1024px;
-    private property<bool> narrow:root.width<680px;
-    private property<length> player-height:root.width - root.sidebar-width<860px ? (AppState.quality-info ? 148px : 136px) : 96px;
-    private property<bool> side-panel-open:!AppState.full-player && ((AppState.lyrics-open && AppState.now.path!="") || AppState.queue-open);
-    private property<bool> side-panel-docked:root.side-panel-open && root.width>=1100px;
-    private property<length> side-panel-width:clamp(root.width*0.28,320px,420px);
-    private property<length> header-height:root.narrow && AppState.view=="songs" ? 168px : root.compact ? 116px : 64px;
+    callback artwork-ready();
+    focus-shell=>{
+        AppState.search-focus-pending=false;
+        AppState.text-input-focused=false;
+        AppState.search-input-focused=false;
+        if PlayerState.full-player {
+            full-focus.focus();
+        } else {
+            shell.focus();
+        }
+    }
+    private property <length> sidebar-width: PreferencesState.icon-sidebar ? 56px : 132px;
+    private property<string> active-view: AppState.view;
+    changed active-view=>{
+        DialogState.menu-open=false;
+        DialogState.collection-menu-open=false;
+        if AppState.view=="settings" || AppState.view=="songs" {
+            LibraryState.detail-key="";
+        }
+    }
+    private property<string> selection-context: AppState.view+":"+LibraryState.detail-key;
+    changed selection-context=>{
+        LibraryState.playlist-selection("cancel",0);
+    }
+    private property<bool> dialog-active: AppState.modal-open;
+    changed dialog-active=>{
+        if !AppState.modal-open {
+            root.focus-shell();
+        }
+    }
+    private property<bool> compact: root.width<1024px;
+    private property<bool> narrow: root.width<680px;
+    private property<length> player-height: root.width - root.sidebar-width<860px ? 148px : 96px;
+    private property<bool> side-panel-open: !PlayerState.full-player && ((LyricsState.lyrics-open && PlayerState.now.path!="") || PlayerState.queue-open);
+    private property<bool> side-panel-docked: ((LyricsState.lyrics-open && PlayerState.now.path!="") || PlayerState.queue-open) && root.width>=1100px;
+    private property<length> side-panel-width: clamp(root.width*0.28,320px,420px);
+    private property<length> header-height: root.narrow && AppState.view=="songs" ? 168px : root.compact ? 116px : 64px;
     keyboard-root:=FocusScope {
-        focus-on-tab-navigation:false;
-        x:0px;y:0px;width:root.width;height:root.height;
+        focus-on-tab-navigation: false;
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
         capture-key-pressed(event)=>{
-            if event.text==Key.Tab {AppState.keyboard-navigation=true;}
-            if event.modifiers.control && event.modifiers.shift && (event.text=="b" || event.text=="B") && AppState.tray-available && !AppState.phantom-global {AppState.phantom();return accept;}
-            if event.modifiers.control && !event.modifiers.alt && !event.modifiers.shift && (event.text=="k" || event.text=="K") && AppState.keyboard("focus-search",false) {return accept;}
-            if event.modifiers.control && !event.modifiers.alt && !event.modifiers.shift && event.text=="," && AppState.keyboard("open-settings",false) {return accept;}
-            if !event.modifiers.control && (!AppState.text-input-focused || event.modifiers.alt || event.text==Key.Escape || event.text==Key.F11) && event.text!=" " && AppState.keyboard(event.text,event.modifiers.alt) {return accept;}
+            if PlayerState.full-player {
+                PlayerState.player-activity();
+            }
+            if event.text==Key.Tab {
+                AppState.keyboard-navigation=true;
+            }
+            if event.modifiers.control && !event.modifiers.alt && !event.modifiers.shift && event.text=="0" && AppState.keyboard("reset-scale",false) {
+                return accept;
+            }
+            if event.text==" " && !event.modifiers.control && !event.modifiers.alt && !AppState.keyboard-navigation && !AppState.text-input-focused && AppState.keyboard(event.text,false) {
+                return accept;
+            }
+            if event.modifiers.control && event.modifiers.shift && (event.text=="b" || event.text=="B") && AppState.tray-available && !AppState.phantom-global {
+                AppState.phantom();
+                return accept;
+            }
+            if event.modifiers.control && !event.modifiers.alt && !event.modifiers.shift && (event.text=="k" || event.text=="K") && AppState.keyboard("focus-search",false) {
+                return accept;
+            }
+            if event.modifiers.control && !event.modifiers.alt && !event.modifiers.shift && event.text=="," && AppState.keyboard("open-settings",false) {
+                return accept;
+            }
+            if !event.modifiers.control && (!AppState.text-input-focused || event.modifiers.alt || event.text==Key.Escape || event.text==Key.F11) && event.text!=" " && AppState.keyboard(event.text,event.modifiers.alt) {
+                return accept;
+            }
             return reject;
         }
-    if AppState.blurred-background && !AppState.full-player: AmbientBackground {source:AppState.backdrop;strength:AppState.light-theme ? 0.08 : 0.24;}
-    shell := FocusScope {
-        focus-on-tab-navigation:false;
-        key-pressed(event)=>{if event.text==" " && !AppState.text-input-focused && AppState.keyboard(event.text,false) {return accept;}return reject;}
-        x:0px;y:0px;width:root.width;height:root.height;
-        enabled:!AppState.full-player;
-        TouchArea {clicked=>{shell.focus();}}
-        Rectangle {
-            x:0px;y:0px;width:root.sidebar-width;height:root.height;
-            Image {x:16px;y:14px;width:24px;height:24px;source:AppState.display-dpr<=1 ? SidebarLogos.logo-24 : AppState.display-dpr<=1.25 ? SidebarLogos.logo-30 : AppState.display-dpr<=1.5 ? SidebarLogos.logo-36 : AppState.display-dpr<=2 ? SidebarLogos.logo-48 : AppState.display-dpr<=3 ? SidebarLogos.logo-72 : SidebarLogos.logo-96;image-fit:contain;}
-            if !AppState.icon-sidebar: Text {x:44px;y:20px;text:"Orca";color:AppState.ink;font-size:16px;font-weight:700;}
-            for item[index] in [Icons.library,Icons.users,Icons.disc,Icons.genre,Icons.list,Icons.folder,Icons.settings]: Rectangle {
-                x:8px;y:64px+index*44px;width:parent.width - 16px;height:40px;
-                border-width:nav.has-focus ? 2px : 0px;border-color:AppState.ink;
-                accessible-role:button;accessible-label:["Library","Artists","Albums","Genres","Playlists","Folders","Settings"][index];
-                nav:=ActionFocus {activated=>{AppState.view=["songs","artists","albums","genres","playlists","folders","settings"][index];AppState.search="";AppState.detail-key="";AppState.browse();}}
-                border-radius:6px;background:AppState.view==["songs","artists","albums","genres","playlists","folders","settings"][index] ? AppState.ink.with-alpha(0.1216) : transparent;
-                Image {x:12px;y:10px;width:20px;height:20px;source:item;colorize:AppState.ink;opacity:0.65;}
-                if !AppState.icon-sidebar: Text {x:40px;height:40px;text:["Library","Artists","Albums","Genres","Playlists","Folders","Settings"][index];color:AppState.ink;font-size:14px;vertical-alignment:center;}
-                TouchArea {clicked => {AppState.unfocus();AppState.view=["songs","artists","albums","genres","playlists","folders","settings"][index];AppState.search="";AppState.detail-key="";AppState.browse();}}
-            }
-            IconButton {label:"Add music folder";x:8px;y:parent.height - 104px;icon:Icons.folderPlus;clicked => {AppState.add-folder();}}
-            if AppState.folders.length>0: Rectangle {x:28px;y:parent.height - 98px;width:16px;height:16px;border-radius:8px;background:AppState.ink;
-                Text {text:AppState.folders.length;color:AppState.inverse-ink;font-size:9px;font-weight:700;horizontal-alignment:center;vertical-alignment:center;}}
-            IconButton {label:"Refresh library";x:8px;y:parent.height - 60px;icon:Icons.refresh;clicked => {AppState.refresh();}}
+        if PreferencesState.blurred-background && !PlayerState.full-player: AmbientBackground {
+            source: PlayerState.backdrop;
+            strength: 1;
+            subtle: false;
         }
-        Rectangle {
-            x:root.sidebar-width+20px;y:20px;width:root.width - self.x - 20px - (root.side-panel-docked ? root.side-panel-width : 0px);height:root.height - root.player-height - 40px;
-            Rectangle {x:0px;y:0px;height:32px;clip:true;width:root.compact ? parent.width - (AppState.view=="playlists" ? 180px : 0px) : max(120px,parent.width - 650px);
-                for title[index] in ["Library","Artists","Albums","Genres","Playlists","Folders","Settings"]: Rectangle {
-                    if AppState.detail-key=="" && AppState.view==["songs","artists","albums","genres","playlists","folders","settings"][index]: Text {
-                    x:0px;y:0px;width:parent.width;height:32px;text:title;
-                    color:AppState.ink;font-weight:700;font-size:24px*AppState.scale;overflow:elide;
+        shell := FocusScope {
+            visible: !PlayerState.full-player;
+            focus-on-tab-navigation: false;
+            key-pressed(event)=>{
+                if event.text==" " && !AppState.text-input-focused && AppState.keyboard(event.text,false) {
+                    return accept;
+                }
+                return reject;
+            }
+            x: 0px;
+            y: 0px;
+            width: root.width;
+            height: root.height;
+            enabled: !PlayerState.full-player;
+            TouchArea {
+                clicked=>{
+                    shell.focus();
+                }
+            }
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                width: root.sidebar-width;
+                height: root.height;
+                Image {
+                    x: 16px;
+                    y: 14px;
+                    width: 24px;
+                    height: 24px;
+                    source: AppState.display-dpr<=1 ? SidebarLogos.logo-24 : AppState.display-dpr<=1.25 ? SidebarLogos.logo-30 : AppState.display-dpr<=1.5 ? SidebarLogos.logo-36 : AppState.display-dpr<=2 ? SidebarLogos.logo-48 : AppState.display-dpr<=3 ? SidebarLogos.logo-72 : SidebarLogos.logo-96;
+                    image-fit: contain;
+                }
+                if !PreferencesState.icon-sidebar: Text {
+                    x: 44px;
+                    y: 20px;
+                    text: "Orca";
+                    color: PreferencesState.ink;
+                    font-size: 16px;
+                    font-weight: 700;
+                }
+                VerticalLayout {
+                    x: 8px;
+                    y: 64px;
+                    width: parent.width - 16px;
+                    spacing: 0;
+                    alignment: start;
+                    for entry in [{
+                        page: "songs",label: "Library",icon: Icons.library,shown: PreferencesState.sidebar-songs
+                    },{
+                        page: "artists",label: "Artists",icon: Icons.users,shown: PreferencesState.sidebar-artists
+                    },{
+                        page: "albums",label: "Albums",icon: Icons.disc,shown: PreferencesState.sidebar-albums
+                    },{
+                        page: "genres",label: "Genres",icon: Icons.genre,shown: PreferencesState.sidebar-genres
+                    },{
+                        page: "playlists",label: "Playlists",icon: Icons.list,shown: PreferencesState.sidebar-playlists
+                    },{
+                        page: "folders",label: "Folders",icon: Icons.folder,shown: PreferencesState.sidebar-folders
+                    },{
+                        page: "composers",label: "Composers",icon: Icons.composer,shown: PreferencesState.sidebar-composers
+                    },{
+                        page: "years",label: "Years",icon: Icons.calendar,shown: PreferencesState.sidebar-years
+                    },{
+                        page: "settings",label: "Settings",icon: Icons.settings,shown: true
+                    }]: Rectangle {
+                        height: entry.shown ? 44px : 0px;
+                        if entry.shown: Rectangle {
+                            x: 0px;
+                            y: 0px;
+                            width: parent.width;
+                            height: 40px;
+                            border-width: AppState.keyboard-navigation && nav.has-focus ? 2px : 0px;
+                            border-color: PreferencesState.ink;
+                            accessible-role: button;
+                            accessible-label: entry.label;
+                            nav:=ActionFocus {
+                                activated=>{
+                                    AppState.view=entry.page;
+                                    LibraryState.search="";
+                                    LibraryState.detail-key="";
+                                    LibraryState.browse();
+                                }
+                            }
+                            border-radius: 6px;
+                            background: AppState.view==entry.page ? PreferencesState.ink.with-alpha(0.1216) : transparent;
+                            Image {
+                                x: 12px;
+                                y: 10px;
+                                width: 20px;
+                                height: 20px;
+                                source: entry.icon;
+                                colorize: PreferencesState.ink;
+                                opacity: 0.65;
+                            }
+                            if !PreferencesState.icon-sidebar: Text {
+                                x: 40px;
+                                height: 40px;
+                                text: entry.label;
+                                color: PreferencesState.ink;
+                                font-size: 14px;
+                                vertical-alignment: center;
+                            }
+                            if PreferencesState.show-tooltips && PreferencesState.icon-sidebar: Tooltip {
+                                text: @markdown("\{entry.label}");
+                            }
+                            TouchArea {
+                                clicked=>{
+                                    AppState.unfocus();
+                                    AppState.view=entry.page;
+                                    LibraryState.search="";
+                                    LibraryState.detail-key="";
+                                    LibraryState.browse();
+                                }
+                            }
+                        }
+                    }
+                }
+                IconButton {
+                    label: "Add music folder";
+                    x: 8px;
+                    y: parent.height - 104px;
+                    icon: Icons.folderPlus;
+                    clicked => {
+                        LibraryState.add-folder();
+                    }
+                }
+                if LibraryState.folders.length>0: Rectangle {
+                    x: 28px;
+                    y: parent.height - 98px;
+                    width: 16px;
+                    height: 16px;
+                    border-radius: 8px;
+                    background: PreferencesState.ink;
+                    Text {
+                        text: LibraryState.folders.length;
+                        color: PreferencesState.inverse-ink;
+                        font-size: 9px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                IconButton {
+                    label: "Refresh library";
+                    x: 8px;
+                    y: parent.height - 60px;
+                    icon: Icons.refresh;
+                    clicked => {
+                        LibraryState.refresh();
                     }
                 }
             }
-            Text {x:0px;y:32px;visible:AppState.detail-key=="";height:20px;text:AppState.view=="settings" ? "Tune Orca for the way you listen" : AppState.view=="songs" ? AppState.summary : AppState.catalog-summary;color:AppState.secondary-ink;font-size:14px*AppState.scale;font-weight:600;}
-            search := SearchField {
-                y:root.compact ? 64px : 0px;
-                visible:AppState.detail-key=="";
-                x:root.compact ? 0px : max(200px,parent.width - (AppState.view=="songs" ? 678px : AppState.view=="folders" ? 396px : 300px));
-                width:root.compact ? parent.width - (AppState.view=="songs" && !root.narrow ? 294px : AppState.view=="folders" ? 96px : 0px) : AppState.view=="songs" ? 380px : 300px;height:40px;
-                text <=> AppState.search;placeholder-text:"Search "+(AppState.view=="songs" ? "library" : AppState.view)+"…";
-                edited => {AppState.browse();}
+            browse-area := Rectangle {
+                x: root.sidebar-width+20px;
+                y: 20px;
+                width: root.width - self.x - 20px - (root.side-panel-docked ? root.side-panel-width : 0px);
+                height: root.height - root.player-height - 40px;
+                Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    height: 32px;
+                    clip: true;
+                    width: root.compact ? parent.width - (AppState.view=="playlists" ? 180px : 0px) : max(120px,parent.width - 650px);
+                    for title[index] in ["Library","Artists","Albums","Genres","Playlists","Folders","Settings","Composers","Years"]: Rectangle {
+                        if LibraryState.detail-key=="" && AppState.view==["songs","artists","albums","genres","playlists","folders","settings","composers","years"][index]: Text {
+                            x: 0px;
+                            y: 0px;
+                            width: parent.width;
+                            height: 32px;
+                            text: title;
+                            color: PreferencesState.ink;
+                            font-weight: 700;
+                            font-size: 24px*PreferencesState.scale;
+                            overflow: elide;
+                        }
+                    }
+                }
+                Text {
+                    x: 0px;
+                    y: 32px;
+                    visible: LibraryState.detail-key=="";
+                    height: 20px;
+                    text: AppState.view=="settings" ? "Tune Orca for the way you listen" : AppState.view=="songs" ? LibraryState.summary : LibraryState.catalog-summary;
+                    color: PreferencesState.secondary-ink;
+                    font-size: 14px*PreferencesState.scale;
+                    font-weight: 600;
+                }
+                search := SearchField {
+                    y: root.compact ? 64px : 0px;
+                    visible: LibraryState.detail-key=="";
+                    x: root.compact ? 0px : max(200px,parent.width - (AppState.view=="songs" ? 678px : AppState.view=="folders" ? 396px : 300px));
+                    width: root.compact ? parent.width - (AppState.view=="songs" && !root.narrow ? 294px : AppState.view=="folders" ? 96px : 0px) : AppState.view=="songs" ? 380px : 300px;
+                    height: 40px;
+                    text <=> LibraryState.search;
+                    placeholder-text: "Search "+(AppState.view=="songs" ? "library" : AppState.view)+"…";
+                    edited => {
+                        LibraryState.browse();
+                    }
+                }
+                if AppState.view=="folders" && LibraryState.detail-key=="": HorizontalLayout {
+                    x: parent.width - 80px;
+                    y: root.compact ? 64px : 0px;
+                    width: 80px;
+                    height: 40px;
+                    IconButton {
+                        label: "List view";
+                        width: 40px;
+                        icon: Icons.list;
+                        primary: !PreferencesState.folder-grid;
+                        clicked=>{
+                            PreferencesState.folder-grid=false;
+                            PreferencesState.save-settings();
+                            LibraryState.browse();
+                        }
+                    }
+                    IconButton {
+                        label: "Grid view";
+                        width: 40px;
+                        icon: Icons.grid;
+                        primary: PreferencesState.folder-grid;
+                        clicked=>{
+                            PreferencesState.folder-grid=true;
+                            PreferencesState.save-settings();
+                            LibraryState.browse();
+                        }
+                    }
+                }
+                if AppState.view=="songs": HorizontalLayout {
+                    x: root.narrow ? 0px : parent.width - 242px;
+                    y: root.narrow ? 112px : root.compact ? 64px : 0px;
+                    width: 242px;
+                    height: 40px;
+                    spacing: 12px;
+                    HorizontalLayout {
+                        width: 80px;
+                        spacing: 0px;
+                        IconButton {
+                            label: "List view";
+                            width: 40px;
+                            icon: Icons.list;
+                            primary: !PreferencesState.grid;
+                            clicked=>{
+                                if PreferencesState.grid {
+                                    LibraryState.library-view-restore=true;
+                                    PreferencesState.grid=false;
+                                    PreferencesState.save-settings();
+                                }
+                            }
+                        }
+                        IconButton {
+                            label: "Grid view";
+                            width: 40px;
+                            icon: Icons.grid;
+                            primary: PreferencesState.grid;
+                            clicked=>{
+                                if !PreferencesState.grid {
+                                    LibraryState.library-view-restore=true;
+                                    PreferencesState.grid=true;
+                                    PreferencesState.save-settings();
+                                }
+                            }
+                        }
+                    }
+                    ComboBox {
+                        enabled: AppState.focus-layer=="browse";
+                        accessible-label: "Sort library";
+                        width: 150px;
+                        model: ["Artist","Title","Album","Recently added","Duration"];
+                        current-index: (LibraryState.sort=="artist" || LibraryState.sort=="artist-asc" || LibraryState.sort=="artist-desc") ? 0 : (LibraryState.sort=="title" || LibraryState.sort=="title-asc" || LibraryState.sort=="title-desc") ? 1 : (LibraryState.sort=="album" || LibraryState.sort=="album-asc" || LibraryState.sort=="album-desc") ? 2 : (LibraryState.sort=="duration-asc" || LibraryState.sort=="duration-desc") ? 4 : 3;
+                        selected(value) => {
+                            LibraryState.sort=["artist","title","album","recent","duration-asc"][self.current-index];
+                            PreferencesState.save-settings();
+                            LibraryState.browse();
+                        }
+                    }
+                }
+                if AppState.view=="playlists" && LibraryState.detail-key=="": TextButton {
+                    x: root.compact ? parent.width - 120px : max(200px,parent.width - 440px);
+                    y: 0px;
+                    width: 120px;
+                    text: "New playlist";
+                    clicked=>{
+                        DialogState.playlist-action("new-dialog","");
+                    }
+                }
+                if AppState.view=="playlists" && LibraryState.detail-key=="": IconButton {
+                    label: "Import playlist (.m3u / .m3u8)";
+                    x: root.compact ? parent.width - 168px : max(152px,parent.width - 488px);
+                    y: 0px;
+                    icon: Icons.export;
+                    outlined: true;
+                    clicked=>{
+                        DialogState.playlist-action("import","");
+                    }
+                }
+                if AppState.view=="songs" && LibraryState.detail-key=="": SongsView {
+                    y: root.header-height;
+                    height: parent.height - self.y;
+                }
+                if LibraryState.detail-key!="" && (AppState.view=="artists" || AppState.view=="albums" || AppState.view=="genres" || AppState.view=="playlists" || AppState.view=="composers" || AppState.view=="years"): CatalogDetails {
+                }
+                if AppState.view!="songs" && AppState.view!="settings" && AppState.view!="folders" && LibraryState.detail-key=="": CatalogView {
+                    y: root.header-height;
+                    height: parent.height - self.y;
+                }
+                if AppState.view=="folders": FoldersView {
+                    y: LibraryState.detail-key=="" ? root.header-height : 0px;
+                    height: parent.height - self.y;
+                }
+                if AppState.view=="settings": SettingsView {
+                    y: root.header-height;
+                    height: parent.height - self.y;
+                }
             }
-            if AppState.view=="folders" && AppState.detail-key=="": HorizontalLayout {
-                x:parent.width - 80px;y:root.compact ? 64px : 0px;width:80px;height:40px;
-                IconButton {label:"List view";width:40px;icon:Icons.list;primary:!AppState.folder-grid;clicked=>{AppState.folder-grid=false;AppState.save-settings();AppState.browse();}}
-                IconButton {label:"Grid view";width:40px;icon:Icons.grid;primary:AppState.folder-grid;clicked=>{AppState.folder-grid=true;AppState.save-settings();AppState.browse();}}
+            if root.side-panel-open && LyricsState.lyrics-open && !PlayerState.queue-open: InlineLyricsPanel {
+                panel-width: root.side-panel-width;
+                panel-height: root.height - root.player-height;
+                overlay: !root.side-panel-docked;
+                x: root.width - self.width;
+                y: 0px;
             }
-            if AppState.view=="songs": HorizontalLayout {
-                x:root.narrow ? 0px : parent.width - 242px;y:root.narrow ? 112px : root.compact ? 64px : 0px;width:242px;height:40px;spacing:12px;
-                HorizontalLayout {width:80px;spacing:0px;
-                    IconButton {label:"List view";width:40px;icon:Icons.list;primary:!AppState.grid;clicked=>{if AppState.grid {AppState.library-view-restore=true;AppState.grid=false;AppState.save-settings();}}}
-                    IconButton {label:"Grid view";width:40px;icon:Icons.grid;primary:AppState.grid;clicked=>{if !AppState.grid {AppState.library-view-restore=true;AppState.grid=true;AppState.save-settings();}}}}
-                ComboBox {enabled:AppState.focus-layer=="browse";accessible-label:"Sort library";width:150px;model:["Artist","Title","Album","Recently added"];current-index:AppState.sort=="artist" ? 0 : AppState.sort=="title" ? 1 : AppState.sort=="album" ? 2 : 3;selected(value) => {AppState.sort=["artist","title","album","recent"][self.current-index];AppState.save-settings();AppState.browse();}}
+            if root.side-panel-open && PlayerState.queue-open: QueuePanel {
+                docked: true;
+                overlay: !root.side-panel-docked;
+                dock-width: root.side-panel-width;
+                dock-height: root.height - root.player-height;
+                x: root.width - self.width;
+                y: 0px;
             }
-            if AppState.view=="playlists" && AppState.detail-key=="": TextButton {x:root.compact ? parent.width - 120px : max(200px,parent.width - 440px);y:0px;width:120px;text:"New playlist";clicked=>{AppState.playlist-action("new-dialog","");}}
-            if AppState.view=="playlists" && AppState.detail-key=="": IconButton {label:"Import playlist (.m3u / .m3u8)";x:root.compact ? parent.width - 168px : max(152px,parent.width - 488px);y:0px;icon:Icons.export;outlined:true;clicked=>{AppState.playlist-action("import","");}}
-            if AppState.view=="songs" && AppState.detail-key=="": SongsView {y:root.header-height;height:parent.height - self.y;}
-            if AppState.detail-key!="" && (AppState.view=="artists" || AppState.view=="albums" || AppState.view=="genres" || AppState.view=="playlists"): CatalogDetails {}
-            if AppState.view!="songs" && AppState.view!="settings" && AppState.view!="folders" && AppState.detail-key=="": CatalogView {y:root.header-height;height:parent.height - self.y;}
-            if AppState.view=="folders": FoldersView {y:AppState.detail-key=="" ? root.header-height : 0px;height:parent.height - self.y;}
-            if AppState.view=="settings": SettingsView {y:root.header-height;height:parent.height - self.y;}
+            PlayerBar {
+                x: root.sidebar-width;
+                y: root.height - root.player-height;
+                width: root.width - self.x;
+                height: root.player-height;
+            }
         }
-        if root.side-panel-open && AppState.lyrics-open && !AppState.queue-open: InlineLyricsPanel {panel-width:root.side-panel-width;panel-height:root.height - root.player-height;overlay:!root.side-panel-docked;x:root.width - self.width;y:0px;}
-        if root.side-panel-open && AppState.queue-open: QueuePanel {docked:true;overlay:!root.side-panel-docked;dock-width:root.side-panel-width;dock-height:root.height - root.player-height;x:root.width - self.width;y:0px;}
-        PlayerBar {x:root.sidebar-width;y:root.height - root.player-height;width:root.width - self.x;height:root.player-height;}
-    }
-    full-focus:=FocusScope {
-        focus-on-tab-navigation:false;
-        key-pressed(event)=>{if event.text==" " && AppState.keyboard(event.text,false) {return accept;}return reject;}
-        enabled:AppState.full-player;
-        private property<bool> active:AppState.full-player;
-        changed active=>{if AppState.full-player {full-focus.focus();} else if !AppState.search-focus-pending {shell.focus();}}
-        if AppState.full-player: FullPlayer {}
-    }
-    if AppState.queue-open && AppState.full-player: TouchArea {clicked => {AppState.queue-open=false;}}
-    if AppState.queue-open && AppState.full-player: QueuePanel {available-width:root.width;available-height:root.height;x:root.width - self.width - 24px;y:root.height - self.height - 24px;}
-    if AppState.playlist-picker-open: TouchArea {clicked=>{AppState.playlist-picker-open=false;}}
-    if AppState.playlist-picker-open: PlaylistPicker {dark:AppState.full-player && AppState.full-player-dark;x:root.width - self.width - 24px;y:AppState.full-player ? 104px : root.height - root.player-height - self.height - 12px;}
-    if AppState.menu-open: TouchArea {clicked => {AppState.menu-open=false;}}
-    if AppState.menu-open: TrackMenu {x:clamp(AppState.menu-x*1px,8px,root.width - self.width - 8px);y:clamp(AppState.menu-y*1px,8px,root.height - self.height - 8px);}
-    if AppState.metadata-open: Rectangle {
-        background:#000000b8;
-        TouchArea {}
-        MetadataEditor {x:(parent.width - self.width)/2;y:(parent.height - self.height)/2;width:min(1000px,parent.width - 40px);height:min(720px,parent.height - 40px);}
-    }
-    if AppState.collection-menu-open: TouchArea {clicked=>{AppState.collection-menu-open=false;}}
-    if AppState.collection-menu-open: CollectionMenu {x:clamp(AppState.collection-menu-x*1px,8px,root.width - self.width - 8px);y:clamp(AppState.collection-menu-y*1px,8px,root.height - self.height - 8px);}
-    if AppState.collection-dialog: Rectangle {background:#000000b8;TouchArea {}CollectionDialog {width:min(440px,parent.width - 40px);height:min(AppState.collection-kind=="folders" ? 540px : 440px,parent.height - 40px);x:(parent.width - self.width)/2;y:(parent.height - self.height)/2;}}
-    if AppState.playlist-dialog: Rectangle {background:#000000b8;TouchArea {}PlaylistDialog {width:min(440px,parent.width - 40px);x:(parent.width - self.width)/2;y:(parent.height - self.height)/2;}}
-    if AppState.folder-dialog: Rectangle {background:#000000b8;TouchArea {}FolderReviewDialog {width:min(620px,parent.width - 40px);height:min(max(340px,266px + AppState.folder-choices.length * 52px),min(600px,parent.height - 32px));x:(parent.width - self.width)/2;y:(parent.height - self.height)/2;}}
-    if AppState.folder-remove-open: Rectangle {background:#000000b8;TouchArea {}RemoveFolderDialog {width:min(440px,parent.width - 40px);x:(parent.width - self.width)/2;y:(parent.height - self.height)/2;}}
-    if AppState.error!="": Rectangle {
-        x:root.sidebar-width+20px;y:root.height - 156px;width:min(650px,root.width - self.x - 20px);height:48px;
-        background:AppState.light-theme ? #fff0ee : #292123;border-color:AppState.light-theme ? #b45e62 : #6f444a;border-width:1px;border-radius:6px;
-        Text {x:12px;width:parent.width - 60px;text:AppState.error;color:AppState.ink;vertical-alignment:center;overflow:elide;}
-        IconButton {label:"Close";x:parent.width - 44px;y:4px;icon:Icons.close;clicked => {AppState.error="";}}
-    }
+        full-focus:=FocusScope {
+            focus-on-tab-navigation: false;
+            key-pressed(event)=>{
+                if event.text==" " && AppState.keyboard(event.text,false) {
+                    return accept;
+                }
+                return reject;
+            }
+            enabled: PlayerState.full-player;
+            private property<bool> active: PlayerState.full-player;
+            changed active=>{
+                if PlayerState.full-player || !AppState.search-focus-pending {
+                    root.focus-shell();
+                }
+            }
+            if PlayerState.full-player: Rectangle {
+                x: 0px;
+                y: 0px;
+                width: root.width;
+                height: root.height;
+                background: PreferencesState.full-player-dark ? #090a0c : PreferencesState.base;
+            }
+            if PlayerState.full-player: FullPlayer {
+                x: 0px;
+                y: 0px;
+                width: root.width;
+            }
+        }
+        if PlayerState.queue-open && PlayerState.full-player: QueuePanel {
+            docked: true;
+            overlay: root.width<1000px;
+            dock-width: min(root.width - 32px,clamp(root.width*0.32,300px,420px));
+            dock-height: root.height;
+            x: root.width - self.width;
+            y: 0px;
+        }
+        if DialogState.playlist-picker-open: TouchArea {
+            clicked=>{
+                DialogState.playlist-picker-open=false;
+            }
+        }
+        if DialogState.playlist-picker-open: PlaylistPicker {
+            dark: PlayerState.full-player && PreferencesState.full-player-dark;
+            x: DialogState.playlist-picker-x>0 ? clamp(DialogState.playlist-picker-x*1px - self.width/2+20px,16px,root.width - self.width - 16px) : root.width - self.width - 24px;
+            y: DialogState.playlist-picker-y>0 ? clamp(DialogState.playlist-picker-y*1px - self.height - 12px,16px,root.height - self.height - 16px) : PlayerState.full-player ? 104px : root.height - root.player-height - self.height - 12px;
+        }
+        if DialogState.menu-open: TouchArea {
+            clicked => {
+                DialogState.menu-open=false;
+            }
+        }
+        if DialogState.menu-open: TrackMenu {
+            x: clamp(DialogState.menu-x*1px,8px,root.width - self.width - 8px);
+            y: clamp(DialogState.menu-y*1px,8px,root.height - self.height - 8px);
+        }
+        if DialogState.audio-info-open: Rectangle {
+            background: #00000088;
+            TouchArea {
+                clicked=>{
+                    DialogState.audio-info-open=false;
+                }
+            }
+            AudioInfo {
+                x: (parent.width - self.width)/2;
+                y: (parent.height - self.height)/2;
+                width: min(480px,parent.width - 40px);
+                height: min(self.preferred-height,parent.height - 40px);
+            }
+        }
+        if DialogState.metadata-open: Rectangle {
+            background: #000000b8;
+            TouchArea {
+            }
+            MetadataEditor {
+                x: (parent.width - self.width)/2;
+                y: (parent.height - self.height)/2;
+                width: min(1000px,parent.width - 40px);
+                height: min(720px,parent.height - 40px);
+            }
+        }
+        if DialogState.collection-menu-open: TouchArea {
+            clicked=>{
+                DialogState.collection-menu-open=false;
+            }
+        }
+        if DialogState.collection-menu-open: CollectionMenu {
+            x: clamp(DialogState.collection-menu-x*1px,8px,root.width - self.width - 8px);
+            y: clamp(DialogState.collection-menu-y*1px,8px,root.height - self.height - 8px);
+        }
+        if DialogState.collection-dialog: Rectangle {
+            background: #000000b8;
+            TouchArea {
+            }
+            CollectionDialog {
+                width: min(440px,parent.width - 40px);
+                height: min(DialogState.collection-kind=="folders" ? 540px : 440px,parent.height - 40px);
+                x: (parent.width - self.width)/2;
+                y: (parent.height - self.height)/2;
+            }
+        }
+        if DialogState.playlist-dialog: Rectangle {
+            background: #000000b8;
+            TouchArea {
+            }
+            PlaylistDialog {
+                width: min(440px,parent.width - 40px);
+                x: (parent.width - self.width)/2;
+                y: (parent.height - self.height)/2;
+            }
+        }
+        if DialogState.folder-dialog: Rectangle {
+            background: #000000b8;
+            TouchArea {
+            }
+            FolderReviewDialog {
+                width: min(620px,parent.width - 40px);
+                height: min(max(340px,266px + DialogState.folder-choices.length * 52px),min(600px,parent.height - 32px));
+                x: (parent.width - self.width)/2;
+                y: (parent.height - self.height)/2;
+            }
+        }
+        if DialogState.folder-remove-open: Rectangle {
+            background: #000000b8;
+            TouchArea {
+            }
+            RemoveFolderDialog {
+                width: min(440px,parent.width - 40px);
+                x: (parent.width - self.width)/2;
+                y: (parent.height - self.height)/2;
+            }
+        }
+        if AppState.error!="": Rectangle {
+            x: root.sidebar-width+20px;
+            y: root.height - 156px;
+            width: min(650px,root.width - self.x - 20px);
+            height: 48px;
+            background: PreferencesState.light-theme ? #fff0ee : #292123;
+            border-color: PreferencesState.light-theme ? #b45e62 : #6f444a;
+            border-width: 1px;
+            border-radius: 6px;
+            Text {
+                x: 12px;
+                width: parent.width - 60px;
+                text: AppState.error;
+                color: PreferencesState.ink;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            IconButton {
+                label: "Close";
+                x: parent.width - 44px;
+                y: 4px;
+                icon: Icons.close;
+                clicked => {
+                    AppState.error="";
+                }
+            }
+        }
     }
 }
 
 export component OrcaTray inherits SystemTrayIcon {
     in property<bool> playing;
     icon: SidebarLogos.logo-32;
-    tooltip:AppState.show-tooltips ? "Orca" : "";
+    tooltip: PreferencesState.show-tooltips ? "Orca" : "";
     callback action(string);
-    clicked=>{root.action("restore");}
+    clicked=>{
+        root.action("restore");
+    }
     Menu {
-        MenuItem {title:"Open Orca";icon:Icons.logo;activated=>{root.action("restore");}}
-        MenuSeparator {}
-        MenuItem {title:root.playing ? "Pause" : "Play";icon:root.playing ? @image-url("icons/menu-pause.svg") : @image-url("icons/menu-play.svg");activated=>{root.action("toggle");}}
-        MenuItem {title:"Previous track";icon:@image-url("icons/menu-previous.svg");activated=>{root.action("previous");}}
-        MenuItem {title:"Next track";icon:@image-url("icons/menu-next.svg");activated=>{root.action("next");}}
-        MenuSeparator {}
-        MenuItem {title:"Quit Orca";icon:@image-url("icons/menu-close.svg");activated=>{root.action("quit");}}
+        MenuItem {
+            title: "Open Orca";
+            icon: Icons.logo;
+            activated=>{
+                root.action("restore");
+            }
+        }
+        MenuSeparator {
+        }
+        MenuItem {
+            title: root.playing ? "Pause" : "Play";
+            icon: root.playing ? @image-url("icons/menu-pause.svg") : @image-url("icons/menu-play.svg");
+            activated=>{
+                root.action("toggle");
+            }
+        }
+        MenuItem {
+            title: "Previous track";
+            icon: @image-url("icons/menu-previous.svg");
+            activated=>{
+                root.action("previous");
+            }
+        }
+        MenuItem {
+            title: "Next track";
+            icon: @image-url("icons/menu-next.svg");
+            activated=>{
+                root.action("next");
+            }
+        }
+        MenuSeparator {
+        }
+        MenuItem {
+            title: "Quit Orca";
+            icon: @image-url("icons/menu-close.svg");
+            activated=>{
+                root.action("quit");
+            }
+        }
     }
 }

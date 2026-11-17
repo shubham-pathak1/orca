@@ -2,12 +2,15 @@
 mod metadata;
 mod playback;
 mod romanization;
-pub use romanization::{romanization_language_code, RomanizationMode, RomanizationPolicy, ROMANIZATION_LANGUAGES};
 pub use metadata::{
-    AdvancedMetadata, MetadataAssetKind, MetadataDocument, MetadataEdit, MetadataFields, MetadataRequest,
+    AdvancedMetadata, MetadataAssetKind, MetadataDocument, MetadataEdit, MetadataFields,
+    MetadataRequest,
 };
 pub use playback::{OutputDevice, OutputPreference, OutputStatus};
 pub use playback::{PlaybackCommand, PlaylistChange, PlaylistEdit};
+pub use romanization::{
+    romanization_language_code, RomanizationMode, RomanizationPolicy, ROMANIZATION_LANGUAGES,
+};
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Track {
     pub id: i64,
@@ -70,7 +73,6 @@ pub struct Snapshot {
     pub ended: u64,
     pub transitioned: u64,
     pub error: String,
-    pub output_status: String,
     pub output: OutputStatus,
     pub output_revision: u64,
     pub playback_error: String,

@@ -1,71 +1,314 @@
 export struct Song {
-    id: int, path: string, title: string, artist: string, album: string, album-artist:string,
-    duration: string, quality: string, cover: image, cover-missing:bool, explicit:bool, index: int,
+    id: int, path: string, title: string, artist: string, album: string, album-artist: string, duration: string, quality: string, cover: image, cover-missing: bool, explicit: bool, liked: bool, bit-depth: int, index: int,
 }
+
 export struct CatalogGroup {
-    key: string, secondary: string, title: string, subtitle: string,
-    count: int, cover: image, cover-missing:bool,
+    key: string, secondary: string, title: string, subtitle: string, count: int, cover: image, cover-missing: bool, accent: color, year: int,
 }
-export struct PlaylistChoice { key:string, title:string, selected:bool, }
-export struct FolderChoice { path:string, name:string, mode:string, included:bool, has-children:bool, }
-export struct FolderRuleDraft { path:string, mode:string, }
-export struct LyricWord {text:string,time:float,end-time:float,}
-export struct LyricLine { text: string, time: float, words:[LyricWord], }
-export struct LyricSpan { x:float,y:float,width:float,height:float,time:float,end-time:float,rtl:bool, }
-export struct LyricRender { bitmap:image,height:float,ink-top:float,ink-bottom:float,spans:[LyricSpan], }
+
+export struct SongGridRow {
+    index: int,cells: [Song],
+}
+
+export struct SidebarEntry {
+    page: string,label: string,icon: image,shown: bool,
+}
+
+export struct ArtistCredit {
+    text: string, key: string,
+}
+
+export struct PlaylistChoice {
+    key: string, title: string, selected: bool,
+}
+
+export struct OutputChoice {
+    id: string, name: string,
+}
+
+export struct FolderChoice {
+    path: string, name: string, mode: string, included: bool, has-children: bool,
+}
+
+export struct FolderRuleDraft {
+    path: string, mode: string,
+}
+
+export struct RomanizationLanguage {
+    code: string,name: string,selected: bool,
+}
+
+export struct LyricWord {
+    text: string,time: float,end-time: float,
+}
+
+export struct LyricLine {
+    text: string, time: float, words: [LyricWord],
+}
+
+export struct LyricSpan {
+    x: float,y: float,width: float,height: float,time: float,end-time: float,rtl: bool,caption: bool,
+}
+
+export struct LyricRender {
+    bitmap: image,blurred: image,padding: float,height: float,ink-top: float,ink-bottom: float,spans: [LyricSpan],
+}
+
 export struct MetadataDraft {
-    path:string,title:string,artist:string,album:string,album-artist:string,
-    year:string,track-number:string,disc-number:string,genre:string,lyrics:string,
-    artwork:string,cover-to-embed:string,remove-cover:bool,file-version:string,
+    path: string,title: string,artist: string,album: string,album-artist: string, year: string,track-number: string,disc-number: string,genre: string,lyrics: string, composer: string,comment: string,advisory: int,advanced-changed: bool, artwork: string,cover-to-embed: string,remove-cover: bool,file-version: string,
 }
 
 export global AppState {
-    in-out property<bool> keyboard-navigation:false;
-    in-out property<float> display-dpr:1;
-    out property<string> focus-layer:modal-open ? "dialog" : menu-open || collection-menu-open || playlist-picker-open ? "menu" : queue-open && full-player ? "queue" : full-player ? "full" : "browse";
-    out property<bool> modal-open:metadata-open || collection-dialog || playlist-dialog || folder-dialog || folder-remove-open;
-    in-out property<color> player-accent:white;
-    in-out property<color> background-accent:#626262;
-    in-out property<bool> light-theme:false;
-    out property<bool> full-player-dark:!light-theme || full-player-background!="off";
-    out property<color> ink:light-theme ? #242321 : white;
-    out property<color> secondary-ink:ink.with-alpha(0.78);
-    out property<color> inverse-ink:light-theme ? #FCFBF7 : black;
-    out property<color> base:light-theme ? #FCFBF7 : #090a0c;
-    out property<color> panel:light-theme ? #F3F1EA : #141414;
-    out property<color> raised-panel:light-theme ? #F8F6F0 : #171719;
-    out property<color> queue-background:light-theme ? #F8F6F0 : #000;
+    in-out property<bool> windows-audio: true;
+    in-out property<bool> keyboard-navigation: false;
+    in-out property<float> display-dpr: 1;
+    in-out property<bool> software-rendering: true;
+    out property<string> focus-layer: modal-open ? "dialog" : DialogState.menu-open || DialogState.collection-menu-open || DialogState.playlist-picker-open ? "menu" : PlayerState.queue-open && PlayerState.full-player ? "queue" : PlayerState.full-player ? "full" : "browse";
+    public pure function layer-enabled(layer: string)->bool {
+        return focus-layer==layer || (layer=="full" && focus-layer=="queue");
+    }
+    out property<bool> modal-open: DialogState.audio-info-open || DialogState.metadata-open || DialogState.collection-dialog || DialogState.playlist-dialog || DialogState.folder-dialog || DialogState.folder-remove-open;
     in-out property<bool> tray-available;
     in-out property<bool> phantom-global;
     in-out property<bool> window-hidden;
     callback phantom();
     in-out property <string> view: "songs";
+    in-out property <bool> text-input-focused;
+    in-out property <string> error;
+    in-out property<string> app-version;
+    callback report-issue();
+    callback unfocus();
+    in-out property<int> search-focus-request: 0;
+    in-out property<bool> search-focus-pending: false;
+    in-out property<bool> search-input-focused: false;
+    callback keyboard(string,bool)->bool;
+    pure callback display-path(string)->string;
+
+    in-out property<color> player-accent: PlayerState.player-accent;
+    in-out property<color> background-accent: PlayerState.background-accent;
+    in-out property<bool> light-theme: PreferencesState.light-theme;
+    out property<bool> full-player-dark: PreferencesState.full-player-dark;
+    out property<color> ink: PreferencesState.ink;
+    out property<color> secondary-ink: PreferencesState.secondary-ink;
+    out property<color> inverse-ink: PreferencesState.inverse-ink;
+    out property<color> base: PreferencesState.base;
+    out property<color> panel: PreferencesState.panel;
+    out property<color> raised-panel: PreferencesState.raised-panel;
+    out property<color> queue-background: PreferencesState.queue-background;
+    in-out property<string> search: LibraryState.search;
+    in-out property<bool> catalog-loading: LibraryState.catalog-loading;
+    in-out property<int> known-artists: LibraryState.known-artists;
+    in-out property<int> known-albums: LibraryState.known-albums;
+    in-out property<int> known-genres: LibraryState.known-genres;
+    in-out property<int> known-playlists: LibraryState.known-playlists;
+    in-out property<string> sort: LibraryState.sort;
+    in-out property<bool> browse-artwork: PreferencesState.browse-artwork;
+    in-out property<bool> compact-artwork: PreferencesState.compact-artwork;
+    in-out property<bool> full-artwork: PreferencesState.full-artwork;
+    in-out property<bool> grid: PreferencesState.grid;
+    in-out property<bool> folder-grid: PreferencesState.folder-grid;
+    in-out property<string> collection-path: PlayerState.collection-path;
+    in-out property<bool> full-player: PlayerState.full-player;
+    in-out property<bool> lyrics-open: LyricsState.lyrics-open;
+    in-out property<bool> lyrics-refreshing: LyricsState.lyrics-refreshing;
+    in-out property<bool> queue-open: PlayerState.queue-open;
+    in-out property<bool> playlist-picker-open: DialogState.playlist-picker-open;
+    in-out property<bool> playlist-picker-loading: DialogState.playlist-picker-loading;
+    in-out property<bool> liked: PlayerState.liked;
+    in-out property<bool> show-liked-songs: PreferencesState.show-liked-songs;
+    in-out property<bool> playlist-selection-mode: LibraryState.playlist-selection-mode;
+    in-out property<int> playlist-selection-count: LibraryState.playlist-selection-count;
+    in-out property<int> playlist-selection-revision: LibraryState.playlist-selection-revision;
+    in-out property<[PlaylistChoice]> playlist-choices: DialogState.playlist-choices;
+    in-out property<string> detail-key: LibraryState.detail-key;
+    in-out property<string> detail-secondary: LibraryState.detail-secondary;
+    in-out property<string> detail-title: LibraryState.detail-title;
+    in-out property<string> detail-summary: LibraryState.detail-summary;
+    in-out property<image> detail-cover: LibraryState.detail-cover;
+    in-out property<image> detail-backdrop: LibraryState.detail-backdrop;
+    in-out property<[[CatalogGroup]]> related-albums: LibraryState.related-albums;
+    in-out property<int> related-columns: LibraryState.related-columns;
+    in-out property<string> summary: LibraryState.summary;
+    in-out property<string> catalog-summary: LibraryState.catalog-summary;
+    in-out property<int> song-first: LibraryState.song-first;
+    in-out property<int> song-end: LibraryState.song-end;
+    in-out property<int> library-scroll-index: LibraryState.library-scroll-index;
+    in-out property<float> library-scroll-fraction: LibraryState.library-scroll-fraction;
+    in-out property<bool> library-view-restore: LibraryState.library-view-restore;
+    in-out property<[Song]> songs: LibraryState.songs;
+    in-out property<[[Song]]> song-grid: LibraryState.song-grid;
+    in-out property<[[CatalogGroup]]> group-grid: LibraryState.group-grid;
+    in-out property<[Song]> queue: PlayerState.queue;
+    in-out property<[LyricLine]> lyrics: LyricsState.lyrics;
+    in-out property<float> lyrics-width: LyricsState.lyrics-width;
+    in-out property<float> lyric-font-size: LyricsState.lyric-font-size;
+    in-out property<int> lyric-render-revision: LyricsState.lyric-render-revision;
+    in-out property<int> lyric-layout-revision: LyricsState.lyric-layout-revision;
+    in-out property<float> player-cover-size: PlayerState.player-cover-size;
+    in-out property<float> player-swipe-offset: PlayerState.player-swipe-offset;
+    in-out property<int> active-line: LyricsState.active-line;
+    in-out property<Song> now: PlayerState.now;
+    in-out property<image> original-cover: PlayerState.original-cover;
+    in-out property<bool> original-cover-missing: PlayerState.original-cover-missing;
+    in-out property<bool> detail-cover-missing: LibraryState.detail-cover-missing;
+    in-out property<image> backdrop: PlayerState.backdrop;
+    in-out property<image> full-backdrop: PlayerState.full-backdrop;
+    in-out property<image> waveform: PlayerState.waveform;
+    in-out property<bool> playing: PlayerState.playing;
+    in-out property<bool> shuffle: PlayerState.shuffle;
+    in-out property<int> repeat: PlayerState.repeat;
+    in-out property<float> position: PlayerState.position;
+    in-out property<float> lyric-position: LyricsState.lyric-position;
+    in-out property<float> duration: PlayerState.duration;
+    in-out property<float> volume: PlayerState.volume;
+    in-out property<string> elapsed: PlayerState.elapsed;
+    in-out property<string> total: PlayerState.total;
+    in-out property<color> accent: PreferencesState.accent;
+    in-out property<float> scale: PreferencesState.scale;
+    in-out property<string> font-family: PreferencesState.font-family;
+    in-out property<string> font-path: PreferencesState.font-path;
+    in-out property<string> custom-font-family: PreferencesState.custom-font-family;
+    in-out property<bool> quality-info: PreferencesState.quality-info;
+    in-out property<bool> lyrics-left-aligned: PreferencesState.lyrics-left-aligned;
+    in-out property<bool> show-tooltips: PreferencesState.show-tooltips;
+    in-out property<bool> replaygain: PreferencesState.replaygain;
+    in-out property<bool> dynamic-accent: PreferencesState.dynamic-accent;
+    in-out property<bool> blurred-background: PreferencesState.blurred-background;
+    in-out property<string> full-player-background: PreferencesState.full-player-background;
+    in-out property<bool> gapless: PreferencesState.gapless;
+    in-out property<bool> auto-artwork: PreferencesState.auto-artwork;
+    in-out property<bool> artwork-bulk-started: LibraryState.artwork-bulk-started;
+    in-out property<bool> artwork-bulk-running: LibraryState.artwork-bulk-running;
+    in-out property<bool> artwork-bulk-complete: LibraryState.artwork-bulk-complete;
+    in-out property<string> artwork-bulk-progress: LibraryState.artwork-bulk-progress;
+    in-out property<bool> icon-sidebar: PreferencesState.icon-sidebar;
+    in-out property<string> seek-style: PreferencesState.seek-style;
+    in-out property<int> columns: LibraryState.columns;
+    in-out property<int> image-edge: LibraryState.image-edge;
+    in-out property<int> group-columns: LibraryState.group-columns;
+    in-out property<int> jump-index: LibraryState.jump-index;
+    in-out property<int> jump-revision: LibraryState.jump-revision;
+    in-out property<float> catalog-scroll-y: LibraryState.catalog-scroll-y;
+    in-out property<float> catalog-scroll-target: LibraryState.catalog-scroll-target;
+    in-out property<int> catalog-scroll-restore-revision: LibraryState.catalog-scroll-restore-revision;
+    in-out property<bool> catalog-scroll-restore-pending: LibraryState.catalog-scroll-restore-pending;
+    in-out property<string> lyrics-status: LyricsState.lyrics-status;
+    in-out property<bool> metadata-open: DialogState.metadata-open;
+    in-out property<MetadataDraft> draft: DialogState.draft;
+    in-out property<image> editor-cover: DialogState.editor-cover;
+    in-out property<bool> editor-cover-missing: DialogState.editor-cover-missing;
+    in-out property<bool> editor-busy: DialogState.editor-busy;
+    in-out property<int> editor-generation: DialogState.editor-generation;
+    in-out property<string> editor-operation: DialogState.editor-operation;
+    in-out property<string> editor-status: DialogState.editor-status;
+    in-out property<bool> menu-open: DialogState.menu-open;
+    in-out property<Song> menu-song: DialogState.menu-song;
+    in-out property<float> menu-x: DialogState.menu-x;
+    in-out property<float> menu-y: DialogState.menu-y;
+    in-out property<[CatalogGroup]> playlists: LibraryState.playlists;
+    in-out property<bool> playlist-dialog: DialogState.playlist-dialog;
+    in-out property<string> playlist-name: DialogState.playlist-name;
+    in-out property<string> playlist-edit-action: DialogState.playlist-edit-action;
+    in-out property<[string]> folders: LibraryState.folders;
+    in-out property<bool> folder-dialog: DialogState.folder-dialog;
+    in-out property<bool> folder-remove-open: DialogState.folder-remove-open;
+    in-out property<string> folder-remove-path: DialogState.folder-remove-path;
+    in-out property<bool> folder-adding: DialogState.folder-adding;
+    in-out property<string> folder-root: DialogState.folder-root;
+    in-out property<string> folder-current: DialogState.folder-current;
+    in-out property<[FolderChoice]> folder-choices: DialogState.folder-choices;
+    in-out property<[FolderRuleDraft]> folder-rules: DialogState.folder-rules;
+    in-out property<bool> collection-menu-open: DialogState.collection-menu-open;
+    in-out property<float> collection-menu-x: DialogState.collection-menu-x;
+    in-out property<float> collection-menu-y: DialogState.collection-menu-y;
+    in-out property<CatalogGroup> collection-group: DialogState.collection-group;
+    in-out property<string> collection-kind: DialogState.collection-kind;
+    in-out property<string> collection-request: DialogState.collection-request;
+    in-out property<image> collection-cover: DialogState.collection-cover;
+    in-out property<bool> collection-cover-missing: DialogState.collection-cover-missing;
+    in-out property<bool> collection-dialog: DialogState.collection-dialog;
+    in-out property<bool> collection-saving: DialogState.collection-saving;
+    in-out property<bool> collection-fetching: DialogState.collection-fetching;
+    in-out property<string> collection-status: DialogState.collection-status;
+    in-out property<string> collection-name: DialogState.collection-name;
+    callback artwork-bulk(string);
+    artwork-bulk(arg0) => { LibraryState.artwork-bulk(arg0); }
+    callback folder-tree(string,string,string);
+    folder-tree(arg0, arg1, arg2) => { DialogState.folder-tree(arg0, arg1, arg2); }
+    callback browse();
+    browse() => { LibraryState.browse(); }
+    callback play(string);
+    play(arg0) => { PlayerState.play(arg0); }
+    callback command(string, float);
+    command(arg0, arg1) => { PlayerState.command(arg0, arg1); }
+    callback player-swipe(float, float) -> bool;
+    player-swipe(arg0, arg1) => { return PlayerState.player-swipe(arg0, arg1); }
+    callback player-drag(float, float) -> bool;
+    player-drag(arg0, arg1) => { return PlayerState.player-drag(arg0, arg1); }
+    callback seek(float);
+    seek(arg0) => { PlayerState.seek(arg0); }
+    callback volume-changed(float);
+    volume-changed(arg0) => { PlayerState.volume-changed(arg0); }
+    callback add-folder();
+    add-folder() => { LibraryState.add-folder(); }
+    callback refresh();
+    refresh() => { LibraryState.refresh(); }
+    callback refresh-lyrics();
+    refresh-lyrics() => { LyricsState.refresh-lyrics(); }
+    callback folder-action(string, string);
+    folder-action(arg0, arg1) => { LibraryState.folder-action(arg0, arg1); }
+    callback open-group(string, string, string);
+    open-group(arg0, arg1, arg2) => { LibraryState.open-group(arg0, arg1, arg2); }
+    callback go-back();
+    go-back() => { LibraryState.go-back(); }
+    callback menu(string, float, float);
+    menu(arg0, arg1, arg2) => { DialogState.menu(arg0, arg1, arg2); }
+    callback queue-action(string, string, string);
+    queue-action(arg0, arg1, arg2) => { PlayerState.queue-action(arg0, arg1, arg2); }
+    callback save-settings();
+    save-settings() => { PreferencesState.save-settings(); }
+    callback collection-menu(CatalogGroup,float,float);
+    collection-menu(arg0, arg1, arg2) => { DialogState.collection-menu(arg0, arg1, arg2); }
+    callback collection-action(string);
+    collection-action(arg0) => { DialogState.collection-action(arg0); }
+    callback metadata-action(string, string);
+    metadata-action(arg0, arg1) => { DialogState.metadata-action(arg0, arg1); }
+    callback playlist-action(string, string);
+    playlist-action(arg0, arg1) => { DialogState.playlist-action(arg0, arg1); }
+    callback playlist-selection(string, int);
+    playlist-selection(arg0, arg1) => { LibraryState.playlist-selection(arg0, arg1); }
+    pure callback playlist-song-selected(int, int)->bool;
+    playlist-song-selected(arg0, arg1) => { return LibraryState.playlist-song-selected(arg0, arg1); }
+    callback toggle-like();
+    toggle-like() => { PlayerState.toggle-like(); }
+    callback font-action(string);
+    font-action(arg0) => { PreferencesState.font-action(arg0); }
+    pure callback lyric-render(int,int)->LyricRender;
+    lyric-render(arg0, arg1) => { return LyricsState.lyric-render(arg0, arg1); }
+    pure callback lyric-offset(int,int)->float;
+    lyric-offset(arg0, arg1) => { return LyricsState.lyric-offset(arg0, arg1); }
+    pure callback setting-matches(string,string)->bool;
+    setting-matches(arg0, arg1) => { return PreferencesState.setting-matches(arg0, arg1); }
+    callback font-scale(string);
+    font-scale(arg0) => { PreferencesState.font-scale(arg0); }
+}
+
+export global LibraryState {
+    in-out property<int> detail-year;
+    in-out property<color> detail-accent: white;
     in-out property <string> search;
     in-out property<bool> catalog-loading;
-    in-out property<int> known-artists:-1;
-    in-out property<int> known-albums:-1;
-    in-out property<int> known-genres:-1;
-    in-out property<int> known-playlists:-1;
-    in-out property <bool> text-input-focused;
+    in-out property<int> known-artists: -1;
+    in-out property<int> known-albums: -1;
+    in-out property<int> known-genres: -1;
+    in-out property<int> known-playlists: -1;
     in-out property <string> sort: "artist";
-    in-out property <bool> browse-artwork: true;
-    in-out property <bool> compact-artwork: true;
-    in-out property <bool> full-artwork: true;
-    in-out property <bool> grid: true;
-    in-out property <bool> folder-grid: true;
-    in-out property <string> collection-path;
-    in-out property <bool> full-player: false;
-    in-out property <bool> lyrics-open: false;
-    in-out property <bool> lyrics-refreshing: false;
-    in-out property <bool> queue-open: false;
-    in-out property <bool> playlist-picker-open: false;
-    in-out property <bool> playlist-picker-loading: false;
-    in-out property <bool> liked: false;
-    in-out property <bool> show-liked-songs: true;
+    // Collection sorting is temporary; opening another collection restores its natural order.
+    in-out property<string> detail-sort;
+    out property<string> table-sort: detail-key=="" ? sort : detail-sort;
     in-out property <bool> playlist-selection-mode: false;
     in-out property <int> playlist-selection-count: 0;
     in-out property <int> playlist-selection-revision: 0;
-    in-out property <[PlaylistChoice]> playlist-choices;
     in-out property <string> detail-key;
     in-out property <string> detail-secondary;
     in-out property <string> detail-title;
@@ -73,31 +316,68 @@ export global AppState {
     in-out property <image> detail-cover;
     in-out property <image> detail-backdrop;
     in-out property <[[CatalogGroup]]> related-albums;
-    in-out property <int> related-columns:2;
+    in-out property <int> related-columns: 2;
     in-out property <string> summary: "Loading library…";
     in-out property <string> catalog-summary;
-    in-out property <string> error;
     in-out property<int> song-first;
-    in-out property<int> song-end:32;
+    in-out property<int> song-end: 32;
+    in-out property<float> artwork-scroll-position;
     in-out property<int> library-scroll-index;
     in-out property<float> library-scroll-fraction;
     in-out property<bool> library-view-restore;
     in-out property <[Song]> songs;
     in-out property <[[Song]]> song-grid;
+    pure callback new-grid-window()->[SongGridRow];
+    pure callback prepare-grid-window([SongGridRow],[[Song]],int,int)->int;
+    callback apply-grid-window([SongGridRow],int);
     in-out property <[[CatalogGroup]]> group-grid;
+    in-out property <bool> detail-cover-missing;
+    in-out property <bool> artwork-bulk-started: false;
+    in-out property <bool> artwork-bulk-running: false;
+    in-out property <bool> artwork-bulk-complete: false;
+    in-out property <string> artwork-bulk-progress;
+    callback artwork-bulk(string);
+    in-out property <int> columns: 6;
+    in-out property <int> image-edge: 192;
+    in-out property <int> group-columns: 1;
+    in-out property <int> jump-index: -1;
+    in-out property <int> jump-revision;
+    in-out property <float> catalog-scroll-y;
+    in-out property <float> catalog-scroll-target;
+    in-out property <int> catalog-scroll-restore-revision;
+    in-out property <bool> catalog-scroll-restore-pending;
+    in-out property <[CatalogGroup]> playlists;
+    in-out property <[string]> folders;
+    callback browse();
+    callback open-collection(string, string, string);
+    pure callback artist-names(string, string)->[ArtistCredit];
+    callback add-folder();
+    callback refresh();
+    callback folder-action(string, string);
+    callback open-group(string, string, string);
+    callback go-back();
+    callback playlist-selection(string, int);
+    pure callback playlist-song-selected(int, int)->bool;
+}
+
+export global PlayerState {
+    in-out property<color> player-accent: white;
+    in-out property<color> background-accent: #626262;
+    in-out property <string> collection-path;
+    in-out property <bool> full-player: false;
+    in-out property <bool> queue-open: false;
+    in-out property <bool> liked: false;
     in-out property <[Song]> queue;
-    in-out property <[LyricLine]> lyrics;
-    in-out property <float> lyrics-width;
-    in-out property <float> lyric-font-size:40;
-    in-out property <int> lyric-render-revision;
-    in-out property <int> lyric-layout-revision;
-    in-out property<float> player-cover-size:396;
-    in-out property<float> player-swipe-offset:0;
-    in-out property <int> active-line:  - 1;
+    in-out property<float> player-cover-size: 396;
+    in-out property<float> player-swipe-offset: 0;
     in-out property <Song> now;
     in-out property <image> original-cover;
     in-out property <bool> original-cover-missing;
-    in-out property <bool> detail-cover-missing;
+    pure callback compact-quality(string,int)->string;
+    compact-quality(quality,bits)=>{
+        return quality;
+    }
+    out property<string> display-quality: compact-quality(now.quality,now.bit-depth);
     in-out property <image> backdrop;
     in-out property <image> full-backdrop;
     in-out property <image> waveform;
@@ -105,11 +385,105 @@ export global AppState {
     in-out property <bool> shuffle;
     in-out property <int> repeat;
     in-out property <float> position;
-    in-out property<float> lyric-position:position;
     in-out property <float> duration;
     in-out property <float> volume: 1;
     in-out property <string> elapsed: "0:00";
     in-out property <string> total: "3:00";
+    in-out property<string> output-device-id;
+    in-out property<bool> output-exclusive: false;
+    in-out property<bool> output-unprocessed: false;
+    in-out property<[OutputChoice]> output-choices;
+    in-out property<[string]> output-names: ["System default"];
+    in-out property<int> output-device-index: 0;
+    in-out property<string> output-error;
+    in-out property<string> output-notice;
+    in-out property<string> audio-error-banner;
+    in-out property<string> output-device-name;
+    in-out property<string> output-sample-format;
+    in-out property<int> output-rate;
+    in-out property<int> output-source-rate;
+    in-out property<int> output-channels;
+    in-out property<bool> output-active-exclusive;
+    in-out property<bool> output-active-unprocessed;
+    in-out property<bool> output-switching;
+    out property<bool> output-open: output-rate>0 && output-channels>0 && !output-switching;
+    out property<string> output-requested-mode-label: !AppState.windows-audio ? "System output" : output-unprocessed ? "Unprocessed exclusive" : output-exclusive ? "WASAPI exclusive" : "WASAPI shared";
+    out property<string> output-mode-label: output-switching ? "Switching output..." : !output-open ? "No active output" : !AppState.windows-audio ? "System output" : output-active-unprocessed ? "Unprocessed exclusive" : output-active-exclusive ? "WASAPI exclusive" : "WASAPI shared";
+    out property<string> output-format-label: output-rate>0 ? (output-rate/1000.0)+" kHz · "+output-channels+" ch · "+output-sample-format : "No active output";
+    out property<string> output-rate-path: output-open && output-source-rate>0 ? (output-source-rate==output-rate ? "Native sample rate" : (output-source-rate/1000.0)+" kHz → "+(output-rate/1000.0)+" kHz") : "";
+    out property<string> processing-summary: !output-open ? "No active processing" : output-active-unprocessed ? "Integer PCM · DSP bypassed" : "32-bit float processing";
+    out property<string> processing-controls: !output-open ? "" : output-active-unprocessed ? "App volume fixed at 100%; use device volume" : "App volume "+round(volume*100)+"% · "+(PreferencesState.replaygain ? "ReplayGain enabled" : "ReplayGain off");
+    out property<string> audio-tooltip: (output-open ? output-mode-label+"\n"+output-format-label : output-mode-label)+"\nClick for audio details";
+    callback refresh-outputs();
+    callback retry-output();
+    callback select-output(int);
+    in-out property<bool> player-idle: false;
+    in-out property<bool> player-interacting: false;
+    in-out property<bool> player-hovering-controls: false;
+    in-out property<int> player-activity-sequence: 0;
+    public function player-activity() {
+        player-idle=false;
+        player-activity-sequence+=1;
+    }
+    callback play(string);
+    callback play-group(CatalogGroup, string);
+    callback like-song(int);
+    in-out property<string> playback-kind;
+    in-out property<string> playback-key;
+    in-out property<string> playback-secondary;
+    public pure function collection-playing(kind: string,key: string,secondary: string)->bool {
+        return playing && now.path!="" && playback-kind==kind && playback-key==key && playback-secondary==secondary;
+    }
+    callback command(string, float);
+    callback player-swipe(float, float) -> bool;
+    callback player-drag(float, float) -> bool;
+    callback seek(float);
+    callback volume-changed(float);
+    callback queue-action(string, string, string);
+    callback toggle-like();
+}
+
+export global LyricsState {
+    in-out property <bool> lyrics-open: false;
+    in-out property <bool> lyrics-refreshing: false;
+    in-out property <[LyricLine]> lyrics;
+    in-out property <float> lyrics-width;
+    in-out property <float> lyric-font-size: 40;
+    in-out property <int> lyric-render-revision;
+    in-out property <int> lyric-layout-revision;
+    in-out property <int> active-line: - 1;
+    in-out property<float> lyric-position: PlayerState.position;
+    in-out property <string> lyrics-status;
+    callback refresh-lyrics();
+    pure callback lyric-render(int,int)->LyricRender;
+    pure callback lyric-offset(int,int)->float;
+}
+
+export global PreferencesState {
+    in-out property<bool> sidebar-songs: true;
+    in-out property<bool> sidebar-artists: true;
+    in-out property<bool> sidebar-albums: true;
+    in-out property<bool> sidebar-genres: true;
+    in-out property<bool> sidebar-playlists: true;
+    in-out property<bool> sidebar-folders: true;
+    in-out property<bool> sidebar-composers: false;
+    in-out property<bool> sidebar-years: false;
+    in-out property<bool> light-theme: false;
+    out property<bool> full-player-dark: !light-theme || full-player-background!="off";
+    out property<color> ink: light-theme ? #242321 : white;
+    out property<color> table-secondary-ink: ink.with-alpha(0.68);
+    out property<color> secondary-ink: ink.with-alpha(0.74);
+    out property<color> inverse-ink: light-theme ? #FCFBF7 : black;
+    out property<color> base: light-theme ? #FCFBF7 : #090a0c;
+    out property<color> panel: light-theme ? #F3F1EA : #141414;
+    out property<color> raised-panel: light-theme ? #F8F6F0 : #171719;
+    out property<color> queue-background: light-theme ? #F8F6F0 : #000;
+    in-out property <bool> browse-artwork: true;
+    in-out property <bool> compact-artwork: true;
+    in-out property <bool> full-artwork: true;
+    in-out property <bool> grid: true;
+    in-out property <bool> folder-grid: true;
+    in-out property <bool> show-liked-songs: true;
     in-out property <color> accent: #b09caa;
     in-out property <float> scale: 1;
     in-out property <string> font-family: "Plus Jakarta Sans";
@@ -117,30 +491,33 @@ export global AppState {
     in-out property <string> custom-font-family;
     in-out property <bool> quality-info: true;
     in-out property <bool> lyrics-left-aligned: false;
+    in-out property <bool> blur-unfocused-lyrics: false;
+    in-out property <float> lyrics-blur-strength: 30;
+    in-out property <int> romanization-mode: 0;
+    in-out property <[RomanizationLanguage]> romanization-languages;
+    in-out property <int> romanization-selected-count: 0;
+    callback romanization-language(string,bool);
     in-out property <bool> show-tooltips: true;
     in-out property <bool> replaygain: false;
     in-out property <bool> dynamic-accent: true;
-    in-out property <bool> blurred-background: true;
+    in-out property <bool> blurred-background: false;
     in-out property <string> full-player-background: "artwork";
+    in-out property<bool> auto-hide-player-controls: false;
     in-out property <bool> gapless: true;
     in-out property <bool> auto-artwork: false;
-    in-out property <bool> artwork-bulk-started: false;
-    in-out property <bool> artwork-bulk-running: false;
-    in-out property <bool> artwork-bulk-complete: false;
-    in-out property <string> artwork-bulk-progress;
-    callback artwork-bulk(string);
     in-out property <bool> icon-sidebar: true;
     in-out property <string> seek-style: "waveform";
-    in-out property <int> columns: 6;
-    in-out property <int> image-edge: 192;
-    in-out property <int> group-columns:1;
-    in-out property <int> jump-index: -1;
-    in-out property <int> jump-revision;
-    in-out property <float> catalog-scroll-y;
-    in-out property <float> catalog-scroll-target;
-    in-out property <int> catalog-scroll-restore-revision;
-    in-out property <bool> catalog-scroll-restore-pending;
-    in-out property <string> lyrics-status;
+    callback save-settings();
+    callback font-action(string);
+    pure callback setting-matches(string,string)->bool;
+    callback font-scale(string);
+}
+
+export global DialogState {
+    in-out property <bool> playlist-picker-open: false;
+    in-out property <bool> playlist-picker-loading: false;
+    in-out property <[PlaylistChoice]> playlist-choices;
+    in-out property<bool> audio-info-open: false;
     in-out property <bool> metadata-open;
     in-out property <MetadataDraft> draft;
     in-out property <image> editor-cover;
@@ -151,13 +528,13 @@ export global AppState {
     in-out property <string> editor-status;
     in-out property <bool> menu-open;
     in-out property <Song> menu-song;
+    in-out property<float> playlist-picker-x;
+    in-out property<float> playlist-picker-y;
     in-out property <float> menu-x;
     in-out property <float> menu-y;
-    in-out property <[CatalogGroup]> playlists;
     in-out property <bool> playlist-dialog;
     in-out property <string> playlist-name;
-    in-out property <string> playlist-edit-action:"create";
-    in-out property <[string]> folders;
+    in-out property <string> playlist-edit-action: "create";
     in-out property <bool> folder-dialog;
     in-out property <bool> folder-remove-open;
     in-out property <string> folder-remove-path;
@@ -167,22 +544,7 @@ export global AppState {
     in-out property <[FolderChoice]> folder-choices;
     in-out property <[FolderRuleDraft]> folder-rules;
     callback folder-tree(string,string,string);
-    callback browse();
-    callback play(string);
-    callback command(string, float);
-    callback player-swipe(float, float) -> bool;
-    callback player-drag(float, float) -> bool;
-    callback seek(float);
-    callback volume-changed(float);
-    callback add-folder();
-    callback refresh();
-    callback refresh-lyrics();
-    callback folder-action(string, string);
-    callback open-group(string, string, string);
-    callback go-back();
     callback menu(string, float, float);
-    callback queue-action(string, string, string);
-    callback save-settings();
     in-out property<bool> collection-menu-open;
     in-out property<float> collection-menu-x;
     in-out property<float> collection-menu-y;
@@ -200,19 +562,4 @@ export global AppState {
     callback collection-action(string);
     callback metadata-action(string, string);
     callback playlist-action(string, string);
-    callback playlist-selection(string, int);
-    pure callback playlist-song-selected(int, int)->bool;
-    callback toggle-like();
-    callback report-issue();
-    callback font-action(string);
-    callback unfocus();
-    in-out property<int> search-focus-request:0;
-    in-out property<bool> search-focus-pending:false;
-    in-out property<bool> search-input-focused:false;
-    callback keyboard(string,bool)->bool;
-    pure callback lyric-render(int,int)->LyricRender;
-    pure callback lyric-offset(int,int)->float;
-    pure callback setting-matches(string,string)->bool;
-    callback font-scale(string);
-    pure callback display-path(string)->string;
 }

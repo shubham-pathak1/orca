@@ -135,7 +135,7 @@ fn folder_browsing_and_playback_respect_roots_and_nested_boundaries() {
         "Album"
     );
     assert!(b.folder_groups("", "missing").unwrap().is_empty());
-    let mut query = ffi::Query {
+    let mut query = types::Query {
         kind: "folders".into(),
         key: "C:/Music_100%/".into(),
         ..Default::default()

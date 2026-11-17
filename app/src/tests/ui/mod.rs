@@ -1,8 +1,12 @@
+mod background;
+mod browse_geometry;
 mod browsing;
 mod collections;
 mod display;
 mod editors;
 mod folders;
+mod grid_reuse;
+mod grid_spacing;
 mod keyboard;
 mod lyrics;
 mod matrix;
@@ -10,13 +14,18 @@ mod player;
 mod settings;
 mod themes;
 use crate::controllers::collections::{collection_seed_matches, stage_collection_draft};
-use crate::controllers::preferences::register_font;
+use crate::controllers::preferences::{register_font, setting_matches};
+use crate::controllers::{
+    browse::query,
+    input::{command_request, install_keyboard, play_request},
+};
 use crate::platform_integration::set_background_playback;
 use crate::presentation::{player_background_tone, reset_empty_player, theme_accent};
 use crate::*;
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
 use slint::platform::{Platform, PlatformError, PointerEventButton, WindowAdapter, WindowEvent};
-use slint::Model;
+use slint::{Model, VecModel};
+use std::cell::Cell;
 
 struct OffscreenPlatform(Rc<MinimalSoftwareWindow>);
 #[test]
@@ -104,48 +113,54 @@ fn software_rendering_and_full_player_input_isolation() {
     let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
     slint::platform::set_platform(Box::new(OffscreenPlatform(window.clone()))).unwrap();
     let ui = OrcaWindow::new().unwrap();
+    models::install_grid_window(&ui);
+    ui.player()
+        .on_compact_quality(|quality, bits| models::quality_label(&quality, bits).into());
     crate::runtime::tests::verify_completions(&ui);
     window.set_size(slint::PhysicalSize::new(1280, 820));
-    let state = ui.global::<AppState>();
+
     let (editor_tx, editor_rx) = std::sync::mpsc::channel();
     controllers::editor::install(&ui, editor_tx);
-    state.set_draft(MetadataDraft {
+    ui.dialogs().set_draft(MetadataDraft {
         path: "fixture.flac".into(),
         title: "Song".into(),
         artist: "Artist".into(),
         ..Default::default()
     });
-    state.invoke_metadata_action("fetch-cover".into(), "".into());
-    assert!(state.get_editor_busy());
-    assert_eq!(state.get_editor_operation(), "fetch-cover");
+    ui.dialogs()
+        .invoke_metadata_action("fetch-cover".into(), "".into());
+    assert!(ui.dialogs().get_editor_busy());
+    assert_eq!(ui.dialogs().get_editor_operation(), "fetch-cover");
     assert!(matches!(
         editor_rx.try_recv().unwrap(),
         Request::Operation(_)
     ));
-    state.invoke_metadata_action("save".into(), "".into());
+    ui.dialogs()
+        .invoke_metadata_action("save".into(), "".into());
     assert!(
         editor_rx.try_recv().is_err(),
         "fetch must not submit a metadata save"
     );
-    state.set_editor_busy(false);
-    state.set_editor_status("".into());
+    ui.dialogs().set_editor_busy(false);
+    ui.dialogs().set_editor_status("".into());
     let weak = ui.as_weak();
-    state.on_unfocus(move || {
+    ui.shell().on_unfocus(move || {
         if let Some(ui) = weak.upgrade() {
             ui.invoke_focus_shell();
         }
     });
-    state.on_setting_matches(|text, search| setting_matches(&text, &search));
+    ui.preferences()
+        .on_setting_matches(|text, search| setting_matches(&text, &search));
     let songs = Rc::new(VecModel::from(vec![Song {
         title: "Test song".into(),
         artist: "Artist".into(),
         path: "fixture.flac".into(),
         ..Default::default()
     }]));
-    state.set_songs(songs.clone().into());
+    ui.library().set_songs(songs.clone().into());
     let mut grid_row = vec![songs.row_data(0).unwrap()];
     grid_row.resize(6, Song::default());
-    state.set_song_grid(
+    ui.library().set_song_grid(
         Rc::new(VecModel::from(vec![
             Rc::new(VecModel::from(grid_row)).into()
         ]))
@@ -153,7 +168,8 @@ fn software_rendering_and_full_player_input_isolation() {
     );
     let played = Rc::new(Cell::new(0));
     let observed = played.clone();
-    state.on_play(move |_| observed.set(observed.get() + 1));
+    ui.player()
+        .on_play(move |_| observed.set(observed.get() + 1));
     ui.show().unwrap();
     let mut pixels = vec![slint::Rgb8Pixel::default(); 1280 * 820];
     assert!(window.draw_if_needed(|renderer| {
@@ -168,17 +184,25 @@ fn software_rendering_and_full_player_input_isolation() {
         played,
         shortcuts: Rc::new(Cell::new(0)),
     };
+    display::verify_explicit_badge(&mut case);
     browsing::verify(&mut case);
+    browsing::verify_tables_and_collection_play(&mut case);
+    browsing::verify_seek_previews(&mut case);
+    browsing::verify_queue_remove_and_audio_details(&mut case);
     lyrics::verify(&mut case);
     collections::verify(&mut case);
     settings::verify(&mut case);
     keyboard::verify(&mut case);
     display::verify(&mut case);
     player::verify(&mut case);
+    player::verify_auto_hide(&mut case);
+    settings::verify_optional_sidebar(&mut case);
     themes::verify(&mut case);
     editors::verify(&mut case);
     folders::verify(&mut case);
     matrix::verify_keyboard_and_display_matrix(&case.ui, &case.window);
     collections::verify_narrow_details(&mut case);
+    browsing::verify_controller(&case.ui);
+    player::verify_controller(&case.ui);
     case.ui.hide().unwrap();
 }

@@ -3,34 +3,34 @@ use super::*;
 pub(super) fn verify(case: &mut UiCase) {
     let ui = &case.ui;
     let window = &case.window;
-    let state = ui.global::<AppState>();
+
     let pixels = &mut case.pixels;
-    state.set_detail_key("".into());
-    state.set_view("songs".into());
-    state.set_light_theme(true);
-    state.set_blurred_background(false);
-    state.set_full_player_background("off".into());
-    state.set_full_player(false);
-    state.set_grid(false);
+    ui.library().set_detail_key("".into());
+    ui.shell().set_view("songs".into());
+    ui.preferences().set_light_theme(true);
+    ui.preferences().set_blurred_background(false);
+    ui.preferences().set_full_player_background("off".into());
+    ui.player().set_full_player(false);
+    ui.preferences().set_grid(false);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     assert!(pixels[300 * 1280 + 600].r > 240 && pixels[300 * 1280 + 600].b > 230);
     screenshot(pixels, "light-library-smoke");
-    state.set_view("settings".into());
-    state.set_search("".into());
+    ui.shell().set_view("settings".into());
+    ui.library().set_search("".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "light-settings-smoke");
-    state.set_collection_dialog(true);
-    state.set_collection_kind("artists".into());
+    ui.dialogs().set_collection_dialog(true);
+    ui.dialogs().set_collection_kind("artists".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "light-editor-smoke");
-    state.set_collection_dialog(false);
-    state.set_now(Song {
+    ui.dialogs().set_collection_dialog(false);
+    ui.player().set_now(Song {
         title: "Player navigation".into(),
         artist: "Artist".into(),
         album: "Album".into(),
@@ -39,15 +39,15 @@ pub(super) fn verify(case: &mut UiCase) {
         cover_missing: true,
         ..Default::default()
     });
-    state.set_full_player(true);
-    state.set_full_artwork(false);
-    state.set_lyrics_open(false);
+    ui.player().set_full_player(true);
+    ui.preferences().set_full_artwork(false);
+    ui.lyrics().set_lyrics_open(false);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "light-minimal-player-smoke");
     let light_minimal = pixels.clone();
-    state.set_light_theme(false);
+    ui.preferences().set_light_theme(false);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
@@ -59,65 +59,66 @@ pub(super) fn verify(case: &mut UiCase) {
         pixels[20 * 1280 + 20].r < 20,
         "dark player without blur must keep its dark background"
     );
-    state.set_light_theme(true);
+    ui.preferences().set_light_theme(true);
 
     let targets = Rc::new(RefCell::new(Vec::new()));
     let observed = targets.clone();
-    state.on_open_group(move |key, secondary, _| {
+    ui.library().on_open_group(move |key, secondary, _| {
         observed
             .borrow_mut()
             .push((key.to_string(), secondary.to_string()))
     });
     click(window, 604.0, 355.0);
-    assert!(!state.get_full_player());
-    assert_eq!(state.get_view(), "artists");
+    assert!(!ui.player().get_full_player());
+    assert_eq!(ui.shell().get_view(), "artists");
     assert_eq!(
         targets.borrow().last(),
         Some(&("Artist".to_string(), String::new()))
     );
-    state.set_full_player(true);
+    ui.player().set_full_player(true);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     click(window, 670.0, 355.0);
-    assert!(!state.get_full_player());
-    assert_eq!(state.get_view(), "albums");
+    assert!(!ui.player().get_full_player());
+    assert_eq!(ui.shell().get_view(), "albums");
     assert_eq!(
         targets.borrow().last(),
         Some(&("Album".to_string(), "Album artist".to_string()))
     );
-    state.set_full_artwork(true);
-    state.set_full_player(true);
+    ui.preferences().set_full_artwork(true);
+    ui.player().set_full_player(true);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "light-full-player-smoke");
-    click(window, 604.0, 517.0);
+    click(window, 604.0, 527.0);
     assert!(
-        !state.get_full_player(),
+        !ui.player().get_full_player(),
         "full artwork artist link must leave the player"
     );
-    assert_eq!(state.get_view(), "artists");
-    state.set_full_player(true);
+    assert_eq!(ui.shell().get_view(), "artists");
+    ui.player().set_full_player(true);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
-    click(window, 670.0, 517.0);
+    click(window, 670.0, 527.0);
     assert!(
-        !state.get_full_player(),
+        !ui.player().get_full_player(),
         "full artwork album link must leave the player"
     );
-    assert_eq!(state.get_view(), "albums");
-    state.set_full_player(true);
-    state.set_blurred_background(true);
-    state.set_full_player_background("artwork".into());
-    state.set_lyrics_open(true);
+    assert_eq!(ui.shell().get_view(), "albums");
+    ui.player().set_full_player(true);
+    ui.preferences().set_blurred_background(true);
+    ui.preferences()
+        .set_full_player_background("artwork".into());
+    ui.lyrics().set_lyrics_open(true);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
     screenshot(pixels, "light-lyrics-player-smoke");
     let light_immersive = pixels.clone();
-    state.set_light_theme(false);
+    ui.preferences().set_light_theme(false);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
@@ -125,10 +126,10 @@ pub(super) fn verify(case: &mut UiCase) {
         *pixels == light_immersive,
         "full player artwork, blur, lyrics and controls must match across themes"
     );
-    state.set_full_player(false);
-    state.set_light_theme(true);
-    state.set_blurred_background(false);
-    state.set_view("songs".into());
+    ui.player().set_full_player(false);
+    ui.preferences().set_light_theme(true);
+    ui.preferences().set_blurred_background(false);
+    ui.shell().set_view("songs".into());
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });

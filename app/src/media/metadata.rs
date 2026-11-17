@@ -1,3 +1,4 @@
+//! Convert metadata drafts into typed service requests and validate asynchronous artwork targets.
 use crate::MetadataDraft;
 use orca_services::operation_types::CoverFetch;
 #[cfg(test)]
@@ -48,6 +49,24 @@ pub fn from_document(document: orca_services::types::MetadataDocument) -> Metada
     let value = document.fields;
     let number = |value: Option<i32>| value.map(|v| v.to_string()).unwrap_or_default().into();
     MetadataDraft {
+        composer: value
+            .advanced
+            .as_ref()
+            .and_then(|value| value.composer.clone())
+            .unwrap_or_default()
+            .into(),
+        comment: value
+            .advanced
+            .as_ref()
+            .and_then(|value| value.comment.clone())
+            .unwrap_or_default()
+            .into(),
+        advisory: match value.advanced.as_ref().and_then(|value| value.explicit) {
+            Some(false) => 1,
+            Some(true) => 2,
+            None => 0,
+        },
+        advanced_changed: false,
         path: value.path.into(),
         title: value.title.into(),
         artist: value.artist.into(),
@@ -103,7 +122,20 @@ pub fn edit(draft: &MetadataDraft) -> Result<orca_services::types::MetadataEdit,
     use orca_services::types::{MetadataEdit, MetadataFields};
     Ok(MetadataEdit {
         fields: MetadataFields {
-            advanced: None,
+            advanced: if draft.advanced_changed {
+                Some(orca_services::types::AdvancedMetadata {
+                    composer: optional(&draft.composer).map(str::to_owned),
+                    comment: optional(&draft.comment).map(str::to_owned),
+                    explicit: match draft.advisory {
+                        0 => None,
+                        1 => Some(false),
+                        2 => Some(true),
+                        _ => return Err("Choose Unspecified, Clean, or Explicit".into()),
+                    },
+                })
+            } else {
+                None
+            },
             path: draft.path.to_string(),
             title: draft.title.trim().into(),
             artist: draft.artist.trim().into(),
@@ -142,6 +174,25 @@ mod tests {
         assert_eq!(value["cover_to_embed"], "cover.jpg");
         assert_eq!(value["file_version"], "100:200:300");
         assert!(value["year"].is_null());
+    }
+    #[test]
+    fn advanced_values_are_preserved_unless_explicitly_edited() {
+        let mut draft = parse(r#"{"path":"song.flac","title":"Title","artist":"Artist","album":"Album","album_artist":"Artist","advanced":{"composer":"Composer","comment":"Note","explicit":false}}"#).unwrap();
+        assert_eq!(draft.composer, "Composer");
+        assert_eq!(draft.advisory, 1);
+        assert!(edit(&draft).unwrap().fields.advanced.is_none());
+        draft.advanced_changed = true;
+        draft.advisory = 2;
+        let fields = edit(&draft).unwrap().fields.advanced.unwrap();
+        assert_eq!(fields.explicit, Some(true));
+        assert_eq!(fields.comment.as_deref(), Some("Note"));
+        draft.advisory = 0;
+        draft.composer = "".into();
+        let fields = edit(&draft).unwrap().fields.advanced.unwrap();
+        assert!(fields.explicit.is_none());
+        assert!(fields.composer.is_none());
+        draft.advisory = 3;
+        assert!(edit(&draft).is_err());
     }
     #[test]
     fn invalid_numeric_fields_prevent_writing() {
