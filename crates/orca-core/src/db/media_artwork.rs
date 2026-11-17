@@ -1,14 +1,12 @@
+//! Convert embedded database artwork into profile-owned files and cached derivatives.
+use crate::artwork_cache::{artwork_extension_from_mime, write_webp_derivative};
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::io::Cursor;
 use std::path::Path;
 
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
-use image::codecs::webp::WebPEncoder;
-use image::imageops::FilterType;
-use image::ExtendedColorType;
 use rusqlite::{params, Connection};
 
 pub fn migrate_inline_artwork_to_files(
@@ -49,7 +47,7 @@ pub fn migrate_inline_artwork_to_files(
         let file_path = artwork_dir.join(format!("{}.{}", hash, artwork_extension_from_mime(mime)));
         let thumb_path = artwork_dir.join(format!("thumb_{}_80.webp", hash));
         let preview_path = artwork_dir.join(format!("preview_{}_256.webp", hash));
-        fs::write(&file_path, &decoded).map_err(|error| error.to_string())?;
+        crate::atomic_file::write(&file_path, &decoded).map_err(|error| error.to_string())?;
         let (thumb_url, preview_url) =
             write_artwork_derivatives(&decoded, &thumb_path, &preview_path).unwrap_or((None, None));
 
@@ -108,37 +106,4 @@ fn write_artwork_derivatives(
         .ok()
         .map(|_| preview_path.to_string_lossy().to_string());
     Ok((thumb, preview))
-}
-
-fn write_webp_derivative(
-    image: &image::DynamicImage,
-    output_path: &Path,
-    size: u32,
-) -> Result<(), String> {
-    let resized = image.resize(size, size, FilterType::Triangle).to_rgba8();
-    let mut output = Vec::new();
-    WebPEncoder::new_lossless(Cursor::new(&mut output))
-        .encode(
-            resized.as_raw(),
-            resized.width(),
-            resized.height(),
-            ExtendedColorType::Rgba8,
-        )
-        .map_err(|error| error.to_string())?;
-    fs::write(output_path, output).map_err(|error| error.to_string())
-}
-
-fn artwork_extension_from_mime(mime: &str) -> &'static str {
-    let normalized = mime.to_ascii_lowercase();
-    if normalized.contains("png") {
-        "png"
-    } else if normalized.contains("webp") {
-        "webp"
-    } else if normalized.contains("gif") {
-        "gif"
-    } else if normalized.contains("bmp") {
-        "bmp"
-    } else {
-        "jpg"
-    }
 }

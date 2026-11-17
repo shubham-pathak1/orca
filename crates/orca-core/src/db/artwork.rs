@@ -33,7 +33,7 @@ pub fn collection_needs_artwork(
     } else {
         conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM song_primary_artists pa JOIN songs s ON s.id=pa.song_id WHERE pa.name=?1 COLLATE NOCASE AND s.library_visible=1)
-             AND NOT EXISTS(SELECT 1 FROM artist_artworks WHERE artist_name=?1 AND NULLIF(artwork_path,'') IS NOT NULL)",
+             AND NOT EXISTS(SELECT 1 FROM artist_artworks WHERE artist_name=?1 COLLATE NOCASE AND NULLIF(artwork_path,'') IS NOT NULL)",
             [artist], |row| row.get(0),
         )
     };
@@ -48,7 +48,7 @@ pub fn update_artist_artwork(
 ) -> Result<(), String> {
     conn.execute(
         "INSERT INTO artist_artworks (artist_name, artwork_path, artwork_thumb_path)
-         VALUES (?1, ?2, ?3)
+         VALUES (COALESCE((SELECT artist_name FROM artist_artworks WHERE artist_name=?1 COLLATE NOCASE ORDER BY artist_name=?1 DESC,artist_name LIMIT 1),?1), ?2, ?3)
          ON CONFLICT(artist_name) DO UPDATE SET
            artwork_path = excluded.artwork_path,
            artwork_thumb_path = excluded.artwork_thumb_path",
@@ -59,16 +59,7 @@ pub fn update_artist_artwork(
 }
 
 pub fn remove_artist_artwork(conn: &Connection, artist_name: &str) -> Result<(), String> {
-    conn.execute(
-        "INSERT INTO artist_artworks (artist_name, artwork_path, artwork_thumb_path)
-         VALUES (?1, 'DELETED', 'DELETED')
-         ON CONFLICT(artist_name) DO UPDATE SET
-           artwork_path = 'DELETED',
-           artwork_thumb_path = 'DELETED'",
-        params![artist_name],
-    )
-    .map_err(|error| error.to_string())?;
-    Ok(())
+    update_artist_artwork(conn, artist_name, Some("DELETED"), Some("DELETED"))
 }
 
 pub fn get_artists_needing_artwork(conn: &Connection) -> Result<Vec<String>, String> {
@@ -79,11 +70,12 @@ pub fn get_artists_needing_artwork(conn: &Connection) -> Result<Vec<String>, Str
         .query_map([], |row| row.get::<_, String>(0))
         .map_err(|error| error.to_string())?;
     let covered = rows
+        .map(|name| name.map(|name| name.to_ascii_lowercase()))
         .collect::<rusqlite::Result<std::collections::HashSet<_>>>()
         .map_err(|error| error.to_string())?;
     Ok(super::get_artists(conn)?
         .into_iter()
-        .filter(|artist| !covered.contains(&artist.name))
+        .filter(|artist| !covered.contains(&artist.name.to_ascii_lowercase()))
         .map(|artist| artist.name)
         .collect())
 }

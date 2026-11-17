@@ -83,7 +83,7 @@ pub fn write_webp_derivative(
     crate::atomic_file::write(output_path, &output).map_err(|error| error.to_string())
 }
 
-fn artwork_extension_from_mime(mime: &str) -> &'static str {
+pub(crate) fn artwork_extension_from_mime(mime: &str) -> &'static str {
     let normalized = mime.to_ascii_lowercase();
     if normalized.contains("png") {
         "png"
@@ -109,5 +109,56 @@ mod tests {
     #[test]
     fn artwork_hash_is_content_based() {
         assert_eq!(artwork_hash(b"abc"), "900150983cd24fb0d6963f7d28e17f72");
+    }
+
+    #[test]
+    fn inline_migration_keeps_original_bytes_and_writes_complete_derivatives() {
+        use super::*;
+        use base64::Engine;
+        let folder = std::env::temp_dir().join(format!(
+            "orca-inline-artwork-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&folder).unwrap();
+        let conn = crate::db::init_db(folder.clone()).unwrap();
+        let source = image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+            512,
+            256,
+            image::Rgb([120, 40, 210]),
+        ));
+        let mut png = Cursor::new(Vec::new());
+        source.write_to(&mut png, image::ImageFormat::Png).unwrap();
+        let bytes = png.into_inner();
+        let data = format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(&bytes)
+        );
+        conn.execute("INSERT INTO songs(path,title,artist,duration,artwork_url) VALUES(?1,'Fixture','Artist',1000,?2)", ["fixture.flac",data.as_str()]).unwrap();
+        let artwork = folder.join("artwork");
+        assert_eq!(
+            crate::db::migrate_inline_artwork_to_files(&conn, &artwork).unwrap(),
+            1
+        );
+        let (full, thumb, preview): (String, String, String) = conn
+            .query_row(
+                "SELECT artwork_url,artwork_thumb_url,artwork_preview_url FROM songs",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(fs::read(&full).unwrap(), bytes);
+        assert_eq!(image::image_dimensions(&thumb).unwrap(), (80, 40));
+        assert_eq!(image::image_dimensions(&preview).unwrap(), (256, 128));
+        assert_eq!(
+            crate::db::migrate_inline_artwork_to_files(&conn, &artwork).unwrap(),
+            0
+        );
+        assert_eq!(fs::read(full).unwrap(), bytes);
+        drop(conn);
+        fs::remove_dir_all(folder).unwrap();
     }
 }
