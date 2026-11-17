@@ -1,13 +1,80 @@
-use super::SongMetadataUpdate;
+use super::{AdvancedMetadata, SongMetadataUpdate};
 use lofty::{
     config::WriteOptions,
     file::{AudioFile, TaggedFileExt},
     picture::{Picture, PictureType},
     prelude::*,
     probe::Probe,
-    tag::Tag,
+    tag::{ItemValue, Tag, TagItem, TagType},
 };
 use std::{fs, path::Path};
+
+// Lofty 0.21 maps advisory to ID3/MP4, but leaves this Vorbis field unknown.
+pub(super) fn advisory_value(tag: &Tag) -> Option<&str> {
+    tag.get_string(&ItemKey::ParentalAdvisory).or_else(|| {
+        tag.items()
+            .find_map(|item| match (item.key(), item.value()) {
+                (ItemKey::Unknown(key), ItemValue::Text(value))
+                    if key.eq_ignore_ascii_case("ITUNESADVISORY") =>
+                {
+                    Some(value.as_str())
+                }
+                _ => None,
+            })
+    })
+}
+fn clear_advisory(tag: &mut Tag) {
+    let keys: Vec<_> = tag
+        .items()
+        .filter_map(|item| match item.key() {
+            ItemKey::ParentalAdvisory => Some(item.key().clone()),
+            ItemKey::Unknown(key) if key.eq_ignore_ascii_case("ITUNESADVISORY") => {
+                Some(item.key().clone())
+            }
+            _ => None,
+        })
+        .collect();
+    for key in keys {
+        tag.remove_key(&key);
+    }
+}
+fn set_advisory(tag: &mut Tag, value: Option<&str>) -> Result<(), String> {
+    clear_advisory(tag);
+    if let Some(value) = value {
+        if matches!(tag.tag_type(), TagType::VorbisComments | TagType::Ape) {
+            tag.insert_unchecked(TagItem::new(
+                ItemKey::Unknown("ITUNESADVISORY".into()),
+                ItemValue::Text(value.into()),
+            ));
+        } else {
+            tag.insert_text(ItemKey::ParentalAdvisory, value.into());
+        }
+    }
+    if advisory_value(tag) != value {
+        return Err(
+            "This file format cannot store content advisory. No changes were saved.".into(),
+        );
+    }
+    Ok(())
+}
+
+/// Read editor-only tags afresh without storing them in the library index.
+pub fn read_advanced_metadata(path: &Path) -> Result<AdvancedMetadata, String> {
+    let file = Probe::open(path)
+        .and_then(|probe| Ok(probe.guess_file_type()?))
+        .and_then(|probe| probe.read())
+        .map_err(|error| error.to_string())?;
+    let tag = file.primary_tag().or_else(|| file.first_tag());
+    Ok(AdvancedMetadata {
+        composer: tag
+            .and_then(|tag| tag.get_string(&ItemKey::Composer))
+            .map(str::to_owned),
+        comment: tag
+            .and_then(|tag| tag.get_string(&ItemKey::Comment))
+            .map(str::to_owned),
+        explicit: super::scan::explicit_advisory(tag.and_then(advisory_value)),
+    })
+}
 
 pub fn update_song_metadata(update: SongMetadataUpdate) -> Result<(), String> {
     update_song_metadata_with_cover(update, None)
@@ -56,6 +123,21 @@ pub fn update_song_metadata_checked(
                 }
             }
         }
+        if update.advanced.is_some() {
+            let types: Vec<_> = tagged_file.tags().iter().map(Tag::tag_type).collect();
+            for kind in types {
+                if let Some(tag) = tagged_file.tag_mut(kind) {
+                    clear_advisory(tag);
+                    for key in [
+                        ItemKey::Composer,
+                        ItemKey::Comment,
+                        ItemKey::ParentalAdvisory,
+                    ] {
+                        tag.remove_key(&key);
+                    }
+                }
+            }
+        }
         let tag = writable_tag_mut(&mut tagged_file)?;
         set_text(tag, ItemKey::TrackTitle, &update.title);
         set_text(tag, ItemKey::TrackArtist, &update.artist);
@@ -69,6 +151,22 @@ pub fn update_song_metadata_checked(
         set_optional_number(tag, ItemKey::DiscNumber, update.disc_number);
         set_optional_text(tag, ItemKey::Genre, update.genre.as_deref());
         set_optional_text(tag, ItemKey::Lyrics, update.lyrics.as_deref());
+        if let Some(advanced) = &update.advanced {
+            let advisory = advanced
+                .explicit
+                .map(|explicit| if explicit { "1" } else { "2" });
+            for (key, value) in [
+                (ItemKey::Composer, advanced.composer.as_deref()),
+                (ItemKey::Comment, advanced.comment.as_deref()),
+            ] {
+                let value = value.map(str::trim).filter(|value| !value.is_empty());
+                set_optional_text(tag, key.clone(), value);
+                if tag.get_string(&key) != value {
+                    return Err("This file format cannot store the requested advanced tag. No changes were saved.".into());
+                }
+            }
+            set_advisory(tag, advisory)?;
+        }
         if let Some(picture) = cover {
             tag.push_picture(picture);
         }
@@ -189,10 +287,16 @@ fn save_and_verify(path: &Path, expected: &lofty::file::TaggedFile) -> Result<()
             ItemKey::AlbumArtist,
             ItemKey::Genre,
             ItemKey::Lyrics,
+            ItemKey::Composer,
+            ItemKey::Comment,
+            ItemKey::ParentalAdvisory,
         ] {
             if actual.get_string(&key) != expected_tag.get_string(&key) {
                 return Err("Metadata verification failed: the file format did not preserve the edited fields".into());
             }
+        }
+        if advisory_value(actual) != advisory_value(expected_tag) {
+            return Err("Metadata verification failed: content advisory was not preserved".into());
         }
         if actual.year() != expected_tag.year()
             || actual.track() != expected_tag.track()

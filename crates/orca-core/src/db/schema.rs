@@ -10,6 +10,8 @@ const LIKES_MIGRATION: i64 = 3;
 const FOLDER_RULES_MIGRATION: i64 = 4;
 const LYRICS_SUPPRESSION_MIGRATION: i64 = 5;
 const EXPLICIT_ADVISORY_MIGRATION: i64 = 6;
+const COMPOSER_MIGRATION: i64 = 7;
+const COMMA_ARTISTS_MIGRATION: i64 = 8;
 const LIKES_PREVIEW_VERSION: i64 = 3;
 const LIKES_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS liked_songs (
     song_id INTEGER PRIMARY KEY REFERENCES songs(id) ON DELETE CASCADE,
@@ -162,6 +164,23 @@ fn migrate(conn: &mut Connection) -> rusqlite::Result<()> {
             [LYRICS_SUPPRESSION_MIGRATION],
         )?;
     }
+    let composer_applied: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM orca_schema_migrations WHERE revision=?1)",
+        [COMPOSER_MIGRATION],
+        |row| row.get(0),
+    )?;
+    if !composer_applied {
+        ensure_column(&tx, "songs", "composer", "TEXT")?;
+        ensure_column(&tx, "songs", "modified_at", "INTEGER")?;
+        ensure_column(&tx, "songs", "year", "INTEGER")?;
+        // Rescan once so existing libraries acquire composer tags as well.
+        tx.execute("UPDATE songs SET modified_at=NULL", [])?;
+        tx.execute(
+            "INSERT INTO orca_schema_migrations(revision) VALUES(?1)",
+            [COMPOSER_MIGRATION],
+        )?;
+    }
+    tx.execute_batch("CREATE INDEX IF NOT EXISTS idx_songs_composer ON songs(composer); CREATE INDEX IF NOT EXISTS idx_songs_year ON songs(year);")?;
     let explicit_advisory_applied: bool = tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM orca_schema_migrations WHERE revision=?1)",
         [EXPLICIT_ADVISORY_MIGRATION],
@@ -197,10 +216,21 @@ fn migrate(conn: &mut Connection) -> rusqlite::Result<()> {
             INSERT INTO artist_index_pending SELECT NEW.id WHERE NOT EXISTS(SELECT 1 FROM artist_index_pending WHERE song_id=NEW.id);
          END;",
     )?;
-    if !artist_index_exists {
+    let comma_artists_applied: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM orca_schema_migrations WHERE revision=?1)",
+        [COMMA_ARTISTS_MIGRATION],
+        |row| row.get(0),
+    )?;
+    if !artist_index_exists || !comma_artists_applied {
         tx.execute(
             "INSERT OR IGNORE INTO artist_index_pending SELECT id FROM songs",
             [],
+        )?;
+    }
+    if !comma_artists_applied {
+        tx.execute(
+            "INSERT INTO orca_schema_migrations(revision) VALUES(?1)",
+            [COMMA_ARTISTS_MIGRATION],
         )?;
     }
     // Cover the active catalog order so browsing IDs does not fetch every
@@ -400,6 +430,7 @@ CREATE TABLE IF NOT EXISTS artist_artworks (
             artwork_path TEXT,
             artwork_thumb_path TEXT
         );
+CREATE INDEX IF NOT EXISTS idx_artist_artworks_name_nocase ON artist_artworks(artist_name COLLATE NOCASE);
 CREATE TABLE IF NOT EXISTS album_artworks (
             album_key TEXT PRIMARY KEY,
             artwork_path TEXT,

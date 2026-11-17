@@ -38,10 +38,10 @@ fn parse_tag_i32(value: Option<&str>) -> Option<i32> {
     first.parse::<i32>().ok().filter(|n| *n > 0)
 }
 
-fn explicit_advisory(value: Option<&str>) -> Option<bool> {
+pub(super) fn explicit_advisory(value: Option<&str>) -> Option<bool> {
     match value?.trim().to_ascii_lowercase().as_str() {
         "1" | "4" | "true" | "yes" | "explicit" => Some(true),
-        "0" | "2" | "false" | "no" | "clean" | "inoffensive" => Some(false),
+        "2" | "false" | "no" | "clean" | "inoffensive" => Some(false),
         _ => None,
     }
 }
@@ -92,6 +92,7 @@ where
                 disc_number: None,
                 genre: None,
                 explicit: None,
+                composer: None,
                 duration: 0,
                 artwork: None,
                 artwork_thumb: None,
@@ -181,7 +182,7 @@ where
         };
 
     let lyrics = tag.and_then(|t| t.get_string(&ItemKey::Lyrics).map(|s| s.to_string()));
-    let explicit = tag.and_then(|t| explicit_advisory(t.get_string(&ItemKey::ParentalAdvisory)));
+    let explicit = tag.and_then(|tag| explicit_advisory(super::metadata::advisory_value(tag)));
 
     let sample_rate = properties.sample_rate();
     let bitrate = properties.audio_bitrate();
@@ -210,6 +211,9 @@ where
         disc_number,
         genre,
         explicit,
+        composer: tag
+            .and_then(|tag| tag.get_string(&ItemKey::Composer))
+            .map(str::to_owned),
         duration,
         artwork: None,
         artwork_thumb: None,

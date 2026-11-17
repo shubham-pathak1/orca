@@ -174,6 +174,7 @@ impl Backend {
             return Err("Metadata document exceeds 1 MB".into());
         }
         let update = library::SongMetadataUpdate {
+            advanced: None,
             path: fields.path,
             title: fields.title,
             artist: fields.artist,

@@ -1,8 +1,8 @@
 mod metadata;
 mod scan;
 pub use metadata::{
-    remove_song_cover, replace_song_cover, update_collection_name_checked, update_song_metadata,
-    update_song_metadata_checked, update_song_metadata_cover_action,
+    read_advanced_metadata, remove_song_cover, replace_song_cover, update_collection_name_checked,
+    update_song_metadata, update_song_metadata_checked, update_song_metadata_cover_action,
     update_song_metadata_with_cover,
 };
 pub use scan::{scan_music_file, scan_music_file_with_metadata};
@@ -21,6 +21,8 @@ pub struct LocalSong {
     pub disc_number: Option<i32>,
     pub genre: Option<String>,
     pub explicit: Option<bool>,
+    #[serde(default)]
+    pub composer: Option<String>,
     pub duration: u32,
     pub artwork: Option<String>,
     pub artwork_thumb: Option<String>,
@@ -34,8 +36,17 @@ pub struct LocalSong {
     pub file_size: Option<u64>,
 }
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct AdvancedMetadata {
+    pub composer: Option<String>,
+    pub comment: Option<String>,
+    pub explicit: Option<bool>,
+}
+
 #[derive(Deserialize)]
 pub struct SongMetadataUpdate {
+    #[serde(default)]
+    pub advanced: Option<AdvancedMetadata>,
     pub path: String,
     pub title: String,
     pub artist: String,

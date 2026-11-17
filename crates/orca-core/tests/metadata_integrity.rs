@@ -41,6 +41,7 @@ fn edits_and_cover_removal_preserve_decoded_audio_across_formats() {
         }
         for remove in [false, true] {
             let update = SongMetadataUpdate {
+                advanced: None,
                 path: path.to_str().unwrap().into(),
                 title: "Edited title 音楽".into(),
                 artist: "Artist".into(),
