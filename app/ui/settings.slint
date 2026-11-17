@@ -1,178 +1,1139 @@
 import { ScrollView, CheckBox, ComboBox, Slider, LineEdit } from "std-widgets.slint";
-import { AppState } from "state.slint";
+import { AppState, LibraryState, PlayerState, PreferencesState, DialogState } from "state.slint";
 import { Icons } from "icons.slint";
 import { IconButton, TextButton, ToggleSwitch, AccentSlider, ActionFocus } from "controls.slint";
-
 component SettingRow inherits Rectangle {
     in property <string> title;
     in property <string> description;
     in property <string> hint;
-    if AppState.show-tooltips && root.hint!="": Tooltip {text:@markdown("\{root.hint}");}
-    private property<bool> compact:root.width<620px;
-    height:root.compact ? 128px : 78px;
-    Text {x:0px;y:4px;height:24px;width:root.compact ? parent.width : parent.width - 260px;text:root.title;color:AppState.ink;font-weight:600;font-size:14px*AppState.scale;}
-    Text {x:0px;y:28px;height:40px;width:root.compact ? parent.width : parent.width - 260px;text:root.description;color:AppState.ink;font-size:14px*AppState.scale;wrap:word-wrap;}
-    Rectangle {x:root.compact ? 0px : parent.width - 220px;y:root.compact ? 76px : 0px;width:220px;height:40px;@children}
-    Rectangle {y:parent.height - 1px;height:1px;background:AppState.ink.with-alpha(0.1020);}
+    if PreferencesState.show-tooltips && root.hint!="": Tooltip {
+        text: @markdown("\{root.hint}");
+    }
+    private property<bool> compact: root.width<620px;
+    height: root.compact ? description.y + description.height + 56px : max(60px,description.y + description.height + 12px);
+    Text {
+        x: 0px;
+        y: 4px;
+        height: 24px;
+        width: root.compact ? parent.width : parent.width - 260px;
+        text: root.title;
+        color: PreferencesState.ink;
+        font-weight: 600;
+        font-size: 14px*PreferencesState.scale;
+    }
+    description:=Text {
+        x: 0px;
+        y: 28px;
+        height: self.preferred-height;
+        width: root.compact ? parent.width : parent.width - 260px;
+        text: root.description;
+        color: PreferencesState.secondary-ink;
+        font-size: 14px*PreferencesState.scale;
+        wrap: word-wrap;
+    }
+    Rectangle {
+        x: root.compact ? 0px : parent.width - 220px;
+        y: root.compact ? description.y + description.height + 8px : 4px;
+        width: 220px;
+        height: 40px;
+        @children
+    }
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: PreferencesState.ink.with-alpha(0.1020);
+    }
+}
+
+component SectionHeading inherits Rectangle {
+    in property<string> text;
+    in property<length> text-size: 18px*PreferencesState.scale;
+    in property<length> space-after: 8px;
+    height: 8px+label.preferred-height+root.space-after;
+    label:=Text {
+        x: 0px;
+        y: 8px;
+        width: parent.width;
+        height: self.preferred-height;
+        horizontal-alignment: left;
+        text: root.text;
+        color: PreferencesState.ink;
+        font-size: root.text-size;
+        font-weight: 600;
+    }
 }
 
 component KeyCap inherits Rectangle {
     in property<string> text;
-    width:max(24px,key.preferred-width+16px);height:26px;border-radius:4px;
-    border-width:1px;border-color:AppState.ink.with-alpha(0.6000);background:AppState.ink.with-alpha(0.0353);
-    key:=Text {text:root.text;color:AppState.ink;font-size:11px;font-weight:600;horizontal-alignment:center;vertical-alignment:center;}
+    width: max(24px,key.preferred-width+16px);
+    height: 26px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: PreferencesState.ink.with-alpha(0.6000);
+    background: PreferencesState.ink.with-alpha(0.0353);
+    key:=Text {
+        text: root.text;
+        color: PreferencesState.ink;
+        font-size: 11px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
 }
+
 component ShortcutRow inherits Rectangle {
     in property<string> title;
     in property<[string]> keys;
-    height:42px;
-    Text {x:16px;width:parent.width - 180px;text:root.title;color:AppState.ink;font-size:14px*AppState.scale;vertical-alignment:center;}
-    HorizontalLayout {x:parent.width - 174px;width:158px;y:8px;height:26px;alignment:end;spacing:6px;
-        for key[index] in root.keys: HorizontalLayout {spacing:6px;
-            if index>0: Text {text:"+";color:AppState.ink;vertical-alignment:center;}
-            KeyCap {text:key;}
+    height: 42px;
+    Text {
+        x: 16px;
+        width: parent.width - 180px;
+        text: root.title;
+        color: PreferencesState.ink;
+        font-size: 14px*PreferencesState.scale;
+        vertical-alignment: center;
+    }
+    HorizontalLayout {
+        x: parent.width - 174px;
+        width: 158px;
+        y: 8px;
+        height: 26px;
+        alignment: end;
+        spacing: 6px;
+        for key[index] in root.keys: HorizontalLayout {
+            spacing: 6px;
+            if index>0: Text {
+                text: "+";
+                color: PreferencesState.ink;
+                vertical-alignment: center;
+            }
+            KeyCap {
+                text: key;
+            }
         }
     }
-    Rectangle {y:parent.height - 1px;height:1px;background:AppState.ink.with-alpha(0.0392);}
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: PreferencesState.ink.with-alpha(0.0392);
+    }
 }
+
 export component SettingsView inherits Rectangle {
     private property <int> tab;
-    ScrollView {y:0px;height:48px;vertical-scrollbar-policy:always-off;
-    HorizontalLayout {
-        height:36px;alignment:start;spacing:root.width<620px ? 14px : 28px;
-        for label[index] in ["Appearance","Interface","Library","Audio","About"]: Rectangle {
-            width:text.preferred-width+8px;height:36px;
-            accessible-role:button;accessible-label:label;
-            focus:=ActionFocus {activated=>{root.tab=index;}}
-            border-width:focus.has-focus ? 2px : 0px;border-color:AppState.ink;
-            text := Text {text:label;color:AppState.ink;font-size:14px*AppState.scale;font-weight:600;vertical-alignment:center;}
-            Rectangle {y:parent.height - 2px;height:2px;background:root.tab==index ? AppState.ink : transparent;}
-            TouchArea {clicked => {root.tab=index;}}
+    private property<string> romanization-search;
+    private property<bool> category-rail: root.width>=900px && LibraryState.search=="";
+    private property<[string]> pages: ["Appearance","Interface","Player","Lyrics","Library","Audio","About"];
+    if root.category-rail: VerticalLayout {
+        x: 0px;
+        y: 0px;
+        width: 148px;
+        height: min(root.height,304px);
+        alignment: start;
+        spacing: 4px;
+        for label[index] in root.pages: Rectangle {
+            height: 40px;
+            border-radius: 6px;
+            background: root.tab==index ? PreferencesState.ink.with-alpha(0.08) : rail-pointer.has-hover ? PreferencesState.ink.with-alpha(0.04) : transparent;
+            accessible-role: button;
+            accessible-label: label;
+            rail-focus:=ActionFocus {
+                activated=>{
+                    root.tab=index;
+                }
+            }
+            border-width: AppState.keyboard-navigation && rail-focus.has-focus ? 2px : 0px;
+            border-color: PreferencesState.ink;
+            Text {
+                x: 12px;
+                width: parent.width - 24px;
+                height: parent.height;
+                text: label;
+                color: root.tab==index ? PreferencesState.ink : PreferencesState.secondary-ink;
+                font-size: 14px*PreferencesState.scale;
+                font-weight: root.tab==index ? 600 : 500;
+                vertical-alignment: center;
+            }
+            rail-pointer:=TouchArea {
+                clicked=>{
+                    root.tab=index;
+                }
+            }
         }
     }
+    if !root.category-rail: ScrollView {
+        y: 0px;
+        height: 48px;
+        vertical-scrollbar-policy: always-off;
+        HorizontalLayout {
+            height: 36px;
+            alignment: start;
+            spacing: root.width<620px ? 14px : 28px;
+            for label[index] in root.pages: Rectangle {
+                width: text.preferred-width+8px;
+                height: 36px;
+                accessible-role: button;
+                accessible-label: label;
+                focus:=ActionFocus {
+                    activated=>{
+                        root.tab=index;
+                    }
+                }
+                border-width: AppState.keyboard-navigation && focus.has-focus ? 2px : 0px;
+                border-color: PreferencesState.ink;
+                text := Text {
+                    text: label;
+                    color: PreferencesState.ink;
+                    font-size: 14px*PreferencesState.scale;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+                Rectangle {
+                    y: parent.height - 2px;
+                    height: 2px;
+                    background: root.tab==index ? PreferencesState.ink : transparent;
+                }
+                TouchArea {
+                    clicked => {
+                        root.tab=index;
+                    }
+                }
+            }
+        }
     }
-    Rectangle {y:48px;height:1px;background:AppState.ink.with-alpha(0.1020);}
+    if !root.category-rail: Rectangle {
+        y: 48px;
+        height: 1px;
+        background: PreferencesState.ink.with-alpha(0.1020);
+    }
     ScrollView {
-        y:60px;height:parent.height - 60px;horizontal-scrollbar-policy:always-off;
+        x: root.category-rail ? 180px : 0px;
+        y: root.category-rail ? 0px : 60px;
+        width: root.width - self.x;
+        height: parent.height - self.y;
+        horizontal-scrollbar-policy: always-off;
+        private property<int> selected-page: root.tab;
+        changed selected-page=>{
+            self.content-y=0px;
+        }
+        private property<string> query: LibraryState.search;
+        changed query=>{
+            self.content-y=0px;
+        }
         VerticalLayout {
-            x:0px;width:min(root.width - 12px,820px);spacing:24px;alignment:start;
-            if root.tab==0 || AppState.search!="": VerticalLayout {spacing:24px;alignment:start;
-                if AppState.setting-matches("Theme color scheme",AppState.search): Rectangle {height:140px;
-                    Text {x:0px;y:4px;width:parent.width;height:24px;text:"Theme";color:AppState.ink;font-weight:600;font-size:14px*AppState.scale;}
-                    Text {x:0px;y:28px;width:parent.width;height:24px;text:"Choose your preferred color scheme";color:AppState.ink;font-size:14px*AppState.scale;}
-                    HorizontalLayout {x:0px;y:64px;height:46px;alignment:start;spacing:8px;
-                        TextButton {width:128px;height:46px;text:"Dark";primary:!AppState.light-theme;clicked=>{AppState.light-theme=false;AppState.save-settings();}}
-                        TextButton {width:128px;height:46px;text:"Light";primary:AppState.light-theme;clicked=>{AppState.light-theme=true;AppState.save-settings();}}
+            x: 0px;
+            width: min(root.width - (root.category-rail ? 192px : 12px),820px);
+            spacing: 12px;
+            alignment: start;
+            if root.category-rail: SectionHeading {
+                text: root.pages[root.tab];
+                text-size: 22px;
+                space-after: 16px;
+            }
+            if (root.tab==0 || root.tab==2) || LibraryState.search!="": VerticalLayout {
+                spacing: 16px;
+                alignment: start;
+                if (root.tab==0 || LibraryState.search!="") && PreferencesState.setting-matches("Theme color scheme",LibraryState.search): Rectangle {
+                    height: 140px;
+                    Text {
+                        x: 0px;
+                        y: 4px;
+                        width: parent.width;
+                        height: 24px;
+                        text: "Theme";
+                        color: PreferencesState.ink;
+                        font-weight: 600;
+                        font-size: 14px*PreferencesState.scale;
                     }
-                    Rectangle {y:parent.height - 1px;height:1px;background:AppState.ink.with-alpha(0.1020);}}
-                if AppState.setting-matches("Font preset custom browse file selected remove",AppState.search): font-setting:=Rectangle {
-                    private property<bool> compact:self.width<440px;
-                    private property<string> font-selection:AppState.font-path + "|" + AppState.font-family + "|" + AppState.custom-font-family;
-                    changed font-selection=>{font-picker.current-index=AppState.font-path!="" && AppState.font-family==AppState.custom-font-family ? 2 : AppState.font-family=="" ? 1 : 0;}
-                    height:font-setting.compact ? 180px : 140px;
-                    Text {x:0px;y:4px;width:parent.width;height:24px;text:"Font";color:AppState.ink;font-weight:600;font-size:14px*AppState.scale;}
-                    Text {x:0px;y:28px;width:parent.width;height:36px;text:"Pick a preset or browse for a custom font file";color:AppState.ink;font-size:14px*AppState.scale;wrap:word-wrap;}
-                    HorizontalLayout {x:0px;y:70px;width:parent.width;height:40px;alignment:start;spacing:8px;
-                        font-picker:=ComboBox {
-                            enabled:AppState.focus-layer=="browse";
-                            width:font-setting.compact ? font-setting.width - (AppState.font-path!="" ? 48px : 0px) : min(280px,font-setting.width - (AppState.font-path!="" ? 166px : 118px));
-                            model:AppState.font-path!="" ? ["Plus Jakarta Sans (Default)","System UI",AppState.custom-font-family] : ["Plus Jakarta Sans (Default)","System UI"];
-                            current-index:AppState.font-path!="" && AppState.font-family==AppState.custom-font-family ? 2 : AppState.font-family=="" ? 1 : 0;
-                            selected(value)=>{if self.current-index==0 {AppState.font-action("preset");} else if self.current-index==1 {AppState.font-action("system");} else {AppState.font-action("custom");}}
+                    Text {
+                        x: 0px;
+                        y: 28px;
+                        width: parent.width;
+                        height: 24px;
+                        text: "Choose your preferred color scheme";
+                        color: PreferencesState.ink;
+                        font-size: 14px*PreferencesState.scale;
+                    }
+                    HorizontalLayout {
+                        x: 0px;
+                        y: 64px;
+                        height: 46px;
+                        alignment: start;
+                        spacing: 8px;
+                        TextButton {
+                            width: 128px;
+                            height: 46px;
+                            text: "Dark";
+                            primary: !PreferencesState.light-theme;
+                            clicked=>{
+                                PreferencesState.light-theme=false;
+                                PreferencesState.save-settings();
+                            }
                         }
-                        if AppState.font-path!="": IconButton {label:"Remove custom font";width:40px;height:40px;icon-size:16px;icon:Icons.close;outlined:true;clicked=>{AppState.font-action("remove");}}
-                        if !font-setting.compact: TextButton {width:110px;height:40px;text:"Browse file";clicked=>{AppState.font-action("browse");}}
+                        TextButton {
+                            width: 128px;
+                            height: 46px;
+                            text: "Light";
+                            primary: PreferencesState.light-theme;
+                            clicked=>{
+                                PreferencesState.light-theme=true;
+                                PreferencesState.save-settings();
+                            }
+                        }
                     }
-                    if font-setting.compact: TextButton {x:0px;y:114px;width:110px;height:40px;text:"Browse file";clicked=>{AppState.font-action("browse");}}
-                    Rectangle {y:parent.height - 1px;height:1px;background:AppState.ink.with-alpha(0.1020);}}
-                if AppState.setting-matches("Font Size adjust base percentage",AppState.search): SettingRow {title:"Font Size";description:"Adjust the base font size";
-                    HorizontalLayout {spacing:10px;
-                        AccentSlider {label:"Font size";minimum:80;maximum:120;value:AppState.scale*100;changed(value) => {AppState.scale=value/100;AppState.save-settings();}}
-                        LineEdit {changed has-focus=>{AppState.text-input-focused=self.has-focus;}width:58px;height:36px;text:round(AppState.scale*100)+"";accepted(text)=>{AppState.font-scale(text);}}
-                        Text {text:"%";color:AppState.ink;vertical-alignment:center;}
-                    }}
-                if AppState.setting-matches("Visuals Minimal text only artwork presets",AppState.search): Rectangle {height:120px;
-                    Text {x:0px;y:0px;height:24px;text:"Visuals";color:AppState.ink;font-size:14px*AppState.scale;font-weight:600;}
-                    Text {x:0px;y:26px;height:28px;width:parent.width;text:"Choose a preset, then adjust individual options";color:AppState.ink;font-size:14px*AppState.scale;}
-                    HorizontalLayout {y:64px;height:40px;alignment:start;spacing:8px;
-                        TextButton {text:"Default";primary:AppState.browse-artwork && AppState.compact-artwork && AppState.full-artwork && AppState.blurred-background && AppState.full-player-background=="artwork" && AppState.dynamic-accent;
-                            clicked=>{AppState.browse-artwork=true;AppState.compact-artwork=true;AppState.full-artwork=true;AppState.blurred-background=true;AppState.full-player-background="artwork";AppState.dynamic-accent=true;AppState.save-settings();}}
-                        TextButton {text:"Minimal";primary:!AppState.browse-artwork && !AppState.compact-artwork && !AppState.full-artwork && !AppState.blurred-background && AppState.full-player-background=="off" && !AppState.dynamic-accent;
-                            clicked=>{AppState.browse-artwork=false;AppState.compact-artwork=false;AppState.full-artwork=false;AppState.blurred-background=false;AppState.full-player-background="off";AppState.dynamic-accent=false;AppState.grid=false;AppState.save-settings();}}
+                    Rectangle {
+                        y: parent.height - 1px;
+                        height: 1px;
+                        background: PreferencesState.ink.with-alpha(0.1020);
                     }
                 }
-                if AppState.setting-matches("Visuals Browse artwork",AppState.search): SettingRow {title:"Browse artwork";description:"Show covers across the library, artists, albums, genres, playlists, and queue";
-                    ToggleSwitch {label:"Browse artwork";x:178px;y:12px;checked <=> AppState.browse-artwork;toggled=>{AppState.save-settings();}}}
-                if AppState.setting-matches("Visuals Compact player artwork",AppState.search): SettingRow {title:"Compact player artwork";description:"Show the cover beside the current track";
-                    ToggleSwitch {label:"Compact player artwork";x:178px;y:12px;checked <=> AppState.compact-artwork;toggled=>{AppState.save-settings();}}}
-                if AppState.setting-matches("Visuals Full player artwork",AppState.search): SettingRow {title:"Full player artwork";description:"Show the cover in the full player";
-                    ToggleSwitch {label:"Full player artwork";x:178px;y:12px;checked <=> AppState.full-artwork;toggled=>{AppState.save-settings();}}}
-                if AppState.setting-matches("Dynamic cover accent tint active controls current art",AppState.search): SettingRow {title:"Dynamic cover accent";description:"Tint active controls from the current cover art";
-                    ToggleSwitch {label:"Dynamic cover accent";x:178px;y:12px;checked <=> AppState.dynamic-accent;toggled => {AppState.save-settings();}}}
-                if AppState.setting-matches("Visuals Browse backgrounds cover art ambience library",AppState.search): SettingRow {title:"Browse backgrounds";description:"Show subtle cover colors behind library pages";
-                    ToggleSwitch {label:"Browse backgrounds";x:178px;y:12px;checked <=> AppState.blurred-background;toggled => {AppState.save-settings();}}}
-                if AppState.setting-matches("Visuals Full player background artwork color off",AppState.search): SettingRow {title:"Full player background";description:"Choose artwork, a cover-color gradient, or no background";
-                    ComboBox {enabled:AppState.focus-layer=="browse";model:["Artwork","Color","Off"];current-index:AppState.full-player-background=="color" ? 1 : AppState.full-player-background=="off" ? 2 : 0;
-                        selected(value)=>{AppState.full-player-background=self.current-index==1 ? "color" : self.current-index==2 ? "off" : "artwork";AppState.save-settings();}}}
-            }
-            if root.tab==1 || AppState.search!="": VerticalLayout {spacing:24px;alignment:start;
-                if AppState.setting-matches("Show tooltips hover hints controls",AppState.search): SettingRow {title:"Show tooltips";description:"Show hover hints for controls and track details";
-                    ToggleSwitch {label:"Show tooltips";x:178px;y:12px;checked <=> AppState.show-tooltips;toggled=>{AppState.save-settings();}}}
-                if AppState.setting-matches("Lyrics alignment left center synced word timed",AppState.search): SettingRow {title:"Lyrics alignment";description:"Align lyrics in the side panel and full player";
-                    ComboBox {enabled:AppState.focus-layer=="browse";model:["Center","Left"];current-index:AppState.lyrics-left-aligned ? 1 : 0;selected(value) => {AppState.lyrics-left-aligned=self.current-index==1;AppState.save-settings();}}}
-                if AppState.setting-matches("Sidebar mode text labels icons",AppState.search): SettingRow {title:"Sidebar mode";description:"Choose whether the sidebar should show text labels or just icons";
-                    ComboBox {enabled:AppState.focus-layer=="browse";model:["Icon-only","Labels"];current-index:AppState.icon-sidebar ? 0 : 1;selected(value) => {AppState.icon-sidebar=self.current-index==0;AppState.save-settings();}}}
-                if AppState.setting-matches("Seekbar style classic slider decoded waveform",AppState.search): SettingRow {title:"Seekbar style";description:"Choose between the classic slider and a decoded waveform";
-                    ComboBox {enabled:AppState.focus-layer=="browse";model:["Waveform","Classic"];current-index:AppState.seek-style=="waveform" ? 0 : 1;selected(value) => {AppState.seek-style=self.current-index==0 ? "waveform" : "classic";AppState.save-settings();}}}
-                if AppState.setting-matches("Liked Songs favorites heart controls",AppState.search): SettingRow {title:"Liked Songs";description:"Show Liked Songs in Playlists and the Like action in player controls. Your saved likes stay when hidden.";
-                    ToggleSwitch {label:"Liked Songs";x:178px;y:12px;checked <=> AppState.show-liked-songs;toggled => {AppState.save-settings();AppState.browse();}}}
-                if AppState.setting-matches("Keyboard shortcuts",AppState.search): Text {text:"Keyboard shortcuts";color:AppState.ink;font-size:14px;font-weight:600;}
-                if AppState.setting-matches("Keyboard shortcuts",AppState.search): Rectangle {
-                    height:504px;border-width:1px;border-color:AppState.ink.with-alpha(0.1020);border-radius:6px;
-                    VerticalLayout {spacing:0px;alignment:start;
-                        ShortcutRow {title:"Play or pause";keys:["Space"];}
-                        ShortcutRow {title:"Next song";keys:["Alt","N"];}
-                        ShortcutRow {title:"Previous song";keys:["Alt","P"];}
-                        ShortcutRow {title:"Toggle mute";keys:["M"];}
-                        ShortcutRow {title:"Show or hide lyrics";keys:["L"];}
-                        ShortcutRow {title:"Open or close full player";keys:["F"];}
-                        ShortcutRow {title:"Focus or leave search";keys:["Ctrl","K"];}
-                        ShortcutRow {title:"Open settings";keys:["Ctrl",","];}
-                        ShortcutRow {title:"Show or hide queue";keys:["Q"];}
-                        ShortcutRow {title:"Toggle full screen";keys:["F11"];}
-                        ShortcutRow {title:"Close full player";keys:["Escape"];}
-                        ShortcutRow {title:"Toggle Phantom mode";keys:["Ctrl","Shift","B"];}
+                if (root.tab==0 || LibraryState.search!="") && PreferencesState.setting-matches("Font preset custom browse file selected remove",LibraryState.search): font-setting:=Rectangle {
+                    private property<bool> compact: self.width<440px;
+                    private property<string> font-selection: PreferencesState.font-path + "|" + PreferencesState.font-family + "|" + PreferencesState.custom-font-family;
+                    changed font-selection=>{
+                        font-picker.current-index=PreferencesState.font-path!="" && PreferencesState.font-family==PreferencesState.custom-font-family ? 2 : PreferencesState.font-family=="" ? 1 : 0;
+                    }
+                    height: font-setting.compact ? 180px : 140px;
+                    Text {
+                        x: 0px;
+                        y: 4px;
+                        width: parent.width;
+                        height: 24px;
+                        text: "Font";
+                        color: PreferencesState.ink;
+                        font-weight: 600;
+                        font-size: 14px*PreferencesState.scale;
+                    }
+                    Text {
+                        x: 0px;
+                        y: 28px;
+                        width: parent.width;
+                        height: 36px;
+                        text: "Pick a preset or browse for a custom font file";
+                        color: PreferencesState.ink;
+                        font-size: 14px*PreferencesState.scale;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        x: 0px;
+                        y: 70px;
+                        width: parent.width;
+                        height: 40px;
+                        alignment: start;
+                        spacing: 8px;
+                        font-picker:=ComboBox {
+                            enabled: AppState.focus-layer=="browse";
+                            width: font-setting.compact ? font-setting.width - (PreferencesState.font-path!="" ? 48px : 0px) : min(280px,font-setting.width - (PreferencesState.font-path!="" ? 166px : 118px));
+                            model: PreferencesState.font-path!="" ? ["Plus Jakarta Sans (Default)","System UI",PreferencesState.custom-font-family] : ["Plus Jakarta Sans (Default)","System UI"];
+                            current-index: PreferencesState.font-path!="" && PreferencesState.font-family==PreferencesState.custom-font-family ? 2 : PreferencesState.font-family=="" ? 1 : 0;
+                            selected(value)=>{
+                                if self.current-index==0 {
+                                    PreferencesState.font-action("preset");
+                                } else if self.current-index==1 {
+                                    PreferencesState.font-action("system");
+                                } else {
+                                    PreferencesState.font-action("custom");
+                                }
+                            }
+                        }
+                        if PreferencesState.font-path!="": IconButton {
+                            label: "Remove custom font";
+                            width: 40px;
+                            height: 40px;
+                            icon-size: 16px;
+                            icon: Icons.close;
+                            outlined: true;
+                            clicked=>{
+                                PreferencesState.font-action("remove");
+                            }
+                        }
+                        if !font-setting.compact: TextButton {
+                            width: 110px;
+                            height: 40px;
+                            text: "Browse file";
+                            clicked=>{
+                                PreferencesState.font-action("browse");
+                            }
+                        }
+                    }
+                    if font-setting.compact: TextButton {
+                        x: 0px;
+                        y: 114px;
+                        width: 110px;
+                        height: 40px;
+                        text: "Browse file";
+                        clicked=>{
+                            PreferencesState.font-action("browse");
+                        }
+                    }
+                    Rectangle {
+                        y: parent.height - 1px;
+                        height: 1px;
+                        background: PreferencesState.ink.with-alpha(0.1020);
+                    }
+                }
+                if (root.tab==0 || LibraryState.search!="") && PreferencesState.setting-matches("Font Size adjust base percentage",LibraryState.search): SettingRow {
+                    title: "Font Size";
+                    description: "Adjust the base font size";
+                    HorizontalLayout {
+                        spacing: 10px;
+                        AccentSlider {
+                            label: "Font size";
+                            minimum: 80;
+                            maximum: 120;
+                            value: PreferencesState.scale*100;
+                            changed(value) => {
+                                PreferencesState.scale=value/100;
+                                PreferencesState.save-settings();
+                            }
+                        }
+                        LineEdit {
+                            changed has-focus=>{
+                                AppState.text-input-focused=self.has-focus;
+                            }
+                            width: 58px;
+                            height: 36px;
+                            text: round(PreferencesState.scale*100)+"";
+                            accepted(text)=>{
+                                PreferencesState.font-scale(text);
+                            }
+                        }
+                        Text {
+                            text: "%";
+                            color: PreferencesState.ink;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                if (root.tab==0 || LibraryState.search!="") && PreferencesState.setting-matches("Visuals Minimal text only artwork presets",LibraryState.search): Rectangle {
+                    height: 120px;
+                    Text {
+                        x: 0px;
+                        y: 0px;
+                        height: 24px;
+                        text: "Visuals";
+                        color: PreferencesState.ink;
+                        font-size: 14px*PreferencesState.scale;
+                        font-weight: 600;
+                    }
+                    Text {
+                        x: 0px;
+                        y: 26px;
+                        height: 28px;
+                        width: parent.width;
+                        text: "Choose a preset, then adjust individual options";
+                        color: PreferencesState.ink;
+                        font-size: 14px*PreferencesState.scale;
+                    }
+                    HorizontalLayout {
+                        y: 64px;
+                        height: 40px;
+                        alignment: start;
+                        spacing: 8px;
+                        TextButton {
+                            text: "Default";
+                            primary: PreferencesState.browse-artwork && PreferencesState.compact-artwork && PreferencesState.full-artwork && !PreferencesState.blurred-background && PreferencesState.full-player-background=="artwork" && PreferencesState.dynamic-accent;
+                            clicked=>{
+                                PreferencesState.browse-artwork=true;
+                                PreferencesState.compact-artwork=true;
+                                PreferencesState.full-artwork=true;
+                                PreferencesState.blurred-background=false;
+                                PreferencesState.full-player-background="artwork";
+                                PreferencesState.dynamic-accent=true;
+                                PreferencesState.save-settings();
+                            }
+                        }
+                        TextButton {
+                            text: "Minimal";
+                            primary: !PreferencesState.browse-artwork && !PreferencesState.compact-artwork && !PreferencesState.full-artwork && !PreferencesState.blurred-background && PreferencesState.full-player-background=="off" && !PreferencesState.dynamic-accent;
+                            clicked=>{
+                                PreferencesState.browse-artwork=false;
+                                PreferencesState.compact-artwork=false;
+                                PreferencesState.full-artwork=false;
+                                PreferencesState.blurred-background=false;
+                                PreferencesState.full-player-background="off";
+                                PreferencesState.dynamic-accent=false;
+                                PreferencesState.grid=false;
+                                PreferencesState.save-settings();
+                            }
+                        }
+                    }
+                }
+                if (root.tab==0 || LibraryState.search!="") && PreferencesState.setting-matches("Visuals Browse artwork",LibraryState.search): SettingRow {
+                    title: "Browse artwork";
+                    description: "Show covers across the library, artists, albums, genres, playlists, and queue";
+                    ToggleSwitch {
+                        label: "Browse artwork";
+                        x: 178px;
+                        y: 12px;
+                        checked <=> PreferencesState.browse-artwork;
+                        toggled=>{
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+                if (root.tab==2 || LibraryState.search!="") && PreferencesState.setting-matches("Visuals Compact player artwork",LibraryState.search): SettingRow {
+                    title: "Compact player artwork";
+                    description: "Show the cover beside the current track";
+                    ToggleSwitch {
+                        label: "Compact player artwork";
+                        x: 178px;
+                        y: 12px;
+                        checked <=> PreferencesState.compact-artwork;
+                        toggled=>{
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+                if (root.tab==2 || LibraryState.search!="") && PreferencesState.setting-matches("Visuals Full player artwork",LibraryState.search): SettingRow {
+                    title: "Full player artwork";
+                    description: "Show the cover in the full player";
+                    ToggleSwitch {
+                        label: "Full player artwork";
+                        x: 178px;
+                        y: 12px;
+                        checked <=> PreferencesState.full-artwork;
+                        toggled=>{
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+                if (root.tab==0 || LibraryState.search!="") && PreferencesState.setting-matches("Dynamic cover accent tint active controls current art",LibraryState.search): SettingRow {
+                    title: "Dynamic cover accent";
+                    description: "Tint active controls from the current cover art";
+                    ToggleSwitch {
+                        label: "Dynamic cover accent";
+                        x: 178px;
+                        y: 12px;
+                        checked <=> PreferencesState.dynamic-accent;
+                        toggled => {
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+                if (root.tab==2 || LibraryState.search!="") && PreferencesState.setting-matches("Visuals Full player Auto-hide controls seekbar icons inactivity",LibraryState.search): SettingRow {
+                    title: "Auto-hide player controls";
+                    description: "Fade controls after 3 seconds of inactivity in the full player";
+                    ToggleSwitch {
+                        label: "Auto-hide player controls";
+                        x: 178px;
+                        y: 12px;
+                        checked<=>PreferencesState.auto-hide-player-controls;
+                        toggled=>{
+                            PlayerState.player-activity();
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+                if (root.tab==2 || LibraryState.search!="") && PreferencesState.setting-matches("Visuals Full player background artwork gradient color off",LibraryState.search): SettingRow {
+                    title: "Full player background";
+                    description: "Choose artwork, an artwork gradient, a solid color, or no background";
+                    ComboBox {
+                        enabled: AppState.focus-layer=="browse";
+                        model: ["Blurred artwork","Gradient","Color","Off"];
+                        current-index: PreferencesState.full-player-background=="gradient" ? 1 : PreferencesState.full-player-background=="color" ? 2 : PreferencesState.full-player-background=="off" ? 3 : 0;
+                        selected(value)=>{
+                            PreferencesState.full-player-background=self.current-index==1 ? "gradient" : self.current-index==2 ? "color" : self.current-index==3 ? "off" : "artwork";
+                            PreferencesState.save-settings();
+                        }
                     }
                 }
             }
-            if root.tab==2 || AppState.search!="": VerticalLayout {spacing:24px;alignment:start;
-                if AppState.setting-matches("Music folders additions changes exclusions",AppState.search): SettingRow {title:"Music folders";description:"Add music roots and choose which subfolders belong in your library";TextButton {text:"Add folder";clicked => {AppState.add-folder();}}}
-                for folder in AppState.folders: Rectangle {visible:AppState.setting-matches("Music folders "+folder,AppState.search);height:self.visible ? 64px : 0px;border-radius:6px;border-width:1px;border-color:AppState.ink.with-alpha(0.1020);
-                    Text {x:16px;width:parent.width - 290px;text:AppState.display-path(folder);color:AppState.ink;vertical-alignment:center;overflow:elide;}
-                    TextButton {x:parent.width - 276px;y:12px;width:76px;text:"Manage";clicked => {AppState.folder-action("manage",folder);}}
-                    TextButton {x:parent.width - 192px;y:12px;width:84px;text:"Rescan";clicked => {AppState.folder-action("rescan",folder);}}
-                    TextButton {x:parent.width - 100px;y:12px;width:84px;text:"Remove";clicked => {AppState.folder-remove-path=folder;AppState.folder-remove-open=true;}}}
-                if AppState.setting-matches("Automatically fetch missing artwork download album covers artist images library alpha experimental",AppState.search): SettingRow {title:"Automatically fetch artwork (Alpha)";description:"Find missing covers and artist images for the playing song and visible collections";hint:"Online artwork fetching is experimental. Images may be unavailable or matched incorrectly. You can change or remove covers manually.";
-                    ToggleSwitch {label:"Automatically fetch missing artwork";x:178px;y:12px;checked <=> AppState.auto-artwork;toggled => {AppState.save-settings();}}}
-                if AppState.setting-matches("Fetch missing artwork whole library bulk download pause resume",AppState.search): SettingRow {title:"Fetch artwork for the whole library";description:AppState.artwork-bulk-started ? AppState.artwork-bulk-progress : "Look for missing album covers and artist images. You can pause and resume.";
-                    TextButton {text:AppState.artwork-bulk-running ? "Pause" : AppState.artwork-bulk-started && !AppState.artwork-bulk-complete ? "Resume" : AppState.artwork-bulk-complete ? "Fetch again" : "Fetch missing artwork";
-                        clicked=>{AppState.artwork-bulk(AppState.artwork-bulk-running ? "pause" : AppState.artwork-bulk-started && !AppState.artwork-bulk-complete ? "resume" : "start");}}}
+            if (root.tab==1 || root.tab==2 || root.tab==3) || LibraryState.search!="": VerticalLayout {
+                spacing: 16px;
+                alignment: start;
+                if (root.tab==2 || LibraryState.search!="") && PreferencesState.setting-matches("Song quality info format sample rate bitrate rows players",LibraryState.search): SettingRow {
+                    title: "Song quality info";
+                    description: "Show format, sample rate, and bit depth or bitrate in lists and players";
+                    ToggleSwitch {
+                        label: "Song quality info";
+                        x: 178px;
+                        y: 12px;
+                        checked <=> PreferencesState.quality-info;
+                        toggled => {
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+                if (root.tab==1 || LibraryState.search!="") && PreferencesState.setting-matches("Show tooltips hover hints controls",LibraryState.search): SettingRow {
+                    title: "Show tooltips";
+                    description: "Show hover hints for controls and track details";
+                    ToggleSwitch {
+                        label: "Show tooltips";
+                        x: 178px;
+                        y: 12px;
+                        checked <=> PreferencesState.show-tooltips;
+                        toggled=>{
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+                if (root.tab==3 || LibraryState.search!="") && PreferencesState.setting-matches("Romanize lyrics Latin pronunciation languages Japanese romaji Google",LibraryState.search): SettingRow {
+                    title: "Romanize lyrics";
+                    description: "Show Latin pronunciation below original lyrics where available. Sends lyric text to Google; successful results are cached for offline use.";
+                    ComboBox {
+                        enabled: AppState.focus-layer=="browse";
+                        model: ["Off","All supported","Selected languages"];
+                        current-index: PreferencesState.romanization-mode;
+                        selected(value)=>{
+                            PreferencesState.romanization-mode=self.current-index;
+                            root.romanization-search="";
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+                if (root.tab==3 || LibraryState.search!="") && PreferencesState.romanization-mode==2 && PreferencesState.setting-matches("Romanize lyrics Latin pronunciation languages Japanese romaji Google",LibraryState.search): Rectangle {
+                    height: language-list.y+language-list.height+12px;
+                    picker-title:=Text {
+                        x: 0px;
+                        y: 0px;
+                        width: parent.width;
+                        height: self.preferred-height;
+                        text: "Languages ("+PreferencesState.romanization-selected-count+" selected)";
+                        color: PreferencesState.ink;
+                        font-size: 14px*PreferencesState.scale;
+                        font-weight: 600;
+                    }
+                    picker-description:=Text {
+                        x: 0px;
+                        y: picker-title.height+4px;
+                        width: parent.width;
+                        height: self.preferred-height;
+                        text: "Choose one or more source languages. Google detects the language when fetching; pronunciation availability varies.";
+                        color: PreferencesState.secondary-ink;
+                        font-size: 13px*PreferencesState.scale;
+                        wrap: word-wrap;
+                    }
+                    language-search:=LineEdit {
+                        changed has-focus=>{
+                            AppState.text-input-focused=self.has-focus;
+                        }
+                        x: 0px;
+                        y: picker-description.y+picker-description.height+8px;
+                        width: parent.width;
+                        height: 40px;
+                        enabled: AppState.focus-layer=="browse";
+                        placeholder-text: "Search languages";
+                        text<=>root.romanization-search;
+                    }
+                    language-list:=ScrollView {
+                        x: 0px;
+                        y: language-search.y+language-search.height+10px;
+                        width: parent.width;
+                        height: 192px;
+                        horizontal-scrollbar-policy: always-off;
+                        VerticalLayout {
+                            spacing: 0px;
+                            alignment: start;
+                            for language in PreferencesState.romanization-languages: Rectangle {
+                                private property<bool> matches: PreferencesState.setting-matches(language.name+" "+language.code,root.romanization-search);
+                                height: self.matches ? 32px*PreferencesState.scale : 0px;
+                                visible: self.matches;
+                                CheckBox {
+                                    x: 0px;
+                                    y: 0px;
+                                    width: parent.width;
+                                    height: parent.height;
+                                    text: language.name;
+                                    checked: language.selected;
+                                    enabled: AppState.focus-layer=="browse";
+                                    toggled=>{
+                                        PreferencesState.romanization-language(language.code,self.checked);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Rectangle {
+                        y: parent.height - 1px;
+                        height: 1px;
+                        background: PreferencesState.ink.with-alpha(0.1020);
+                    }
+                }
+                if (root.tab==3 || LibraryState.search!="") && PreferencesState.setting-matches("Lyrics alignment left center synced word timed",LibraryState.search): SettingRow {
+                    title: "Lyrics alignment";
+                    description: "Align lyrics in the side panel and full player";
+                    ComboBox {
+                        enabled: AppState.focus-layer=="browse";
+                        model: ["Center","Left"];
+                        current-index: PreferencesState.lyrics-left-aligned ? 1 : 0;
+                        selected(value) => {
+                            PreferencesState.lyrics-left-aligned=self.current-index==1;
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+                if (root.tab==3 || LibraryState.search!="") && PreferencesState.setting-matches("Blur unfocused lyrics strength intensity amount",LibraryState.search): SettingRow {
+                    title: "Blur unfocused lyrics";
+                    description: "Soften inactive lines while keeping the current line and its pronunciation sharp";
+                    ToggleSwitch {
+                        label: "Blur unfocused lyrics";
+                        x: 178px;
+                        y: 12px;
+                        checked<=>PreferencesState.blur-unfocused-lyrics;
+                        toggled=>{
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+                if (root.tab==3 || LibraryState.search!="") && PreferencesState.blur-unfocused-lyrics && PreferencesState.setting-matches("Blur unfocused lyrics strength intensity amount",LibraryState.search): SettingRow {
+                    title: "Lyrics blur strength";
+                    description: "Adjust how softly inactive lines appear";
+                    HorizontalLayout {
+                        spacing: 10px;
+                        AccentSlider {
+                            label: "Lyrics blur strength";
+                            minimum: 0;
+                            maximum: 100;
+                            value: PreferencesState.lyrics-blur-strength;
+                            changed(value)=>{
+                                PreferencesState.lyrics-blur-strength=round(value);
+                                PreferencesState.save-settings();
+                            }
+                        }
+                        Text {
+                            width: 42px;
+                            text: round(PreferencesState.lyrics-blur-strength)+"%";
+                            color: PreferencesState.ink;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                if (root.tab==1 || LibraryState.search!="") && PreferencesState.setting-matches("Sidebar mode text labels icons",LibraryState.search): SettingRow {
+                    title: "Sidebar mode";
+                    description: "Choose whether the sidebar should show text labels or just icons";
+                    ComboBox {
+                        enabled: AppState.focus-layer=="browse";
+                        model: ["Icon-only","Labels"];
+                        current-index: PreferencesState.icon-sidebar ? 0 : 1;
+                        selected(value) => {
+                            PreferencesState.icon-sidebar=self.current-index==0;
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+                if (root.tab==2 || LibraryState.search!="") && PreferencesState.setting-matches("Seekbar style classic slider decoded waveform",LibraryState.search): SettingRow {
+                    title: "Seekbar style";
+                    description: "Choose between the classic slider and a decoded waveform";
+                    ComboBox {
+                        enabled: AppState.focus-layer=="browse";
+                        model: ["Waveform","Classic"];
+                        current-index: PreferencesState.seek-style=="waveform" ? 0 : 1;
+                        selected(value) => {
+                            PreferencesState.seek-style=self.current-index==0 ? "waveform" : "classic";
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+                if (root.tab==2 || LibraryState.search!="") && PreferencesState.setting-matches("Liked Songs favorites heart controls",LibraryState.search): SettingRow {
+                    title: "Liked Songs";
+                    description: "Show Liked Songs in Playlists and the Like action in player controls. Your saved likes stay when hidden.";
+                    ToggleSwitch {
+                        label: "Liked Songs";
+                        x: 178px;
+                        y: 12px;
+                        checked <=> PreferencesState.show-liked-songs;
+                        toggled => {
+                            PreferencesState.save-settings();
+                            LibraryState.browse();
+                        }
+                    }
+                }
+                if (root.tab==1 || LibraryState.search!="") && PreferencesState.setting-matches("Keyboard shortcuts",LibraryState.search): SectionHeading {
+                    text: "Keyboard shortcuts";
+                    text-size: 14px;
+                    space-after: 0px;
+                }
+                if (root.tab==1 || LibraryState.search!="") && PreferencesState.setting-matches("Keyboard shortcuts",LibraryState.search): Rectangle {
+                    height: 546px;
+                    border-width: 1px;
+                    border-color: PreferencesState.ink.with-alpha(0.1020);
+                    border-radius: 6px;
+                    VerticalLayout {
+                        spacing: 0px;
+                        alignment: start;
+                        ShortcutRow {
+                            title: "Play or pause";
+                            keys: ["Space"];
+                        }
+                        ShortcutRow {
+                            title: "Next song";
+                            keys: ["Alt","N"];
+                        }
+                        ShortcutRow {
+                            title: "Previous song";
+                            keys: ["Alt","P"];
+                        }
+                        ShortcutRow {
+                            title: "Toggle mute";
+                            keys: ["M"];
+                        }
+                        ShortcutRow {
+                            title: "Show or hide lyrics";
+                            keys: ["L"];
+                        }
+                        ShortcutRow {
+                            title: "Open or close full player";
+                            keys: ["F"];
+                        }
+                        ShortcutRow {
+                            title: "Focus or leave search";
+                            keys: ["Ctrl","K"];
+                        }
+                        ShortcutRow {
+                            title: "Open settings";
+                            keys: ["Ctrl",","];
+                        }
+                        ShortcutRow {
+                            title: "Reset interface scale";
+                            keys: ["Ctrl","0"];
+                        }
+                        ShortcutRow {
+                            title: "Show or hide queue";
+                            keys: ["Q"];
+                        }
+                        ShortcutRow {
+                            title: "Toggle full screen";
+                            keys: ["F11"];
+                        }
+                        ShortcutRow {
+                            title: "Close full player";
+                            keys: ["Escape"];
+                        }
+                        ShortcutRow {
+                            title: "Toggle Phantom mode";
+                            keys: ["Ctrl","Shift","B"];
+                        }
+                    }
+                }
+                if (root.tab==1 || LibraryState.search!="") && PreferencesState.setting-matches("Navigation sidebar library artists albums genres playlists folders composers years",LibraryState.search): VerticalLayout {
+                    spacing: 8px;
+                    SectionHeading {
+                        text: "Navigation";
+                        space-after: 0px;
+                    }
+                    Text {
+                        text: "Show in sidebar";
+                        color: PreferencesState.ink.with-alpha(0.7);
+                        font-size: 13px*PreferencesState.scale;
+                    }
+                    GridLayout {
+                        spacing: 8px;
+                        Row {
+                            CheckBox {
+                                text: "Library";
+                                enabled: AppState.focus-layer=="browse";
+                                checked<=>PreferencesState.sidebar-songs;
+                                toggled=>{
+                                    PreferencesState.save-settings();
+                                }
+                            }
+                            CheckBox {
+                                text: "Artists";
+                                enabled: AppState.focus-layer=="browse";
+                                checked<=>PreferencesState.sidebar-artists;
+                                toggled=>{
+                                    PreferencesState.save-settings();
+                                }
+                            }
+                        }
+                        Row {
+                            CheckBox {
+                                text: "Albums";
+                                enabled: AppState.focus-layer=="browse";
+                                checked<=>PreferencesState.sidebar-albums;
+                                toggled=>{
+                                    PreferencesState.save-settings();
+                                }
+                            }
+                            CheckBox {
+                                text: "Genres";
+                                enabled: AppState.focus-layer=="browse";
+                                checked<=>PreferencesState.sidebar-genres;
+                                toggled=>{
+                                    PreferencesState.save-settings();
+                                }
+                            }
+                        }
+                        Row {
+                            CheckBox {
+                                text: "Playlists";
+                                enabled: AppState.focus-layer=="browse";
+                                checked<=>PreferencesState.sidebar-playlists;
+                                toggled=>{
+                                    PreferencesState.save-settings();
+                                }
+                            }
+                            CheckBox {
+                                text: "Folders";
+                                enabled: AppState.focus-layer=="browse";
+                                checked<=>PreferencesState.sidebar-folders;
+                                toggled=>{
+                                    PreferencesState.save-settings();
+                                }
+                            }
+                        }
+                        Row {
+                            CheckBox {
+                                text: "Composers";
+                                enabled: AppState.focus-layer=="browse";
+                                checked<=>PreferencesState.sidebar-composers;
+                                toggled=>{
+                                    PreferencesState.save-settings();
+                                }
+                            }
+                            CheckBox {
+                                text: "Years";
+                                enabled: AppState.focus-layer=="browse";
+                                checked<=>PreferencesState.sidebar-years;
+                                toggled=>{
+                                    PreferencesState.save-settings();
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            if root.tab==3 || AppState.search!="": VerticalLayout {spacing:24px;alignment:start;
-                if AppState.setting-matches("Song quality info format sample rate bitrate rows players",AppState.search): SettingRow {title:"Song quality info";description:"Show format, sample rate, and bitrate in collection lists and players";
-                    ToggleSwitch {label:"Song quality info";x:178px;y:12px;checked <=> AppState.quality-info;toggled => {AppState.save-settings();}}}
-                if AppState.setting-matches("Gapless playback preload next track smoother transitions",AppState.search): SettingRow {title:"Gapless playback";description:"Preload the next track near the end for smoother transitions";
-                    ToggleSwitch {label:"Gapless playback";x:178px;y:12px;checked <=> AppState.gapless;toggled => {AppState.save-settings();}}}
-                if AppState.setting-matches("ReplayGain normalize playback track loudness",AppState.search): SettingRow {title:"ReplayGain";description:"Balance track loudness using ReplayGain tags; tracks without tags play unchanged";
-                    ToggleSwitch {label:"ReplayGain";x:178px;y:12px;checked <=> AppState.replaygain;toggled => {AppState.save-settings();}}}
-
+            if root.tab==4 || LibraryState.search!="": VerticalLayout {
+                spacing: 16px;
+                alignment: start;
+                if PreferencesState.setting-matches("Music folders additions changes exclusions",LibraryState.search): SettingRow {
+                    title: "Music folders";
+                    description: "Add music roots and choose which subfolders belong in your library";
+                    TextButton {
+                        text: "Add folder";
+                        clicked => {
+                            LibraryState.add-folder();
+                        }
+                    }
+                }
+                for folder in LibraryState.folders: Rectangle {
+                    visible: PreferencesState.setting-matches("Music folders "+folder,LibraryState.search);
+                    height: self.visible ? 64px : 0px;
+                    border-radius: 6px;
+                    border-width: 1px;
+                    border-color: PreferencesState.ink.with-alpha(0.1020);
+                    Text {
+                        x: 16px;
+                        width: parent.width - 290px;
+                        text: AppState.display-path(folder);
+                        color: PreferencesState.ink;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    TextButton {
+                        x: parent.width - 276px;
+                        y: 12px;
+                        width: 76px;
+                        text: "Manage";
+                        clicked => {
+                            LibraryState.folder-action("manage",folder);
+                        }
+                    }
+                    TextButton {
+                        x: parent.width - 192px;
+                        y: 12px;
+                        width: 84px;
+                        text: "Rescan";
+                        clicked => {
+                            LibraryState.folder-action("rescan",folder);
+                        }
+                    }
+                    TextButton {
+                        x: parent.width - 100px;
+                        y: 12px;
+                        width: 84px;
+                        text: "Remove";
+                        clicked => {
+                            DialogState.folder-remove-path=folder;
+                            DialogState.folder-remove-open=true;
+                        }
+                    }
+                }
+                if PreferencesState.setting-matches("Automatically fetch missing artwork download album covers artist images library alpha experimental",LibraryState.search): SettingRow {
+                    title: "Automatically fetch artwork (Alpha)";
+                    description: "Find missing covers and artist images for the playing song and visible collections";
+                    hint: "Online artwork fetching is experimental. Images may be unavailable or matched incorrectly. You can change or remove covers manually.";
+                    ToggleSwitch {
+                        label: "Automatically fetch missing artwork";
+                        x: 178px;
+                        y: 12px;
+                        checked <=> PreferencesState.auto-artwork;
+                        toggled => {
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+                if PreferencesState.setting-matches("Fetch missing artwork whole library bulk download pause resume",LibraryState.search): SettingRow {
+                    title: "Fetch artwork for the whole library";
+                    description: LibraryState.artwork-bulk-started ? LibraryState.artwork-bulk-progress : "Look for missing album covers and artist images. You can pause and resume.";
+                    TextButton {
+                        text: LibraryState.artwork-bulk-running ? "Pause" : LibraryState.artwork-bulk-started && !LibraryState.artwork-bulk-complete ? "Resume" : LibraryState.artwork-bulk-complete ? "Fetch again" : "Fetch missing artwork";
+                        clicked=>{
+                            LibraryState.artwork-bulk(LibraryState.artwork-bulk-running ? "pause" : LibraryState.artwork-bulk-started && !LibraryState.artwork-bulk-complete ? "resume" : "start");
+                        }
+                    }
+                }
             }
-            if (root.tab==4 || AppState.search!="") && AppState.setting-matches("About Orca version report feedback github",AppState.search): VerticalLayout {spacing:24px;alignment:start;
-                Text {text:"Orca  v0.1.8-alpha";color:AppState.ink;font-size:22px;font-weight:600;}
-                Text {text:"Local-first music player, built for listening to the library you already own.";color:AppState.ink;font-size:14px;wrap:word-wrap;}
-                Rectangle {height:1px;background:AppState.ink.with-alpha(0.1020);}
-                Text {text:"Found a bug or have an idea? Feedback helps shape Orca.";color:AppState.ink;font-size:14px;}
-                TextButton {icon:Icons.github;text:"Report on GitHub";clicked => {AppState.report-issue();}}
+            if (root.tab==5 || root.tab==2) || LibraryState.search!="": VerticalLayout {
+                spacing: 16px;
+                alignment: start;
+                if (root.tab==5 || LibraryState.search!="") && PreferencesState.setting-matches("Output device WASAPI shared exclusive unprocessed audio path",LibraryState.search): Text {
+                    text: "Output";
+                    color: PreferencesState.ink;
+                    font-size: 18px*PreferencesState.scale;
+                    font-weight: 600;
+                }
+                if (root.tab==5 || LibraryState.search!="") && PreferencesState.setting-matches("Output device speakers headphones system default refresh",LibraryState.search): SettingRow {
+                    title: "Output device";
+                    description: AppState.windows-audio ? "Follow the Windows default or choose a specific playback device" : "Uses your system default output in this Linux test build";
+                    ComboBox {
+                        width: 220px;
+                        enabled: AppState.focus-layer=="browse";
+                        model: PlayerState.output-names;
+                        current-index: PlayerState.output-device-index;
+                        selected(value)=>{
+                            PlayerState.select-output(self.current-index);
+                        }
+                    }
+                }
+                if (root.tab==5 || LibraryState.search!="") && PreferencesState.setting-matches("Output mode WASAPI shared exclusive unprocessed bit perfect raw",LibraryState.search): SettingRow {
+                    title: "Output mode";
+                    description: !AppState.windows-audio ? "System output (Linux testing)" : PlayerState.output-unprocessed ? "Lossless PCM without app processing" : PlayerState.output-exclusive ? "Reserves the device and follows supported track rates" : "Recommended for everyday playback";
+                    hint: !AppState.windows-audio ? "Linux testing currently uses the default audio output. Exclusive and unprocessed modes are Windows-only." : PlayerState.output-unprocessed ? "Experimental exclusive output. App volume is fixed at 100%; ReplayGain, EQ and resampling are bypassed. Unsupported source or device formats stop with an explanation." : PlayerState.output-exclusive ? "Experimental exclusive output. The device stays reserved while paused. Unsupported rates are resampled; app volume and ReplayGain still apply." : "Windows mixes Orca with other apps using the device format. App volume and ReplayGain remain available.";
+                    ComboBox {
+                        enabled: AppState.focus-layer=="browse" && AppState.windows-audio;
+                        model: AppState.windows-audio ? ["Shared","Exclusive","Unprocessed"] : ["System output"];
+                        current-index: !AppState.windows-audio ? 0 : PlayerState.output-unprocessed ? 2 : PlayerState.output-exclusive ? 1 : 0;
+                        selected(value)=>{
+                            PlayerState.output-exclusive=self.current-index!=0;
+                            PlayerState.output-unprocessed=self.current-index==2;
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+                if (root.tab==5 || LibraryState.search!="") && AppState.windows-audio && PlayerState.output-unprocessed: Text {
+                    text: "Volume is fixed at 100%; use your device's volume control. Requires integer WAV, AIFF or FLAC and a supported device format.";
+                    color: PreferencesState.secondary-ink;
+                    font-size: 12px*PreferencesState.scale;
+                    wrap: word-wrap;
+                }
+                if (root.tab==5 || LibraryState.search!="") && PreferencesState.setting-matches("Output device status active format sample rate error refresh audio path source processing",LibraryState.search): VerticalLayout {
+                    spacing: 10px;
+                    alignment: start;
+                    Text {
+                        text: PlayerState.output-open ? PlayerState.output-device-name : PlayerState.output-mode-label;
+                        color: PreferencesState.ink;
+                        font-size: 14px*PreferencesState.scale;
+                        font-weight: 600;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: "Requested: "+PlayerState.output-requested-mode-label+(PlayerState.output-open ? "\nOpened: "+PlayerState.output-mode-label+" | "+PlayerState.output-format-label : "");
+                        color: PreferencesState.secondary-ink;
+                        font-size: 12px*PreferencesState.scale;
+                        wrap: word-wrap;
+                    }
+                    if PlayerState.output-error!="": Text {
+                        text: PlayerState.output-error;
+                        color: PreferencesState.ink;
+                        font-size: 12px*PreferencesState.scale;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: start;
+                        TextButton {
+                            icon: Icons.info;
+                            text: "Audio path";
+                            clicked=>{
+                                DialogState.audio-info-open=true;
+                            }
+                        }
+                        TextButton {
+                            icon: Icons.refresh;
+                            text: "Refresh devices";
+                            clicked=>{
+                                PlayerState.refresh-outputs();
+                            }
+                        }
+                        if PlayerState.output-error!="": TextButton {
+                            text: "Retry output";
+                            clicked=>{
+                                PlayerState.retry-output();
+                            }
+                        }
+                    }
+                }
+                if (root.tab==2 || LibraryState.search!="") && PreferencesState.setting-matches("Playback gapless preload",LibraryState.search): SectionHeading {
+                    text: "Playback";
+                }
+                if (root.tab==2 || LibraryState.search!="") && PreferencesState.setting-matches("Gapless playback preload next track smoother transitions",LibraryState.search): SettingRow {
+                    title: "Gapless playback";
+                    description: "Preload the next track near the end for smoother transitions";
+                    ToggleSwitch {
+                        label: "Gapless playback";
+                        x: 178px;
+                        y: 12px;
+                        checked <=> PreferencesState.gapless;
+                        toggled => {
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+                if (root.tab==5 || LibraryState.search!="") && PreferencesState.setting-matches("Sound processing ReplayGain normalize loudness",LibraryState.search): SectionHeading {
+                    text: "Sound processing";
+                }
+                if (root.tab==5 || LibraryState.search!="") && PreferencesState.setting-matches("ReplayGain normalize playback track loudness",LibraryState.search): SettingRow {
+                    title: "ReplayGain";
+                    description: "Balance track loudness using ReplayGain tags; tracks without tags play unchanged";
+                    ToggleSwitch {
+                        label: "ReplayGain";
+                        x: 178px;
+                        y: 12px;
+                        checked <=> PreferencesState.replaygain;
+                        toggled => {
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
+            }
+            if (root.tab==6 || LibraryState.search!="") && PreferencesState.setting-matches("About Orca version report feedback github",LibraryState.search): VerticalLayout {
+                spacing: 12px;
+                alignment: start;
+                Text {
+                    text: "Orca"+(AppState.app-version!="" ? "  v"+AppState.app-version : "");
+                    color: PreferencesState.ink;
+                    font-size: 22px;
+                    font-weight: 600;
+                }
+                Text {
+                    text: "Local-first music player, built for listening to the library you already own.";
+                    color: PreferencesState.ink;
+                    font-size: 14px;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: "By Shubham Pathak";
+                    color: PreferencesState.secondary-ink;
+                    font-size: 14px;
+                }
+                Rectangle {
+                    height: 1px;
+                    background: PreferencesState.ink.with-alpha(0.1020);
+                }
+                Text {
+                    text: "Found a bug or have an idea? Feedback helps shape Orca.";
+                    color: PreferencesState.ink;
+                    font-size: 14px;
+                }
+                TextButton {
+                    icon: Icons.github;
+                    text: "Report on GitHub";
+                    clicked => {
+                        AppState.report-issue();
+                    }
+                }
             }
         }
     }
