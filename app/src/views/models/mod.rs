@@ -250,7 +250,7 @@ impl Tracks {
             .iter()
             .filter(|(_, track)| {
                 keys.iter().any(|key| {
-                    !key.backdrop && (key.path == track.artwork || key.path == track.artwork_thumb)
+                    key.backdrop.is_none() && (key.path == track.artwork || key.path == track.artwork_thumb)
                 })
             })
             .map(|(&index, _)| index)

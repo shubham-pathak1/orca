@@ -1,7 +1,11 @@
 mod decode;
-use decode::decode;
+mod gradient;
+use decode::decode_cancellable;
 
-use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
+const BACKDROP_EDGE: u32 = 512;
+const BACKDROP_SOURCE_EDGE: u32 = 86;
+
+use slint::{Image, Rgb8Pixel, Rgba8Pixel, SharedPixelBuffer};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     sync::{
@@ -11,6 +15,21 @@ use std::{
     thread,
 };
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum BackdropStyle {
+    Artwork,
+    Gradient,
+}
+impl BackdropStyle {
+    pub fn from_setting(value: &str) -> Option<Self> {
+        match value {
+            "artwork" => Some(Self::Artwork),
+            "gradient" => Some(Self::Gradient),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Key {
     pub path: String,
@@ -18,8 +37,33 @@ pub struct Key {
     pub edge: u32,
     pub height: u32,
     pub radius: u32,
-    pub backdrop: bool,
+    pub backdrop: Option<BackdropStyle>,
+    pub blend: Option<BackgroundBlend>,
     pub revision: u64,
+}
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct BackgroundBlend {
+    pub base: [u8; 3],
+    pub image_alpha: u8,
+    pub veil_alpha: u8,
+}
+impl BackgroundBlend {
+    pub fn library(light: bool) -> Self {
+        Self {
+            base: if light { [252, 251, 247] } else { [9, 10, 12] },
+            image_alpha: if light { 20 } else { 61 },
+            veil_alpha: 204,
+        }
+    }
+    pub fn apply(self, color: [u8; 3]) -> [u8; 3] {
+        std::array::from_fn(|channel| {
+            let base = self.base[channel] as u16;
+            let alpha = self.image_alpha as u16;
+            let under = color[channel] as u16 * alpha / 255 + base * (255 - alpha) / 255;
+            let veil = self.veil_alpha as u16;
+            (base * veil / 255 + under * (255 - veil) / 255) as u8
+        })
+    }
 }
 pub struct Decoded {
     pub key: Key,
@@ -29,24 +73,99 @@ pub struct Decoded {
     pub bytes: Vec<u8>,
     pub accent: [u8; 3],
 }
+enum Pixels {
+    Rgb(SharedPixelBuffer<Rgb8Pixel>),
+    Rgba(SharedPixelBuffer<Rgba8Pixel>),
+}
+impl Pixels {
+    fn into_image(self) -> Image {
+        match self {
+            Self::Rgb(pixels) => Image::from_rgb8(pixels),
+            Self::Rgba(pixels) => Image::from_rgba8(pixels),
+        }
+    }
+}
+struct Ready {
+    key: Key,
+    cancelled: bool,
+    pixels: Option<Pixels>,
+    bytes: usize,
+    accent: [u8; 3],
+}
+impl Ready {
+    fn from_decoded(decoded: Decoded, limit: usize) -> Self {
+        let opaque = !decoded.cancelled
+            && !decoded.bytes.is_empty()
+            && decoded.bytes.len() / 4 * 3 <= limit
+            && decoded.bytes.chunks_exact(4).all(|pixel| pixel[3] == 255);
+        let bytes = if opaque {
+            decoded.bytes.len() / 4 * 3
+        } else {
+            decoded.bytes.len()
+        };
+        let pixels = (!decoded.cancelled && bytes > 0 && bytes <= limit).then(|| {
+            if opaque {
+                let mut pixels = SharedPixelBuffer::<Rgb8Pixel>::new(decoded.width, decoded.height);
+                for (source, target) in decoded
+                    .bytes
+                    .chunks_exact(4)
+                    .zip(pixels.make_mut_bytes().chunks_exact_mut(3))
+                {
+                    target.copy_from_slice(&source[..3]);
+                }
+                Pixels::Rgb(pixels)
+            } else {
+                Pixels::Rgba(SharedPixelBuffer::clone_from_slice(
+                    &decoded.bytes,
+                    decoded.width,
+                    decoded.height,
+                ))
+            }
+        });
+        Self {
+            key: decoded.key,
+            cancelled: decoded.cancelled,
+            bytes: if pixels.is_some() { bytes } else { 0 },
+            pixels,
+            accent: decoded.accent,
+        }
+    }
+}
 struct Entry {
     image: Image,
     bytes: usize,
     used: u64,
-    accent: [u8; 3],
+}
+#[derive(Default)]
+struct ReadyWake {
+    pending: AtomicBool,
+    handler: Mutex<Option<Box<dyn Fn() + Send>>>,
+}
+impl ReadyWake {
+    fn notify(&self) {
+        if !self.pending.swap(true, Ordering::AcqRel) {
+            if let Some(handler) = self.handler.lock().unwrap().as_ref() {
+                handler();
+            }
+        }
+    }
 }
 
 // Track metadata retains artwork paths. Visible delegates hold image handles;
 // the cache separately bounds retained buffers and queues nearby prefetch work.
 pub struct ArtworkCache {
     entries: HashMap<Key, Entry>,
+    library_key: Option<Key>,
     failures: HashMap<String, usize>,
+    palettes: HashMap<String, ([u8; 3], usize)>,
     pending: HashSet<Key>,
     deferred: VecDeque<Key>,
     prefetch: VecDeque<Key>,
     protected: HashSet<String>,
+    scroll_deferred: bool,
+    immediate_paths: HashSet<String>,
     tx: mpsc::SyncSender<Key>,
-    rx: mpsc::Receiver<Decoded>,
+    rx: mpsc::Receiver<Ready>,
     clock: u64,
     bytes: usize,
     limit: usize,
@@ -55,16 +174,19 @@ pub struct ArtworkCache {
     priority: Arc<Mutex<Option<Key>>>,
     stop: Arc<AtomicBool>,
     worker: Option<thread::JoinHandle<()>>,
+    ready_wake: Arc<ReadyWake>,
 }
 impl ArtworkCache {
     pub fn new(limit: usize) -> Self {
         let (tx, jobs) = mpsc::sync_channel::<Key>(8);
         let (results, rx) = mpsc::sync_channel(8);
         let stop = Arc::new(AtomicBool::new(false));
-        let cancelled = stop.clone();
         let wanted = Arc::new(Mutex::new(HashSet::<Key>::new()));
-        let worker_wanted = wanted.clone();
         let priority = Arc::new(Mutex::new(None::<Key>));
+        let ready_wake = Arc::new(ReadyWake::default());
+        let worker_wake = ready_wake.clone();
+        let cancelled = stop.clone();
+        let worker_wanted = wanted.clone();
         let worker_priority = priority.clone();
         let worker = thread::spawn(move || {
             while !cancelled.load(Ordering::Relaxed) {
@@ -72,31 +194,33 @@ impl ArtworkCache {
                 let key = if let Some(key) = urgent {
                     key
                 } else {
-                    let Ok(key) = jobs.recv() else {
-                        return;
-                    };
-                    if cancelled.load(Ordering::Relaxed) {
-                        return;
-                    }
-                    key
-                };
-                let decoded = if worker_wanted.lock().unwrap().contains(&key) {
-                    decode(key)
-                } else {
-                    Decoded {
-                        key,
-                        cancelled: true,
-                        width: 0,
-                        height: 0,
-                        bytes: vec![],
-                        accent: [245; 3],
+                    match jobs.recv() {
+                        Ok(key) => key,
+                        Err(_) => return,
                     }
                 };
-                // Avoid blocking shutdown on an undrained GUI result queue.
-                let mut result = decoded;
+                if cancelled.load(Ordering::Relaxed) {
+                    return;
+                }
+                let mut decoded = decode_cancellable(key, |key| {
+                    !cancelled.load(Ordering::Relaxed)
+                        && worker_wanted.lock().unwrap().contains(key)
+                });
+                if cancelled.load(Ordering::Relaxed) {
+                    return;
+                }
+                if !worker_wanted.lock().unwrap().contains(&decoded.key) {
+                    decoded.cancelled = true;
+                    decoded.bytes.clear();
+                }
+                // Allocate/copy the renderer buffer here, never on the UI thread.
+                let mut result = Ready::from_decoded(decoded, limit);
                 loop {
                     match results.try_send(result) {
-                        Ok(()) => break,
+                        Ok(()) => {
+                            worker_wake.notify();
+                            break;
+                        }
                         Err(mpsc::TrySendError::Disconnected(_)) => return,
                         Err(mpsc::TrySendError::Full(value)) => result = value,
                     }
@@ -109,11 +233,15 @@ impl ArtworkCache {
         });
         Self {
             entries: HashMap::new(),
+            library_key: None,
             failures: HashMap::new(),
+            palettes: HashMap::new(),
             pending: HashSet::new(),
             deferred: VecDeque::new(),
             prefetch: VecDeque::new(),
             protected: HashSet::new(),
+            scroll_deferred: false,
+            immediate_paths: HashSet::new(),
             tx,
             rx,
             clock: 0,
@@ -124,7 +252,15 @@ impl ArtworkCache {
             priority,
             stop,
             worker: Some(worker),
+            ready_wake,
         }
+    }
+    pub fn on_ready(&mut self, handler: impl Fn() + Send + 'static) {
+        *self.ready_wake.handler.lock().unwrap() = Some(Box::new(handler));
+        self.ready_wake.pending.store(false, Ordering::Release);
+    }
+    pub fn clear_ready_handler(&mut self) {
+        *self.ready_wake.handler.lock().unwrap() = None;
     }
     #[cfg(test)]
     pub fn requested_count(&self) -> usize {
@@ -136,7 +272,15 @@ impl ArtworkCache {
     fn remove_entry(&mut self, key: &Key) {
         if let Some(entry) = self.entries.remove(key) {
             self.bytes -= entry.bytes;
-            if entry.bytes == 0 && !key.backdrop {
+            if entry.bytes > 0 && key.backdrop.is_none() {
+                if let Some((_, count)) = self.palettes.get_mut(&key.path) {
+                    *count -= 1;
+                    if *count == 0 {
+                        self.palettes.remove(&key.path);
+                    }
+                }
+            }
+            if entry.bytes == 0 && key.backdrop.is_none() {
                 if let Some(count) = self.failures.get_mut(&key.path) {
                     *count -= 1;
                     if *count == 0 {
@@ -148,6 +292,35 @@ impl ArtworkCache {
     }
     pub fn get(&mut self, path: &str, edge: u32, backdrop: bool) -> Image {
         self.request(path, &[], edge, backdrop)
+    }
+    pub fn library_background(&mut self, path: &str, light: bool) -> Image {
+        if path.is_empty() {
+            self.release_library_background();
+            return Image::default();
+        }
+        let key = Key {
+            path: path.into(),
+            tiles: vec![],
+            edge: BACKDROP_EDGE,
+            height: 0,
+            radius: 0,
+            backdrop: Some(BackdropStyle::Artwork),
+            blend: Some(BackgroundBlend::library(light)),
+            revision: self.revision,
+        };
+        if self.library_key.as_ref() != Some(&key) {
+            self.release_library_background();
+            self.library_key = Some(key.clone());
+        }
+        self.request_key(key)
+    }
+    fn release_library_background(&mut self) {
+        if let Some(old) = self.library_key.take() {
+            self.wanted.lock().unwrap().remove(&old);
+            self.deferred.retain(|key| key != &old);
+            self.prefetch.retain(|key| key != &old);
+            self.remove_entry(&old);
+        }
     }
     pub fn player_cover(&mut self, path: &str, edge: u32, radius: u32) -> Image {
         if path.is_empty() {
@@ -161,7 +334,8 @@ impl ArtworkCache {
                 edge: edge.clamp(8, 1024),
                 height: edge.clamp(8, 1024),
                 radius,
-                backdrop: false,
+                backdrop: None,
+                blend: None,
                 revision: self.revision,
             },
             true,
@@ -178,7 +352,8 @@ impl ArtworkCache {
             edge: edge.clamp(8, 1024),
             height: 0,
             radius: 0,
-            backdrop: false,
+            backdrop: None,
+            blend: None,
             revision: self.revision,
         })
     }
@@ -196,9 +371,8 @@ impl ArtworkCache {
         }
     }
     fn grid_key(&self, path: &str, tiles: &[String], edge: u32, landscape: bool) -> Key {
-        // Nearby card sizes share a bitmap. Round upward within the supported
-        // size range so bucketing does not undershoot the requested edge.
-        let edge = edge.clamp(8, 1024).div_ceil(32) * 32;
+        // Match the physical cover size so Slint does not resize a bucketed bitmap again.
+        let edge = edge.clamp(8, 1024);
         Key {
             path: if tiles.len() > 1 {
                 "genre-collage".into()
@@ -213,7 +387,8 @@ impl ArtworkCache {
             edge,
             height: if landscape { edge * 3 / 4 } else { 0 },
             radius: (edge / 64).clamp(1, 8),
-            backdrop: false,
+            backdrop: None,
+            blend: None,
             revision: self.revision,
         }
     }
@@ -248,7 +423,8 @@ impl ArtworkCache {
             } else {
                 (edge / 32).clamp(1, 12)
             },
-            backdrop,
+            backdrop: backdrop.then_some(BackdropStyle::Artwork),
+            blend: None,
             revision: self.revision,
         };
         self.request_key(key)
@@ -261,34 +437,38 @@ impl ArtworkCache {
     }
     fn cover_key(&self, path: &str, edge: u32, radius: u32, player: bool) -> Key {
         let circle = !player && radius > 0 && radius >= edge / 2 && edge > 0;
-        let quantum = if edge <= 96 { 8 } else { 32 };
-        let edge = if circle {
-            edge.clamp(8, 1024).div_ceil(quantum) * quantum
-        } else {
-            edge.clamp(8, 1024)
-        };
+        let edge = edge.clamp(8, 1024);
         Key {
             path: path.into(),
             tiles: vec![],
             edge,
             height: if player { edge } else { 0 },
             radius: if circle { edge / 2 } else { radius },
-            backdrop: false,
+            backdrop: None,
+            blend: None,
             revision: self.revision,
         }
     }
-    pub fn panel_backdrop(&mut self, path: &str, width: u32, height: u32, radius: u32) -> Image {
+    pub fn panel_backdrop(
+        &mut self,
+        path: &str,
+        width: u32,
+        height: u32,
+        radius: u32,
+        style: BackdropStyle,
+    ) -> Image {
         if path.is_empty() {
             return Image::default();
         }
-        let factor = (2048.0 / width.max(height).max(1) as f32).min(1.0);
+        let factor = (BACKDROP_EDGE as f32 / width.max(height).max(1) as f32).min(1.0);
         self.request_key(Key {
             path: path.into(),
             tiles: vec![],
             edge: (width as f32 * factor).max(8.0) as u32,
             height: (height as f32 * factor).max(8.0) as u32,
             radius: (radius as f32 * factor) as u32,
-            backdrop: true,
+            backdrop: Some(style),
+            blend: None,
             revision: self.revision,
         })
     }
@@ -299,7 +479,7 @@ impl ArtworkCache {
             .entries
             .iter()
             .filter(|(key, entry)| {
-                !key.backdrop && entry.bytes > 0 && paths.contains(&key.path.as_str())
+                key.backdrop.is_none() && entry.bytes > 0 && paths.contains(&key.path.as_str())
             })
             .max_by_key(|(key, _)| key.edge)
             .map(|(key, _)| key.clone());
@@ -315,12 +495,17 @@ impl ArtworkCache {
     pub fn prefetch_cover(&mut self, path: &str, edge: u32, radius: u32, player: bool) {
         self.prefetch_key(self.cover_key(path, edge, radius, player));
     }
-    pub fn prefetch_backdrop(&mut self, path: &str, width: u32, height: u32, radius: u32) {
-        let factor = (2048.0 / width.max(height).max(1) as f32).min(1.0);
+    pub fn prefetch_backdrop(
+        &mut self,
+        path: &str,
+        width: u32,
+        height: u32,
+        radius: u32,
+        style: BackdropStyle,
+    ) {
+        let factor = (BACKDROP_EDGE as f32 / width.max(height).max(1) as f32).min(1.0);
         let edge = (width as f32 * factor).max(8.0) as u32;
         let height = (height as f32 * factor).max(8.0) as u32;
-        // Do not speculate on exceptionally large square backgrounds that could
-        // consume most of the shared budget before the user switches tracks.
         if edge as usize * height as usize * 4 > self.limit / 3 {
             return;
         }
@@ -330,7 +515,8 @@ impl ArtworkCache {
             edge,
             height,
             radius: (radius as f32 * factor) as u32,
-            backdrop: true,
+            backdrop: Some(style),
+            blend: None,
             revision: self.revision,
         });
     }
@@ -393,16 +579,43 @@ impl ArtworkCache {
         }
         Image::default()
     }
+    pub fn defer_scrolling(&mut self, deferred: bool, immediate: &[&str]) {
+        self.scroll_deferred = deferred;
+        if deferred {
+            self.immediate_paths
+                .retain(|path| immediate.contains(&path.as_str()));
+            for path in immediate.iter().filter(|path| !path.is_empty()) {
+                if !self.immediate_paths.contains(*path) {
+                    self.immediate_paths.insert((*path).to_owned());
+                }
+            }
+        } else {
+            self.immediate_paths.clear();
+        }
+        self.schedule();
+    }
     fn schedule(&mut self) {
         // Speculative work starts only after all visible/priority work completes.
-        if self.pending.is_empty() && self.deferred.is_empty() {
+        if !self.scroll_deferred && self.pending.is_empty() && self.deferred.is_empty() {
             if let Some(key) = self.prefetch.pop_front() {
                 self.deferred.push_back(key);
             }
         }
         while self.pending.len() < 12 {
-            let Some(key) = self.deferred.pop_back() else {
-                break;
+            let key = if self.scroll_deferred {
+                let immediate = self
+                    .deferred
+                    .iter()
+                    .rposition(|key| self.immediate_paths.contains(&key.path));
+                let Some(index) = immediate else {
+                    break;
+                };
+                self.deferred.remove(index).unwrap()
+            } else {
+                let Some(key) = self.deferred.pop_back() else {
+                    break;
+                };
+                key
             };
             match self.tx.try_send(key.clone()) {
                 Ok(()) => {
@@ -420,8 +633,9 @@ impl ArtworkCache {
         }
     }
     pub fn drain(&mut self) -> Vec<Key> {
+        self.ready_wake.pending.store(false, Ordering::Release);
         let mut changed = Vec::new();
-        while let Ok(mut decoded) = self.rx.try_recv() {
+        while let Ok(decoded) = self.rx.try_recv() {
             self.pending.remove(&decoded.key);
             let wanted = self.wanted.lock().unwrap().remove(&decoded.key);
             if decoded.key.revision != self.revision {
@@ -433,10 +647,7 @@ impl ArtworkCache {
                 changed.push(decoded.key);
                 continue;
             }
-            if decoded.bytes.len() > self.limit {
-                decoded.bytes.clear();
-            }
-            let bytes = decoded.bytes.len();
+            let bytes = decoded.bytes;
             while self.bytes + bytes > self.limit || self.entries.len() >= 512 {
                 let Some(oldest) = self
                     .entries
@@ -447,7 +658,7 @@ impl ArtworkCache {
                                 self.protected.contains(&key.path)
                                     || key.tiles.iter().any(|p| self.protected.contains(p)),
                             ),
-                            u8::from(!key.backdrop && key.edge <= 96),
+                            u8::from(key.backdrop.is_none() && key.edge <= 96),
                             entry.used,
                         )
                     })
@@ -457,20 +668,18 @@ impl ArtworkCache {
                 };
                 self.remove_entry(&oldest);
             }
-            let image = if bytes == 0 {
-                Image::default()
-            } else {
-                Image::from_rgba8(SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
-                    &decoded.bytes,
-                    decoded.width,
-                    decoded.height,
-                ))
-            };
+            let image = decoded.pixels.map(Pixels::into_image).unwrap_or_default();
             self.clock += 1;
             changed.push(decoded.key.clone());
             self.remove_entry(&decoded.key);
-            if bytes == 0 && !decoded.key.backdrop {
+            if bytes == 0 && decoded.key.backdrop.is_none() {
                 *self.failures.entry(decoded.key.path.clone()).or_default() += 1;
+            }
+            if bytes > 0 && decoded.key.backdrop.is_none() {
+                self.palettes
+                    .entry(decoded.key.path.clone())
+                    .and_modify(|(_, count)| *count += 1)
+                    .or_insert((decoded.accent, 1));
             }
             self.entries.insert(
                 decoded.key,
@@ -478,7 +687,6 @@ impl ArtworkCache {
                     image,
                     bytes,
                     used: self.clock,
-                    accent: decoded.accent,
                 },
             );
             self.bytes += bytes;
@@ -493,13 +701,16 @@ impl ArtworkCache {
             edge: 0,
             height: 0,
             radius: 0,
-            backdrop: false,
+            backdrop: None,
+            blend: None,
             revision: u64::MAX,
         }
     }
     fn stop_worker(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
-        let _ = self.tx.try_send(Self::wake_key());
+        // Close the queue to wake the decoder without idle polling.
+        let (disconnected, _) = mpsc::sync_channel(0);
+        drop(std::mem::replace(&mut self.tx, disconnected));
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }
@@ -509,6 +720,7 @@ impl ArtworkCache {
         self.wanted.lock().unwrap().clear();
         self.entries.clear();
         self.failures.clear();
+        self.palettes.clear();
         self.pending.clear();
         self.deferred.clear();
         self.prefetch.clear();
@@ -517,10 +729,7 @@ impl ArtworkCache {
         self.revision = self.revision.wrapping_add(1);
     }
     pub fn accent(&self, path: &str) -> Option<[u8; 3]> {
-        self.entries
-            .iter()
-            .find(|(key, entry)| key.path == path && !key.backdrop && entry.bytes > 0)
-            .map(|(_, entry)| entry.accent)
+        self.palettes.get(path).map(|(accent, _)| *accent)
     }
 }
 impl Drop for ArtworkCache {

@@ -310,6 +310,7 @@ pub(crate) fn install(
                     physical.width,
                     physical.height,
                     0,
+                    crate::artwork::BackdropStyle::Artwork,
                 );
                 if full.size().width > 0
                     || background_source.is_empty()
@@ -406,7 +407,8 @@ pub(crate) fn install(
                         }) * dpr)
                             .round() as u32,
                         (6.0 * dpr) as u32,
-                    ),
+                    crate::artwork::BackdropStyle::Artwork,
+                ),
                 );
             }
             let rows = queue_tracks.borrow();

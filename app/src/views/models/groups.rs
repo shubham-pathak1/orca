@@ -126,7 +126,7 @@ impl GroupGrid {
             };
             for (cell, group) in groups.iter().skip(row * columns).take(columns).enumerate() {
                 if keys.iter().any(|key| {
-                    !key.backdrop
+                    key.backdrop.is_none()
                         && (key.path == group.artwork
                             || !key.tiles.is_empty()
                                 && key.tiles.iter().eq(group.artwork_tiles.iter().take(4)))

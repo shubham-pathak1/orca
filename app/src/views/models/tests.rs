@@ -304,7 +304,8 @@ fn catalog_cover_updates_reuse_the_row_and_leave_other_cells_unchanged() {
         edge: 135,
         height: 0,
         radius: 0,
-        backdrop: false,
+        backdrop: None,
+        blend: None,
         revision: 0,
     }]);
     assert_eq!(row.row_data(0).unwrap().title, "Updated");
@@ -345,7 +346,8 @@ fn artwork_completion_only_invalidates_tracks_using_that_cover() {
         edge: 192,
         height: 0,
         radius: 0,
-        backdrop: false,
+        backdrop: None,
+        blend: None,
         revision: 0,
     }]);
     rows.sort_unstable();
@@ -357,7 +359,8 @@ fn artwork_completion_only_invalidates_tracks_using_that_cover() {
             edge: 160,
             height: 0,
             radius: 0,
-            backdrop: true,
+            backdrop: Some(crate::artwork::BackdropStyle::Artwork),
+            blend: None,
             revision: 0
         }])
         .is_empty());

@@ -200,7 +200,7 @@ pub(super) fn tick(
                     );
                 }
                 if s.get_full_player_background().as_str() == "artwork" {
-                    cache.prefetch_backdrop(small, physical.width, physical.height, 0);
+                    cache.prefetch_backdrop(small, physical.width, physical.height, 0, crate::artwork::BackdropStyle::Artwork);
                 }
             }
         }
