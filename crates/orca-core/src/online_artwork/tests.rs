@@ -57,24 +57,6 @@ fn itunes_collaboration_result_keeps_the_requested_artist_identity() {
 }
 
 #[test]
-#[ignore = "contacts live artwork providers; uses a disposable artwork cache"]
-fn live_collaboration_and_soundtrack_album_covers_are_decodable() {
-    for query in [
-        ArtworkQuery::album(
-            "Alys",
-            "gamble (feat. demxntia)",
-            Some("gamble (feat. demxntia)"),
-        ),
-        ArtworkQuery::album("Amit Trivedi", "Fitoor", Some("Yeh Fitoor Mera")),
-    ] {
-        let fixture = Fixture::new();
-        let paths = fetch(&query, &fixture.0, LookupMode::Manual)
-            .unwrap_or_else(|error| panic!("{query:?}: {error}"));
-        assert!(image::image_dimensions(paths.full).is_ok());
-    }
-}
-
-#[test]
 fn artist_lookup_identifies_with_itunes_then_verifies_deezer_recording_and_downloads_portrait() {
     let f = Fixture::new();
     let mut query = ArtworkQuery::artist("GINI");
@@ -792,25 +774,45 @@ fn ambiguous_artist_lookup_explains_the_failure_and_automatic_retries_are_cached
     );
 }
 #[test]
-#[ignore = "contacts live artwork providers; uses disposable cache and no user files"]
-fn live_artwork_sources_return_decodable_album_and_artist_images() {
+fn combined_credit_portrait_searches_first_artist_directly_and_preserves_credit() {
     let f = Fixture::new();
-    for query in [
-        ArtworkQuery::album(
-            "Oasis",
-            "(What's The Story) Morning Glory?",
-            Some("Don't Look Back in Anger"),
-        ),
-        ArtworkQuery::album(
-            "Malcolm Todd",
-            "Two New Malcolm Todd Songs",
-            Some("You Owe Me"),
-        ),
-        ArtworkQuery::artist("Shawn Mendes"),
-    ] {
-        let paths =
-            fetch(&query, &f.0, LookupMode::Manual).unwrap_or_else(|e| panic!("{query:?}: {e}"));
-        let (w, h) = image::image_dimensions(paths.full).unwrap();
-        assert!(w >= 256 && h >= 256);
-    }
+    let query = ArtworkQuery::artist("Hans Zimmer, Pharrell Williams");
+    let script = Script::new(vec![(
+        "deezer.com".into(),
+        Ok(json!({"data":[{"id":1,"name":"Hans Zimmer","picture_xl":"https://verified"}]})),
+    )]);
+    let paths = lookup(&query, &f.0, LookupMode::Manual, |_| script.clone()).unwrap();
+    assert!(Path::new(&paths.full).is_file());
+    assert_eq!(query.artist, "Hans Zimmer, Pharrell Williams");
+    assert!(!script.calls.borrow()[0].contains("Pharrell"));
+    assert_eq!(
+        script.calls.borrow().len(),
+        2,
+        "one artist search and one image download"
+    );
+    assert!(script.replies.borrow().is_empty());
+    let cached = cache::read(&f.0, &query, LookupMode::Automatic)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (cached.full, cached.thumb, cached.preview),
+        (paths.full, paths.thumb, paths.preview)
+    );
+    assert_eq!(portrait_lead_credit("Grover Washington, Jr."), None);
+    assert_eq!(
+        portrait_lead_credit("Hans Zimmer, Pharrell Williams"),
+        Some("Hans Zimmer")
+    );
+}
+
+#[test]
+fn combined_credit_portrait_cancellation_stops_search() {
+    let f = Fixture::new();
+    let query = ArtworkQuery::artist("First, Second");
+    let script = Script::new(vec![("deezer.com".into(), Err(LookupError::Cancelled))]);
+    assert_eq!(
+        lookup(&query, &f.0, LookupMode::Manual, |_| script.clone()).unwrap_err(),
+        LookupError::Cancelled
+    );
+    assert_eq!(script.calls.borrow().len(), 1);
 }

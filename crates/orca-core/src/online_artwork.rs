@@ -145,6 +145,41 @@ fn lookup<T: Transport>(
     mode: LookupMode,
     transport: impl Fn(providers::Provider) -> T,
 ) -> Result<ArtworkPaths, LookupError> {
+    if query.kind != ArtworkKind::Artist {
+        return lookup_exact(query, directory, mode, transport);
+    }
+    let Some(first) = portrait_lead_credit(&query.artist) else {
+        return lookup_exact(query, directory, mode, transport);
+    };
+    let mut lead = query.clone();
+    lead.artist = first.to_owned();
+    let paths = lookup_exact(&lead, directory, mode, transport)?;
+    cache::save(directory, query, Some(&paths));
+    Ok(paths)
+}
+
+fn portrait_lead_credit(credit: &str) -> Option<&str> {
+    let (first, rest) = credit.split_once(',')?;
+    let first = first.trim();
+    let rest = rest.trim();
+    if first.is_empty()
+        || rest.is_empty()
+        || matches!(
+            rest.trim_end_matches('.').to_ascii_lowercase().as_str(),
+            "jr" | "sr" | "ii" | "iii" | "iv"
+        )
+    {
+        return None;
+    }
+    Some(first)
+}
+
+fn lookup_exact<T: Transport>(
+    query: &ArtworkQuery,
+    directory: &Path,
+    mode: LookupMode,
+    transport: impl Fn(providers::Provider) -> T,
+) -> Result<ArtworkPaths, LookupError> {
     if query.artist.trim().is_empty() {
         return Err(LookupError::NotFound);
     }

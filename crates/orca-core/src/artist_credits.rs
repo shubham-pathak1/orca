@@ -48,13 +48,41 @@ fn credited_in(featured: &str, name: &str) -> bool {
     })
 }
 
-/// Semicolon-separated credits are co-primary unless the title explicitly
-/// labels one of those names as featured. An inline `feat.` suffix is not a
-/// separate artist-browser entry. Commas and ampersands are left untouched.
+fn primary_credit_spans(artist: &str) -> Vec<(usize, &str)> {
+    let mut result = Vec::new();
+    let mut base = 0;
+    for credit in artist.split(';') {
+        let primary = primary_part(credit);
+        let offset = base + credit.find(primary).unwrap_or(0);
+        let mut start = 0;
+        for (at, _) in primary.match_indices(',') {
+            let following = primary[at + 1..]
+                .split(',')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .trim_end_matches('.');
+            if ["jr", "sr", "ii", "iii", "iv"]
+                .iter()
+                .any(|suffix| following.eq_ignore_ascii_case(suffix))
+            {
+                continue;
+            }
+            result.push((offset + start, &primary[start..at]));
+            start = at + 1;
+        }
+        result.push((offset + start, &primary[start..]));
+        base += credit.len() + 1;
+    }
+    result
+}
+
+/// Semicolons and commas separate co-primary credits. Generational suffixes
+/// remain attached; an inline `feat.` suffix is not a primary browser entry.
 pub fn primary_artists(artist: &str, title: &str) -> Vec<String> {
     let mut names = Vec::new();
-    for credit in artist.split(';') {
-        let name = primary_part(credit);
+    for (_, credit) in primary_credit_spans(artist) {
+        let name = credit.trim();
         if !name.is_empty()
             && !names
                 .iter()
@@ -90,16 +118,14 @@ pub fn rename(artist: &str, title: &str, old: &str, new: &str) -> Option<String>
     if !contains(artist, title, old) {
         return None;
     }
-    let mut offset = 0;
-    for credit in artist.split(';') {
-        let name = primary_part(credit);
+    for (offset, credit) in primary_credit_spans(artist) {
+        let name = credit.trim();
         if name.eq_ignore_ascii_case(old) {
             let at = offset + credit.find(name)?;
             let mut renamed = artist.to_string();
             renamed.replace_range(at..at + name.len(), new);
             return Some(renamed);
         }
-        offset += credit.len() + 1;
     }
     None
 }
@@ -137,8 +163,19 @@ mod tests {
         );
         assert_eq!(primary_artists("Main feat. Guest", "Song"), ["Main"]);
         assert_eq!(
-            primary_artists("Earth, Wind & Fire", "Song"),
-            ["Earth, Wind & Fire"]
+            primary_artists(
+                "Hans Zimmer, The Magnificent Six, Pharrell Williams",
+                "Song"
+            ),
+            ["Hans Zimmer", "The Magnificent Six", "Pharrell Williams"]
+        );
+        assert_eq!(
+            primary_artists("Grover Washington, Jr.; Artist", "Song"),
+            ["Grover Washington, Jr.", "Artist"]
+        );
+        assert_eq!(
+            rename("First, Second; Third", "Song", "Second", "New"),
+            Some("First, New; Third".into())
         );
     }
 }

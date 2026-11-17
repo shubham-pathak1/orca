@@ -102,8 +102,8 @@ fn collect(value: &Value, artist: &str, id: u64, images: &mut Vec<String>, depth
 }
 
 // Apple sometimes puts release artwork in an otherwise correctly identified
-// artist's structured `image` field. Music* assets include Taaruk Raina's
-// soundtrack cover, Bharat Chandak's I-POPSTAR image, and Alys's single cover.
+// artist's structured `image` field. Reject release-asset URL patterns even
+// after artist identity has been verified.
 fn release_cover_url(url: &url::Url) -> bool {
     url.path_segments().is_some_and(|segments| {
         segments.filter(|part| !part.is_empty()).any(|part| {
