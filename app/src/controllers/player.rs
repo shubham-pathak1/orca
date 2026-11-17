@@ -10,7 +10,7 @@ use slint::ComponentHandle;
 use std::{rc::Rc, sync::mpsc::Sender, time::Instant};
 pub(crate) fn install(ui: &OrcaWindow, tx: Sender<Request>, player: Rc<PlayerModels>) {
     ui.player()
-        .on_compact_quality(|quality, bits| models::quality_label(&quality, bits).into());
+        .on_compact_quality(|quality| models::quality_label(&quality).into());
     {
         let tx = tx.clone();
         let weak = ui.as_weak();

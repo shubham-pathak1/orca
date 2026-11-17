@@ -115,7 +115,7 @@ fn software_rendering_and_full_player_input_isolation() {
     let ui = OrcaWindow::new().unwrap();
     models::install_grid_window(&ui);
     ui.player()
-        .on_compact_quality(|quality, bits| models::quality_label(&quality, bits).into());
+        .on_compact_quality(|quality| models::quality_label(&quality).into());
     crate::runtime::tests::verify_completions(&ui);
     window.set_size(slint::PhysicalSize::new(1280, 820));
 

@@ -165,11 +165,11 @@ export global PlayerState {
     in-out property <Song> now;
     in-out property <image> original-cover;
     in-out property <bool> original-cover-missing;
-    pure callback compact-quality(string,int)->string;
-    compact-quality(quality,bits)=>{
+    pure callback compact-quality(string)->string;
+    compact-quality(quality)=>{
         return quality;
     }
-    out property<string> display-quality: compact-quality(now.quality,now.bit-depth);
+    out property<string> display-quality: compact-quality(now.quality);
     in-out property <image> backdrop;
     in-out property <image> full-backdrop;
     in-out property <image> waveform;

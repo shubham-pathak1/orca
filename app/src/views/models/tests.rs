@@ -451,18 +451,15 @@ fn playlist_menu_only_requests_visible_rows_and_keeps_its_working_set_bounded() 
 }
 
 #[test]
-fn player_quality_badge_uses_known_lossless_precision_and_lossy_bitrate() {
+fn player_quality_badge_shows_sample_rate_and_bitrate() {
     assert_eq!(
-        quality_label("FLAC | 96 KHZ | 3152 KBPS", 24),
-        "FLAC | 96 kHz | 24-bit"
-    );
-    assert_eq!(
-        quality_label("MP3 | 44.1 KHZ | 320 KBPS", 16),
-        "MP3 | 320 kbps"
-    );
-    assert_eq!(
-        quality_label("FLAC | 96 KHZ | 3152 KBPS", 0),
+        quality_label("FLAC | 96 KHZ | 3152 KBPS"),
         "FLAC | 96 kHz | 3152 kbps"
     );
-    assert_eq!(quality_label("", 24), "");
+    assert_eq!(
+        quality_label("MP3 | 44.1 KHZ | 320 KBPS"),
+        "MP3 | 44.1 kHz | 320 kbps"
+    );
+    assert_eq!(quality_label("FLAC | 96 KHZ"), "FLAC | 96 kHz");
+    assert_eq!(quality_label(""), "");
 }

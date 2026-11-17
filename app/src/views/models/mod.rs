@@ -78,41 +78,14 @@ impl CatalogModels {
 pub fn duration(ms: u64) -> String {
     format!("{}:{:02}", ms / 60000, ms / 1000 % 60)
 }
-pub fn quality_label(source: &str, bits: i32) -> String {
-    let fields: Vec<_> = source
+pub fn quality_label(source: &str) -> String {
+    source
         .split('|')
         .map(str::trim)
         .filter(|field| !field.is_empty())
-        .collect();
-    let Some(codec) = fields.first() else {
-        return String::new();
-    };
-    let codec = codec.to_ascii_uppercase();
-    let display = |value: &str| value.replace("KHZ", "kHz").replace("KBPS", "kbps");
-    if bits > 0
-        && matches!(
-            codec.as_str(),
-            "FLAC" | "ALAC" | "WAV" | "WAVE" | "AIFF" | "AIF" | "APE" | "WV" | "WAVPACK"
-        )
-    {
-        let mut label = codec;
-        if let Some(rate) = fields
-            .iter()
-            .find(|field| field.to_ascii_lowercase().ends_with("khz"))
-        {
-            label.push_str(&format!(" | {}", display(rate)));
-        }
-        return format!("{label} | {bits}-bit");
-    }
-    if matches!(codec.as_str(), "MP3" | "AAC" | "OPUS" | "VORBIS") {
-        if let Some(rate) = fields
-            .iter()
-            .find(|field| field.to_ascii_lowercase().ends_with("kbps"))
-        {
-            return format!("{codec} | {}", display(rate));
-        }
-    }
-    display(source)
+        .map(|field| field.replace("KHZ", "kHz").replace("KBPS", "kbps"))
+        .collect::<Vec<_>>()
+        .join(" | ")
 }
 
 pub fn text_song(track: &Track, index: usize) -> Song {
