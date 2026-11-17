@@ -1,77 +1,317 @@
 import { ScrollView } from "std-widgets.slint";
-import { AppState, FolderChoice } from "state.slint";
+import { AppState, PreferencesState, DialogState, FolderChoice } from "state.slint";
 import { TextButton, ActionFocus } from "controls.slint";
-
 component ResetRule inherits Rectangle {
     in property<string> label;
     callback clicked();
-    accessible-role:button;
-    accessible-label:root.label;
-    accessible-action-default=>{root.clicked();}
-    focus:=ActionFocus {layer:"dialog";activated=>{root.clicked();}}
-    border-radius:4px;
-    border-width:focus.has-focus && AppState.keyboard-navigation ? 1px : 0px;
-    border-color:AppState.ink;
-    background:pointer.has-hover ? AppState.ink.with-alpha(0.06) : transparent;
-    Text {text:root.label;color:AppState.ink.with-alpha(0.72);font-size:11px*AppState.scale;font-weight:600;horizontal-alignment:center;vertical-alignment:center;}
-    pointer:=TouchArea {clicked=>{AppState.keyboard-navigation=false;focus.focus();root.clicked();}}
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default=>{
+        root.clicked();
+    }
+    focus:=ActionFocus {
+        layer: "dialog";
+        activated=>{
+            root.clicked();
+        }
+    }
+    border-radius: 4px;
+    border-width: focus.has-focus && AppState.keyboard-navigation ? 1px : 0px;
+    border-color: PreferencesState.ink;
+    background: pointer.has-hover ? PreferencesState.ink.with-alpha(0.06) : transparent;
+    Text {
+        text: root.label;
+        color: PreferencesState.ink.with-alpha(0.72);
+        font-size: 11px*PreferencesState.scale;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    pointer:=TouchArea {
+        clicked=>{
+            AppState.keyboard-navigation=false;
+            focus.focus();
+            root.clicked();
+        }
+    }
 }
 
 component IncludeSwitch inherits Rectangle {
     in property<string> label;
     in property<bool> checked;
     callback toggled();
-    accessible-role:checkbox;
-    accessible-label:root.label;
-    accessible-checked:root.checked;
-    accessible-action-default=>{root.toggled();}
-    focus:=ActionFocus {layer:"dialog";activated=>{root.toggled();}}
-    width:42px;height:24px;border-radius:12px;border-width:1px;
-    border-color:root.checked ? AppState.ink : AppState.ink.with-alpha(0.25);
-    background:root.checked ? AppState.ink : AppState.ink.with-alpha(0.08);
-    Rectangle {x:root.checked ? 22px : 3px;y:3px;width:18px;height:18px;border-radius:9px;background:root.checked ? AppState.base : AppState.ink;animate x {duration:100ms;easing:ease-out;}}
-    if focus.has-focus && AppState.keyboard-navigation: Rectangle {x:-3px;y:-3px;width:root.width+6px;height:root.height+6px;border-width:2px;border-radius:15px;border-color:AppState.ink;}
-    TouchArea {clicked=>{AppState.keyboard-navigation=false;focus.focus();root.toggled();}}
+    accessible-role: checkbox;
+    accessible-label: root.label;
+    accessible-checked: root.checked;
+    accessible-action-default=>{
+        root.toggled();
+    }
+    focus:=ActionFocus {
+        layer: "dialog";
+        activated=>{
+            root.toggled();
+        }
+    }
+    width: 42px;
+    height: 24px;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: root.checked ? PreferencesState.ink : PreferencesState.ink.with-alpha(0.25);
+    background: root.checked ? PreferencesState.ink : PreferencesState.ink.with-alpha(0.08);
+    Rectangle {
+        x: root.checked ? 22px : 3px;
+        y: 3px;
+        width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        background: root.checked ? PreferencesState.base : PreferencesState.ink;
+        animate x {
+            duration: 100ms;
+            easing: ease-out;
+        }
+    }
+    if focus.has-focus && AppState.keyboard-navigation: Rectangle {
+        x: -3px;
+        y: -3px;
+        width: root.width+6px;
+        height: root.height+6px;
+        border-width: 2px;
+        border-radius: 15px;
+        border-color: PreferencesState.ink;
+    }
+    TouchArea {
+        clicked=>{
+            AppState.keyboard-navigation=false;
+            focus.focus();
+            root.toggled();
+        }
+    }
 }
 
 component FolderRow inherits Rectangle {
     in property<FolderChoice> item;
-    height:52px;
-    Rectangle {y:parent.height - 1px;height:1px;background:AppState.ink.with-alpha(0.09);}
+    height: 52px;
     Rectangle {
-        x:0px;y:2px;width:parent.width - 148px;height:46px;
-        accessible-role:button;accessible-label:"Open " + root.item.name;
-        accessible-enabled:root.item.has-children;
-        accessible-action-default=>{if root.item.has-children {AppState.folder-tree("open",root.item.path,"");}}
-        focus:=ActionFocus {layer:"dialog";enabled:root.item.has-children;activated=>{AppState.folder-tree("open",root.item.path,"");}}
-        border-radius:4px;
-        background:root.item.has-children && pointer.has-hover ? AppState.ink.with-alpha(0.06) : transparent;
-        Text {x:8px;y:4px;width:parent.width - 32px;height:21px;text:root.item.name;color:AppState.ink;font-size:14px*AppState.scale;font-weight:600;overflow:elide;}
-        Text {x:8px;y:26px;width:parent.width - 32px;height:16px;text:root.item.mode=="inherit" ? (root.item.included ? "Included by parent" : "Excluded by parent") : (root.item.included ? "Included in library" : "Excluded from library");color:AppState.ink.with-alpha(0.6);font-size:11px*AppState.scale;}
-        if root.item.has-children: Text {x:parent.width - 20px;y:11px;width:14px;height:22px;text:"›";color:AppState.ink.with-alpha(0.6);font-size:20px;horizontal-alignment:center;vertical-alignment:center;}
-        pointer:=TouchArea {enabled:root.item.has-children;clicked=>{AppState.keyboard-navigation=false;focus.focus();AppState.folder-tree("open",root.item.path,"");}}
+        y: parent.height - 1px;
+        height: 1px;
+        background: PreferencesState.ink.with-alpha(0.09);
     }
-    if root.item.mode!="inherit": ResetRule {x:parent.width - 140px;y:12px;width:86px;height:28px;label:"Use parent";clicked=>{AppState.folder-tree("rule",root.item.path,"inherit");}}
-    IncludeSwitch {x:parent.width - 46px;y:14px;label:"Include " + root.item.name;checked:root.item.included;toggled=>{AppState.folder-tree("rule",root.item.path,root.item.included ? "exclude" : "include");}}
+    Rectangle {
+        x: 0px;
+        y: 2px;
+        width: parent.width - 148px;
+        height: 46px;
+        accessible-role: button;
+        accessible-label: "Open " + root.item.name;
+        accessible-enabled: root.item.has-children;
+        accessible-action-default=>{
+            if root.item.has-children {
+                DialogState.folder-tree("open",root.item.path,"");
+            }
+        }
+        focus:=ActionFocus {
+            layer: "dialog";
+            enabled: root.item.has-children;
+            activated=>{
+                DialogState.folder-tree("open",root.item.path,"");
+            }
+        }
+        border-radius: 4px;
+        background: root.item.has-children && pointer.has-hover ? PreferencesState.ink.with-alpha(0.06) : transparent;
+        Text {
+            x: 8px;
+            y: 4px;
+            width: parent.width - 32px;
+            height: 21px;
+            text: root.item.name;
+            color: PreferencesState.ink;
+            font-size: 14px*PreferencesState.scale;
+            font-weight: 600;
+            overflow: elide;
+        }
+        Text {
+            x: 8px;
+            y: 26px;
+            width: parent.width - 32px;
+            height: 16px;
+            text: root.item.mode=="inherit" ? (root.item.included ? "Included by parent" : "Excluded by parent") : (root.item.included ? "Included in library" : "Excluded from library");
+            color: PreferencesState.ink.with-alpha(0.6);
+            font-size: 11px*PreferencesState.scale;
+        }
+        if root.item.has-children: Text {
+            x: parent.width - 20px;
+            y: 11px;
+            width: 14px;
+            height: 22px;
+            text: "›";
+            color: PreferencesState.ink.with-alpha(0.6);
+            font-size: 20px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        pointer:=TouchArea {
+            enabled: root.item.has-children;
+            clicked=>{
+                AppState.keyboard-navigation=false;
+                focus.focus();
+                DialogState.folder-tree("open",root.item.path,"");
+            }
+        }
+    }
+    if root.item.mode!="inherit": ResetRule {
+        x: parent.width - 140px;
+        y: 12px;
+        width: 86px;
+        height: 28px;
+        label: "Use parent";
+        clicked=>{
+            DialogState.folder-tree("rule",root.item.path,"inherit");
+        }
+    }
+    IncludeSwitch {
+        x: parent.width - 46px;
+        y: 14px;
+        label: "Include " + root.item.name;
+        checked: root.item.included;
+        toggled=>{
+            DialogState.folder-tree("rule",root.item.path,root.item.included ? "exclude" : "include");
+        }
+    }
 }
 
 export component FolderReviewDialog inherits Rectangle {
-    background:AppState.panel;border-radius:10px;border-width:1px;border-color:AppState.ink.with-alpha(0.18);
-    Text {x:24px;y:20px;width:parent.width - 48px;height:29px;text:AppState.folder-adding ? "Add music folder" : "Manage music folder";font-size:21px;font-weight:700;color:AppState.ink;}
-    if AppState.folder-current!=AppState.folder-root: TextButton {x:24px;y:62px;width:64px;height:30px;text:"Back";dialog-control:true;clicked=>{AppState.folder-tree("back","","");}}
-    Text {x:AppState.folder-current==AppState.folder-root ? 24px : 96px;y:62px;width:parent.width - self.x - 24px;height:30px;text:AppState.display-path(AppState.folder-current);font-size:12px;color:AppState.ink.with-alpha(0.65);overflow:elide;vertical-alignment:center;}
-    Text {x:24px;y:104px;width:parent.width - 48px;height:34px;text:"Turn off folders you don't want scanned. You can still include a folder inside an excluded one.";font-size:12px;color:AppState.ink.with-alpha(0.75);wrap:word-wrap;}
-    Text {x:32px;y:151px;width:parent.width - 190px;height:16px;text:"SUBFOLDERS";font-size:10px;font-weight:700;color:AppState.ink.with-alpha(0.5);}
-    Text {x:parent.width - 108px;y:151px;width:76px;height:16px;text:"INCLUDE";font-size:10px;font-weight:700;color:AppState.ink.with-alpha(0.5);horizontal-alignment:center;}
-    Rectangle {x:24px;y:174px;width:parent.width - 48px;height:parent.height - 250px;border-radius:7px;border-width:1px;border-color:AppState.ink.with-alpha(0.13);
-        ScrollView {x:5px;y:1px;width:parent.width - 10px;height:parent.height - 2px;horizontal-scrollbar-policy:always-off;
-            VerticalLayout {spacing:0px;alignment:start;
-                for item in AppState.folder-choices: FolderRow {item:item;}
+    background: PreferencesState.panel;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: PreferencesState.ink.with-alpha(0.18);
+    Text {
+        x: 24px;
+        y: 20px;
+        width: parent.width - 48px;
+        height: 29px;
+        text: DialogState.folder-adding ? "Add music folder" : "Manage music folder";
+        font-size: 21px;
+        font-weight: 700;
+        color: PreferencesState.ink;
+    }
+    if DialogState.folder-current!=DialogState.folder-root: TextButton {
+        x: 24px;
+        y: 62px;
+        width: 64px;
+        height: 30px;
+        text: "Back";
+        dialog-control: true;
+        clicked=>{
+            DialogState.folder-tree("back","","");
+        }
+    }
+    Text {
+        x: DialogState.folder-current==DialogState.folder-root ? 24px : 96px;
+        y: 62px;
+        width: parent.width - self.x - 24px;
+        height: 30px;
+        text: AppState.display-path(DialogState.folder-current);
+        font-size: 12px;
+        color: PreferencesState.ink.with-alpha(0.65);
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    Text {
+        x: 24px;
+        y: 104px;
+        width: parent.width - 48px;
+        height: 34px;
+        text: "Turn off folders you don't want scanned. You can still include a folder inside an excluded one.";
+        font-size: 12px;
+        color: PreferencesState.ink.with-alpha(0.75);
+        wrap: word-wrap;
+    }
+    Text {
+        x: 32px;
+        y: 151px;
+        width: parent.width - 190px;
+        height: 16px;
+        text: "SUBFOLDERS";
+        font-size: 10px;
+        font-weight: 700;
+        color: PreferencesState.ink.with-alpha(0.5);
+    }
+    Text {
+        x: parent.width - 108px;
+        y: 151px;
+        width: 76px;
+        height: 16px;
+        text: "INCLUDE";
+        font-size: 10px;
+        font-weight: 700;
+        color: PreferencesState.ink.with-alpha(0.5);
+        horizontal-alignment: center;
+    }
+    Rectangle {
+        x: 24px;
+        y: 174px;
+        width: parent.width - 48px;
+        height: parent.height - 250px;
+        border-radius: 7px;
+        border-width: 1px;
+        border-color: PreferencesState.ink.with-alpha(0.13);
+        ScrollView {
+            x: 5px;
+            y: 1px;
+            width: parent.width - 10px;
+            height: parent.height - 2px;
+            horizontal-scrollbar-policy: always-off;
+            VerticalLayout {
+                spacing: 0px;
+                alignment: start;
+                for item in DialogState.folder-choices: FolderRow {
+                    item: item;
+                }
             }
         }
-        if AppState.folder-choices.length==0: Text {x:12px;width:parent.width - 24px;height:parent.height;text:"No subfolders here";font-size:13px;color:AppState.ink.with-alpha(0.6);vertical-alignment:center;horizontal-alignment:center;}
+        if DialogState.folder-choices.length==0: Text {
+            x: 12px;
+            width: parent.width - 24px;
+            height: parent.height;
+            text: "No subfolders here";
+            font-size: 13px;
+            color: PreferencesState.ink.with-alpha(0.6);
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
     }
-    Text {x:24px;y:parent.height - 66px;width:parent.width - 258px;height:40px;text:AppState.folder-adding ? "Songs directly in this folder stay included." : AppState.folder-current==AppState.folder-root ? "Changes save immediately. Direct songs stay included." : "Changes save immediately and apply to new subfolders.";font-size:11px;color:AppState.ink.with-alpha(0.65);vertical-alignment:center;wrap:word-wrap;}
-    if AppState.folder-adding: TextButton {x:parent.width - 208px;y:parent.height - 66px;width:80px;height:40px;text:"Cancel";dialog-control:true;clicked=>{AppState.folder-tree("cancel","","");}}
-    TextButton {x:parent.width - 120px;y:parent.height - 66px;width:96px;height:40px;text:AppState.folder-adding ? "Add folder" : "Done";primary:true;dialog-control:true;clicked=>{AppState.folder-tree("finish","","");}}
+    Text {
+        x: 24px;
+        y: parent.height - 66px;
+        width: parent.width - 258px;
+        height: 40px;
+        text: DialogState.folder-adding ? "Songs directly in this folder stay included." : DialogState.folder-current==DialogState.folder-root ? "Changes save immediately. Direct songs stay included." : "Changes save immediately and apply to new subfolders.";
+        font-size: 11px;
+        color: PreferencesState.ink.with-alpha(0.65);
+        vertical-alignment: center;
+        wrap: word-wrap;
+    }
+    if DialogState.folder-adding: TextButton {
+        x: parent.width - 208px;
+        y: parent.height - 66px;
+        width: 80px;
+        height: 40px;
+        text: "Cancel";
+        dialog-control: true;
+        clicked=>{
+            DialogState.folder-tree("cancel","","");
+        }
+    }
+    TextButton {
+        x: parent.width - 120px;
+        y: parent.height - 66px;
+        width: 96px;
+        height: 40px;
+        text: DialogState.folder-adding ? "Add folder" : "Done";
+        primary: true;
+        dialog-control: true;
+        clicked=>{
+            DialogState.folder-tree("finish","","");
+        }
+    }
 }
