@@ -1,118 +1,98 @@
 <p align="center">
-  <img src="app/ui/assets/orca-logo.png" alt="Orca logo" width="88">
+  <img src="app/ui/assets/orca-logo.png" alt="Orca" width="88">
 </p>
 
 <h1 align="center">Orca</h1>
 
+<p align="center">A minimal local music player. Built with Rust and Slint.</p>
+
+<p align="center">Currently in alpha. Windows x64.</p>
+
 <p align="center">
-  <a href="https://github.com/shubham-pathak1/orca/releases">Download</a> ·
-  <a href="https://github.com/shubham-pathak1/orca/issues">Report a bug</a> ·
-  <a href="docs/CONTRIBUTING.md">Contribute</a>
+  <a href="https://github.com/shubham-pathak1/orca/releases">Download</a> &middot;
+  <a href="#screenshots">Screenshots</a> &middot;
+  <a href="docs/CONTRIBUTING.md">Contribute</a> &middot;
+  <a href="https://github.com/shubham-pathak1/orca/issues">Report a bug</a>
 </p>
 
-<p align="center">A local open-source music player.</p>
-
-Orca is still in alpha and is currently available only for Windows x64.
-Once it is stable enough, the plan is to bring it to Linux and possibly macOS too.
-
-**Large libraries:** Orca has not been validated with libraries larger than
-5,000 songs. Performance with larger libraries may vary, including slower
-browsing and higher resource use.
-
-If you try Orca, please [report any bugs](https://github.com/shubham-pathak1/orca/issues)
-or share your ideas. Your feedback and contributions help make it better. Thank you! :)
-
-![Orca's main library showing album artwork, search and playback controls](https://ik.imagekit.io/shubhampathak/orca-web/library.png?v=20261026)
+![Orca library with album artwork, search and playback controls](https://ik.imagekit.io/shubhampathak/orca-web/library.png?v=20261026)
 
 ## Features
 
-- Offline playback, search, alphabetical browsing and nested music folders
-- Songs, artists, albums, genres, playlists and one-click Liked Songs, with list and grid views
-- Gapless playback, shuffle, repeat, queue reordering and session restore
-- Synced and word-timed lyrics, click-to-seek, LRC import and online fetching
-- Waveform and classic seekbars, compact player and full-player lyrics
-- Song tags and embedded cover editing, bulk album, artist and genre tag updates
-- Online artwork lookup, custom collection covers and M3U playlist import/export
-- Light and dark themes, custom fonts, minimal mode, dynamic accents and cover backgrounds
-- Windows media controls, tray integration, keyboard shortcuts and Phantom Mode
+- **Library** - browse songs, albums, artists, genres and folders.
+- **Playback** - gapless playback, shuffle, repeat, an editable queue and session restore.
+- **Playlists** - create playlists, save liked songs and import or export M3U files.
+- **Lyrics** - synced and word-timed lyrics, click-to-seek, LRC import and optional romanization.
+- **Audio Output** - shared, exclusive and unprocessed WASAPI modes for supported devices and formats.
+- **Metadata** - edit song tags, embedded artwork and lyrics; rename albums, artists and genres across their songs.
+- **Themes** - light and dark themes, artwork accents, custom fonts, classic or waveform seekbars, and a full player.
+- **Windows Integration** - media controls, tray controls and keyboard shortcuts.
+
+Playback is local. Optional lyrics, romanization and artwork lookup use online services.
+
+## Get started
+
+1. Download the Windows x64 installer or portable ZIP from [Releases](https://github.com/shubham-pathak1/orca/releases).
+2. Install Orca, or extract the ZIP and open **Orca.exe**.
+3. Add your music folders in **Settings → Library**. Subfolders are included automatically.
+
+Tag and embedded-artwork edits write to your audio files. Playlists and collection
+covers are stored in Orca's profile.
+
+### Updating
+
+Close Orca, then run the new installer or replace the portable app files with the
+new build.
 
 ## Screenshots
-
-<details open>
-<summary>Artists, albums, lyrics and metadata editing</summary>
-
-### Artists
-
-![Artist page with songs and albums from the local library](https://ik.imagekit.io/shubhampathak/orca-web/artist.png?v=20261026)
-
-### Albums
-
-![Album page with track details and playback controls](https://ik.imagekit.io/shubhampathak/orca-web/album.png?v=20261026)
 
 ### Lyrics
 
 ![Full player with album artwork and synced lyrics](https://ik.imagekit.io/shubhampathak/orca-web/fullplayer_lyrics.png?v=20261026)
 
-### Metadata editing
+### Artists
 
-![Song metadata editor with cover and lyrics controls](https://ik.imagekit.io/shubhampathak/orca-web/metadata_editor.png?v=20261026)
+![Artist page with songs and albums](https://ik.imagekit.io/shubhampathak/orca-web/artist.png?v=20261026)
 
-</details>
+### Albums
 
-## Getting started
+![Album page with track details](https://ik.imagekit.io/shubhampathak/orca-web/album.png?v=20261026)
 
-1. Download a build from [GitHub Releases](https://github.com/shubham-pathak1/orca/releases).
-2. Run the Windows installer, or extract the portable ZIP and open **Orca.exe**.
-3. Add your music folders in **Settings**. Orca includes music in their subfolders.
+### Metadata editor
 
-Online artwork fetching is experimental. Images may be unavailable or matched
-incorrectly; you can choose or replace them manually.
+![Song metadata editor with artwork and lyrics controls](https://ik.imagekit.io/shubhampathak/orca-web/metadata_editor.png?v=20261026)
 
-Song edits write tags and covers to the audio file. Album, artist and genre
-renames update the corresponding song tags. Collection covers and playlists
-stay in Orca, preserving embedded song artwork.
 
-### Updating
+## Build
 
-Close Orca before installing an update. For portable builds, extract the new ZIP
-into a separate directory. Your existing library, playlists and settings are reused.
-On first launch, 0.1.8 automatically moves your
-existing library, playlists, artwork and settings to its permanent data folder.
-Later releases reuse that folder.
-
-## Development
-
-Orca uses Rust and Slint. Install stable Rust and the Windows MSVC build tools,
-then run from the repository root:
+Install [Rust](https://rustup.rs/) and Visual Studio Build Tools with the
+**Desktop development with C++** workload, then run from the repository root:
 
 ```powershell
-cargo run --manifest-path app/Cargo.toml --target-dir target/slint
+cargo run --release --locked
 ```
 
-See [Contributing](docs/CONTRIBUTING.md) for setup, checks and packaging, and
-[Architecture](docs/ARCHITECTURE.md) for the code structure.
+See [Contributing](docs/CONTRIBUTING.md) for development setup, checks and packaging,
+and [Architecture](docs/ARCHITECTURE.md) for the code structure.
 
 ## Contributing
 
-Contributions of all sizes are welcome, from bug reports and documentation fixes
-to code improvements. Since Orca is still in alpha, there may be rough edges;
-please let us know what works well and what needs attention through
-[GitHub Issues](https://github.com/shubham-pathak1/orca/issues).
+Bug reports, documentation fixes and focused pull requests are welcome.
+Discuss larger changes in an [issue](https://github.com/shubham-pathak1/orca/issues)
+first to keep the scope focused on local music playback.
 
-When reporting a bug, please include your Orca version, steps to reproduce and
-screenshots or logs when helpful. For code contributions, see the
-[contributor guide](docs/CONTRIBUTING.md), keep your pull request focused on one
-change and describe how you checked it.
+For bug reports, include your Orca version, steps to reproduce, and relevant
+screenshots or logs. Please see the [contributor guide](docs/CONTRIBUTING.md) before submitting code.
 
-Thank you for trying Orca and helping it grow!
+Thank you for using Orca and helping make it better! :)
 
 ## Credits
 
-- [Slint](https://slint.dev/): native interface
-- [Rodio](https://github.com/RustAudio/rodio) and [Lofty](https://github.com/Serial-ATA/lofty-rs): audio and metadata
-- [LRC.RED](https://lrc.red/) and [LRCLIB](https://lrclib.net/): lyrics
-- [iTunes](https://www.apple.com/itunes/), [Deezer](https://www.deezer.com/), [MusicBrainz](https://musicbrainz.org/) and [Cover Art Archive](https://coverartarchive.org/): artwork lookup
+- [Slint](https://slint.dev/) - native desktop interface.
+- [Rodio](https://github.com/RustAudio/rodio), [Symphonia](https://github.com/pdeljanov/Symphonia) and [Lofty](https://github.com/Serial-ATA/lofty-rs) - audio playback, decoding and metadata.
+- [LRC.RED](https://lrc.red/) and [LRCLIB](https://lrclib.net/) - lyrics; [Google](https://translate.google.com/) - romanization.
+- [iTunes](https://www.apple.com/itunes/), [Deezer](https://www.deezer.com/), [MusicBrainz](https://musicbrainz.org/) and [Cover Art Archive](https://coverartarchive.org/) - artwork lookup.
 
 ## License
 
-Orca is available under the [MIT License](LICENSE).
+[MIT](LICENSE)
