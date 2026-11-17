@@ -1,9 +1,9 @@
 name: Native validation
 on:
   push:
-    paths: ['crates/**', 'app/**', 'scripts/**', '.github/workflows/native-validation.yml']
+    paths: ['Cargo.toml', 'Cargo.lock', '.cargo/**', 'crates/**', 'app/**', 'vendor/**', 'scripts/**', '.github/workflows/native-validation.yml']
   pull_request:
-    paths: ['crates/**', 'app/**', 'scripts/**', '.github/workflows/native-validation.yml']
+    paths: ['Cargo.toml', 'Cargo.lock', '.cargo/**', 'crates/**', 'app/**', 'vendor/**', 'scripts/**', '.github/workflows/native-validation.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -21,21 +21,15 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            app -> ../target/slint
-            crates/orca-core -> ../../target/slint
-            crates/orca-services -> ../../target/slint
-      - name: Validate Rust projects
+          workspaces: ". -> target/slint"
+      - name: Validate workspace
         shell: pwsh
         run: |
-          foreach ($project in @('crates/orca-core', 'crates/orca-services', 'app')) {
-            $manifest = "$project/Cargo.toml"
-            cargo fmt --manifest-path $manifest --check
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            cargo clippy --manifest-path $manifest --target-dir target/slint --jobs 2 --locked --all-targets --no-deps -- -D warnings
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            cargo test --manifest-path $manifest --target-dir target/slint --jobs 2 --locked -- --test-threads=1
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
+          cargo fmt --all --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo clippy --workspace --locked --all-targets --no-deps -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --workspace --locked -- --test-threads=1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Check release configuration and optional GPU backend
-        run: cargo clippy --release --manifest-path app/Cargo.toml --features gpu --target-dir target/slint --jobs 2 --locked --all-targets --no-deps -- -D warnings
+        run: cargo clippy --release -p orca-slint --features gpu --locked --all-targets --no-deps -- -D warnings

@@ -35,22 +35,19 @@ try {
             throw 'Install NSIS 3, or use -PortableOnly to build just the ZIP.'
         }
     }
-    $metadata = & cargo metadata --format-version 1 --no-deps --locked --offline --manifest-path app/Cargo.toml
+    $metadata = & cargo metadata --format-version 1 --no-deps --locked --offline
     if ($LASTEXITCODE -ne 0) { throw 'Could not read the native manifest.' }
     $nativeVersion = (($metadata | ConvertFrom-Json).packages | Where-Object name -eq 'orca-slint').version
     if ($nativeVersion -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') { throw 'Invalid native version.' }
     if (-not $SkipValidation) {
-        foreach ($project in @('crates/orca-core', 'crates/orca-services', 'app')) {
-            $manifest = "$project/Cargo.toml"
-            & cargo fmt --manifest-path $manifest --check
-            if ($LASTEXITCODE -ne 0) { throw "Formatting failed: $project" }
-            & cargo clippy --manifest-path $manifest --target-dir target/slint --jobs 2 --locked --offline --all-targets --no-deps -- -D warnings
-            if ($LASTEXITCODE -ne 0) { throw "Clippy failed: $project" }
-            & cargo test --manifest-path $manifest --target-dir target/slint --jobs 2 --locked --offline -- --test-threads=1
-            if ($LASTEXITCODE -ne 0) { throw "Tests failed: $project" }
-        }
+        & cargo fmt --all --check
+        if ($LASTEXITCODE -ne 0) { throw 'Formatting failed.' }
+        & cargo clippy --workspace --locked --offline --all-targets --no-deps -- -D warnings
+        if ($LASTEXITCODE -ne 0) { throw 'Workspace Clippy checks failed.' }
+        & cargo test --workspace --locked --offline -- --test-threads=1
+        if ($LASTEXITCODE -ne 0) { throw 'Workspace tests failed.' }
     }
-    & cargo build --release --locked --offline --manifest-path app/Cargo.toml --target-dir target/slint --jobs 2
+    & cargo build --release -p orca-slint --locked --offline
     if ($LASTEXITCODE -ne 0) { throw 'Native release compilation failed.' }
     $executable = Join-Path $repoRoot 'target/slint/release/orca-slint.exe'
     $actualVersion = (Get-Item -LiteralPath $executable).VersionInfo.ProductVersion
@@ -68,9 +65,8 @@ try {
 Extract the ZIP and open Orca.exe. Add music folders in Settings.
 Song metadata and cover edits write your audio files. Collection name edits
 update matching song tags; collection covers and playlists stay in Orca.
-Close Orca before upgrading. Version 0.1.8 automatically moves your existing
-library, playlists, artwork and settings to its permanent data folder.
-Later releases reuse that folder.
+Close Orca before upgrading. Your library and settings are stored in
+%LOCALAPPDATA%\Orca and reused by later releases.
 Extract newer builds into a separate directory; your profile is reused.
 Orca uses software rendering.
 Keep the included Microsoft Visual C++ runtime DLL beside Orca.exe.
