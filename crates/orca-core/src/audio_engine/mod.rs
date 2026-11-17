@@ -1,3 +1,8 @@
+#[cfg(windows)]
+mod integer_playback;
+mod output_source;
+#[cfg(test)]
+mod signal_tests;
 mod sources;
 mod waveform;
 mod worker;
@@ -77,7 +82,8 @@ impl Default for VisualizerData {
 }
 
 pub enum AudioCommand {
-    Play(String), // Clears the active and preloaded sinks.
+    Play(String),            // Clears the active and preloaded sinks.
+    PlayQueued(String, u64), // Deferred exclusive-rate transition, guarded by source generation.
     LoadPaused(String, Duration),
     PlayCrossfade(String, Duration),
     Pause,

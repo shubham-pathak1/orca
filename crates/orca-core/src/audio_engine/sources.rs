@@ -1,7 +1,8 @@
+use super::output_source::PlaybackSink as Sink;
 use super::VISUALIZER_BUFFER_SIZE;
 use biquad::{Biquad, Coefficients, DirectForm1, ToHertz, Type};
 use lofty::{config::ParseOptions, file::TaggedFileExt, probe::Probe, tag::ItemKey};
-use rodio::{Decoder, Sink, Source};
+use rodio::{Decoder, Source};
 use std::{
     fs::File,
     sync::{
@@ -13,6 +14,12 @@ use std::{
 const EQ_BAND_FREQUENCIES_HZ: [f32; 5] = [60.0, 230.0, 910.0, 3600.0, 14000.0];
 const EQ_Q: f32 = 0.707;
 const VISUALIZER_SAMPLES_PER_PEAK: usize = 1024;
+
+pub(super) fn track_sample_rate(path: &str) -> Result<u32, String> {
+    let decoder = Decoder::try_from(File::open(path).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    Ok(decoder.sample_rate())
+}
 
 fn parse_gain_db(value: &str) -> Option<f32> {
     let value = value
@@ -307,13 +314,26 @@ pub(super) fn create_track_source(
     on_start: Option<Box<dyn FnOnce(u64) + Send>>,
 ) -> Result<(u64, Box<dyn Source<Item = f32> + Send>), String> {
     let file = File::open(path).map_err(|e| format!("Failed to open '{path}': {e}"))?;
-    let decoder = Decoder::try_from(file).map_err(|e| format!("Decode error for '{path}': {e}"))?;
+    let mut decoder =
+        Decoder::try_from(file).map_err(|e| format!("Decode error for '{path}': {e}"))?;
     let total_duration_ms = decoder
         .total_duration()
         .unwrap_or_else(|| Duration::from_secs(0))
         .as_millis() as u64;
 
-    let source = decoder.skip_duration(start_pos);
+    if !start_pos.is_zero() && decoder.try_seek(start_pos).is_err() {
+        // A failed seek may have moved the decoder. Restart before falling back
+        // to a frame-aligned skip; sample-wise duration rounding can swap stereo
+        // channels when the requested time falls between frames.
+        decoder = Decoder::try_from(File::open(path).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+        let frames = start_pos.as_nanos() * decoder.sample_rate() as u128 / 1_000_000_000;
+        let samples = (frames * decoder.channels() as u128).min(usize::MAX as u128) as usize;
+        if samples > 0 {
+            let _ = decoder.nth(samples - 1);
+        }
+    }
+    let source = decoder;
     let gain_source = ReplayGainSource {
         inner: source,
         multiplier: track_replaygain(path),
@@ -353,7 +373,7 @@ pub(super) fn load_track_into_sink(
         path, start_pos, eq_enabled, eq_gains, replaygain, visualizer, None,
     )?;
     sink.clear();
-    sink.append(source);
+    sink.append(source)?;
     Ok(duration)
 }
 

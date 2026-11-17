@@ -40,6 +40,7 @@ impl Backend {
             orca_core::audio_output::OutputConfig {
                 device_id: device_id.into(),
                 exclusive,
+                unprocessed: false,
             },
         ))
         .map_err(|_| "Audio device unavailable".into())

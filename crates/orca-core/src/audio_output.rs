@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 pub struct OutputConfig {
     pub device_id: String,
     pub exclusive: bool,
+    pub unprocessed: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -19,10 +20,13 @@ pub struct OutputDevice {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct OutputStatus {
     pub config: OutputConfig,
     pub device_name: String,
     pub sample_rate: u32,
+    pub source_sample_rate: u32,
+    pub notice: String,
     pub channels: u16,
     pub sample_format: String,
     pub error: String,
@@ -30,15 +34,24 @@ pub struct OutputStatus {
     pub revision: u64,
 }
 
-// The experimental direct WASAPI worker is deliberately not compiled: hardware
-// validation found blocking driver calls and corrupt output. Keep the established
-// Rodio/CPAL shared-output path on every platform until a replacement is validated.
+#[cfg(any(windows, test))]
+pub(crate) mod buffered;
+#[cfg(any(windows, test))]
+pub(crate) mod pcm;
+#[cfg(windows)]
+mod windows_output;
+#[cfg(windows)]
+pub type IntegerOutput = windows_output::OutputHandle<i32>;
+
 pub fn devices() -> Result<Vec<OutputDevice>, String> {
+    #[cfg(windows)]
+    return windows_output::devices();
+    #[cfg(not(windows))]
     Ok(Vec::new())
 }
 
 /// Observe Windows default-endpoint changes without polling devices.
-/// Playback continues to use shared Rodio output.
+/// The audio worker decides whether the selected output follows the default.
 #[cfg(target_os = "windows")]
 pub struct DefaultOutputNotifications {
     registration: Option<wasapi::DeviceEventRegistration>,
@@ -148,11 +161,36 @@ mod tests {
     }
 }
 
-pub struct OutputHandle(rodio::OutputStream, Arc<Mutex<Option<String>>>);
+pub enum OutputHandle {
+    Shared(rodio::OutputStream, Arc<Mutex<Option<String>>>),
+    #[cfg(windows)]
+    Selected(windows_output::OutputHandle),
+}
 impl OutputHandle {
     pub fn open(config: &OutputConfig) -> Result<(Self, OutputStatus), String> {
+        Self::open_for_rate(config, None)
+    }
+    pub fn open_for_rate(
+        config: &OutputConfig,
+        preferred_rate: Option<u32>,
+    ) -> Result<(Self, OutputStatus), String> {
+        if config.unprocessed {
+            return Err(
+                "Unprocessed output requires an integer source and exact format negotiation".into(),
+            );
+        }
+        if preferred_rate.is_some_and(|rate| !(8000..=768000).contains(&rate)) {
+            return Err("Unsupported source sample rate".into());
+        }
+        if config.device_id.len() > 8192 || config.device_id.contains('\0') {
+            return Err("Invalid output device ID".into());
+        }
         if config.exclusive || !config.device_id.is_empty() {
-            return Err("Output device selection and exclusive mode are disabled pending validation. Use shared system-default output.".into());
+            #[cfg(windows)]
+            return windows_output::OutputHandle::open(config, preferred_rate)
+                .map(|(handle, status)| (Self::Selected(handle), status));
+            #[cfg(not(windows))]
+            return Err("Selected-device output is only supported on Windows.".into());
         }
         let errors = Arc::new(Mutex::new(None));
         let reported = errors.clone();
@@ -162,7 +200,7 @@ impl OutputHandle {
             }
         };
         // Retain Rodio's default-device fallback while observing stream failures.
-        let stream = rodio::OutputStreamBuilder::from_default_device()
+        let mut stream = rodio::OutputStreamBuilder::from_default_device()
             .and_then(|builder| builder.with_error_callback(callback.clone()).open_stream())
             .or_else(|original| {
                 let Ok(mut devices) = rodio::cpal::default_host().output_devices() else {
@@ -181,6 +219,9 @@ impl OutputHandle {
                     .ok_or(original)
             })
             .map_err(|error| error.to_string())?;
+        // Switching output deliberately releases this stream. Rodio's routine
+        // drop diagnostic would corrupt terminal hosts; errors use the callback.
+        stream.log_on_drop(false);
         let status = OutputStatus {
             config: config.clone(),
             device_name: "System default".into(),
@@ -189,13 +230,58 @@ impl OutputHandle {
             sample_format: format!("{:?}", stream.config().sample_format()),
             ..Default::default()
         };
-        Ok((Self(stream, errors), status))
+        Ok((Self::Shared(stream, errors), status))
     }
     pub fn mixer(&self) -> &Mixer {
-        self.0.mixer()
+        match self {
+            Self::Shared(stream, _) => stream.mixer(),
+            #[cfg(windows)]
+            Self::Selected(handle) => handle.mixer(),
+        }
     }
-    pub fn set_active(&self, _active: bool) {}
+    pub fn set_active(&self, active: bool) {
+        #[cfg(windows)]
+        if let Self::Selected(handle) = self {
+            handle.set_active(active);
+        }
+        #[cfg(not(windows))]
+        let _ = active;
+    }
+    /// Native buffered output replaces sources instead of waiting on a device
+    /// callback to acknowledge synchronous Rodio seek/clear operations.
+    pub fn buffered(&self) -> bool {
+        match self {
+            Self::Shared(..) => false,
+            #[cfg(windows)]
+            Self::Selected(_) => true,
+        }
+    }
+    pub fn discard_pending(&self) {
+        #[cfg(windows)]
+        if let Self::Selected(handle) = self {
+            handle.discard_pending();
+        }
+    }
+    pub fn has_pending(&self) -> bool {
+        match self {
+            Self::Shared(..) => false,
+            #[cfg(windows)]
+            Self::Selected(handle) => handle.has_pending(),
+        }
+    }
+    pub fn set_draining(&self, draining: bool) {
+        #[cfg(windows)]
+        if let Self::Selected(handle) = self {
+            handle.set_draining(draining);
+        }
+        #[cfg(not(windows))]
+        let _ = draining;
+    }
     pub fn take_error(&self) -> Option<String> {
-        self.1.lock().ok()?.take()
+        match self {
+            Self::Shared(_, errors) => errors.lock().ok()?.take(),
+            #[cfg(windows)]
+            Self::Selected(handle) => handle.take_error(),
+        }
     }
 }

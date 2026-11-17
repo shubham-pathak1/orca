@@ -4,6 +4,7 @@ pub mod atomic_file;
 pub mod audio_engine;
 pub mod audio_output;
 pub mod db;
+pub mod integer_audio;
 pub mod lastfm;
 pub mod library;
 pub mod lyrics;
