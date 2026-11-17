@@ -1,24 +1,27 @@
 [package]
 name = "orca-core"
-version = "0.1.8-alpha"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
 base64 = "0.22"
 biquad = "0.5"
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+image = { workspace = true, features = ["jpeg", "png", "webp"] }
 log = "0.4"
 httpdate = "1.0"
 lofty = "0.21"
 md5 = "0.7"
 rodio = "0.21.1"
-rusqlite = { version = "0.31", features = ["bundled", "functions"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-ureq = { version = "2.9", features = ["json"] }
+rubato = { version = "=0.16.2", default-features = false }
+rusqlite = { workspace = true, features = ["functions"] }
+serde.workspace = true
+serde_json.workspace = true
+symphonia = { version = "=0.5.5", default-features = false, features = ["pcm", "wav", "aiff", "flac"] }
+ureq.workspace = true
 url = "2.5"
-walkdir = "2"
+walkdir.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 wasapi = "0.25"
-windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
+windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }

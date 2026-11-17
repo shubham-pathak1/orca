@@ -1,15 +1,15 @@
 [package]
 name = "orca-services"
-version = "0.1.8-alpha"
-edition = "2021"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
-orca-core = { path = "../orca-core" }
-rusqlite = { version = "0.31", features = ["bundled", "backup"] }
-walkdir = "2"
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-ureq = { version = "2.9", features = ["json"] }
+orca-core.workspace = true
+rusqlite = { workspace = true, features = ["backup"] }
+walkdir.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+ureq.workspace = true
 
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+image = { workspace = true, features = ["jpeg", "png", "webp"] }

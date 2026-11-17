@@ -2169,8 +2169,6 @@ dependencies = [
 [[package]]
 name = "i-slint-renderer-software"
 version = "1.18.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f8c641e138a2cc96537cac4481f5c7c8bb8dcc66d09acaed269329c8738628a"
 dependencies = [
  "bytemuck",
  "clru",
@@ -3584,7 +3582,7 @@ dependencies = [
 
 [[package]]
 name = "orca-core"
-version = "0.1.8-alpha"
+version = "0.1.9-alpha"
 dependencies = [
  "base64 0.22.1",
  "biquad",
@@ -3594,9 +3592,11 @@ dependencies = [
  "log",
  "md5",
  "rodio",
+ "rubato",
  "rusqlite",
  "serde",
  "serde_json",
+ "symphonia",
  "ureq",
  "url",
  "walkdir",
@@ -3606,7 +3606,7 @@ dependencies = [
 
 [[package]]
 name = "orca-services"
-version = "0.1.8-alpha"
+version = "0.1.9-alpha"
 dependencies = [
  "image",
  "orca-core",
@@ -3619,8 +3619,9 @@ dependencies = [
 
 [[package]]
 name = "orca-slint"
-version = "0.1.8-alpha"
+version = "0.1.9-alpha"
 dependencies = [
+ "i-slint-core",
  "image",
  "notify",
  "orca-services",
@@ -4309,6 +4310,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rubato"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5258099699851cfd0082aeb645feb9c084d9a5e1f1b8d5372086b989fc5e56a1"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "rusqlite"
 version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4631,6 +4642,7 @@ dependencies = [
  "const-field-offset",
  "i-slint-backend-linuxkms",
  "i-slint-backend-selector",
+ "i-slint-backend-winit",
  "i-slint-common",
  "i-slint-core",
  "i-slint-core-macros",
@@ -4890,8 +4902,6 @@ dependencies = [
 [[package]]
 name = "symphonia-bundle-flac"
 version = "0.5.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c91565e180aea25d9b80a910c546802526ffd0072d0b8974e3ebe59b686c9976"
 dependencies = [
  "log",
  "symphonia-core",
