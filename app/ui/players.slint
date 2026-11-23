@@ -614,25 +614,35 @@ component LyricsViewport inherits Rectangle {
                     fade-bottom: clipped-bottom;
                     opacity: line.time<0 ? 0.84 : LyricsState.active-line==index && line.words.length>0 ? 0.34 : LyricsState.active-line==index ? 1 : abs(LyricsState.active-line - index)==1 ? 0.56 : 0.34;
                 }
-                for span in (LyricsState.active-line==index ? rendered.spans : []): Rectangle {
-                    private property<float> progress: LyricsState.active-line==index ? clamp((LyricsState.lyric-position - span.time)/max(1,span.end-time - span.time),0,1) : 0;
+                for span in (LyricsState.active-line==index ? rendered.spans : []): sweep := Rectangle {
+                    private property<float> progress: clamp((LyricsState.lyric-position - span.time)/max(1,span.end-time - span.time),0,1);
+                    private property<length> feather: PreferencesState.soft-lyric-sweep ? min(10px,self.width,span.width*1px - self.width) : 0px;
                     x: (span.x+(span.rtl ? span.width*(1 - self.progress) : 0))*1px;
                     y: span.y*1px;
                     width: span.width*self.progress*1px;
                     height: span.height*1px;
-                    clip: true;
-                    visible: LyricsState.active-line==index && self.progress>0;
-                    LyricImage {
-                        x: -parent.x - rendered.padding*1px;
-                        y: -parent.y - rendered.padding*1px;
-                        width: karaoke.width+rendered.padding*2px;
-                        height: karaoke.height+rendered.padding*2px;
-                        source: rendered.bitmap;
-                        tint: root.ink;
-                        view-y: row-view-y - rendered.padding*1px;
-                        viewport-height: lyrics.height;
-                        fade-top: clipped-top;
-                        fade-bottom: clipped-bottom;
+                    visible: self.progress>0;
+                    // Narrow clips reuse the cached glyphs at the moving edge.
+                    for band in (sweep.feather>0px ? 5 : 1): Rectangle {
+                        width: band==0 ? sweep.width - sweep.feather : sweep.feather/4;
+                        x: span.rtl ? (band==0 ? sweep.feather : (4 - band)*self.width)
+                            : (band==0 ? 0px : sweep.width - sweep.feather+(band - 1)*self.width);
+                        height: sweep.height;
+                        clip: true;
+                        visible: self.width>0px;
+                        opacity: band==0 ? 1 : (5 - band)/5.0;
+                        LyricImage {
+                            x: -sweep.x - parent.x - rendered.padding*1px;
+                            y: -sweep.y - rendered.padding*1px;
+                            width: karaoke.width+rendered.padding*2px;
+                            height: karaoke.height+rendered.padding*2px;
+                            source: rendered.bitmap;
+                            tint: root.ink;
+                            view-y: row-view-y - rendered.padding*1px;
+                            viewport-height: lyrics.height;
+                            fade-top: clipped-top;
+                            fade-bottom: clipped-bottom;
+                        }
                     }
                 }
             }

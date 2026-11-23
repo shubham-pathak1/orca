@@ -671,6 +671,7 @@ fn last_settings_survive_immediate_shutdown_and_restart_without_audio() {
         scale: 1.1,
         quality_info: false,
         lyrics_left_aligned: true,
+        soft_lyric_sweep: true,
         blur_unfocused_lyrics: true,
         lyrics_blur_strength: 75,
         romanization_mode: orca_services::types::RomanizationMode::Selected,

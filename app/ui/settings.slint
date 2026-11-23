@@ -663,6 +663,19 @@ export component SettingsView inherits Rectangle {
                         }
                     }
                 }
+                if (root.tab==3 || LibraryState.search!="") && PreferencesState.setting-matches("Lyrics word highlight sharp soft sweep karaoke",LibraryState.search): SettingRow {
+                    title: "Word highlight";
+                    description: "Choose how the highlight moves across word-timed lyrics";
+                    ComboBox {
+                        enabled: AppState.focus-layer=="browse";
+                        model: ["Sharp sweep","Soft sweep"];
+                        current-index: PreferencesState.soft-lyric-sweep ? 1 : 0;
+                        selected(value) => {
+                            PreferencesState.soft-lyric-sweep=self.current-index==1;
+                            PreferencesState.save-settings();
+                        }
+                    }
+                }
                 if (root.tab==3 || LibraryState.search!="") && PreferencesState.setting-matches("Blur unfocused lyrics strength intensity amount",LibraryState.search): SettingRow {
                     title: "Blur unfocused lyrics";
                     description: "Soften inactive lines while keeping the current line and its pronunciation sharp";

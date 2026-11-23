@@ -141,7 +141,8 @@ pub(super) fn verify(case: &mut UiCase) {
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);
     });
-    let enhanced = crate::lyrics::parse("[00:01.00]Lovely <00:01.50>day\n[00:03.00]Next line");
+    let enhanced =
+        crate::lyrics::parse("[00:01.00]Lovely <00:01.50>day<00:03.00>\n[00:03.00]Next line");
     let rendered = Rc::new(RefCell::new(lyric_render::Renderer::new()));
     rendered.borrow_mut().set_romanization(vec![
         "Latin pronunciation follows this line".into(),
@@ -225,6 +226,19 @@ pub(super) fn verify(case: &mut UiCase) {
         bright_caption_pixels(pixels) > early_caption + 100,
         "pronunciation must sweep with the enhanced original rather than start fully bright"
     );
+    let classic = pixels.clone();
+    ui.preferences().set_soft_lyric_sweep(true);
+    assert!(window.draw_if_needed(|renderer| {
+        renderer.render(pixels, 1280);
+    }));
+    assert!(
+        pixels
+            .iter()
+            .zip(&classic)
+            .any(|(soft, hard)| soft.r < hard.r),
+        "a soft sweep should dim pixels at the moving highlight edge"
+    );
+    ui.preferences().set_soft_lyric_sweep(false);
     ui.lyrics().set_lyric_position(900.0);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);

@@ -34,6 +34,7 @@ pub(crate) fn settings_from_ui(ui: &OrcaWindow) -> Settings {
         scale: ui.preferences().get_scale(),
         quality_info: ui.preferences().get_quality_info(),
         lyrics_left_aligned: ui.preferences().get_lyrics_left_aligned(),
+        soft_lyric_sweep: ui.preferences().get_soft_lyric_sweep(),
         blur_unfocused_lyrics: ui.preferences().get_blur_unfocused_lyrics(),
         lyrics_blur_strength: ui
             .preferences()
@@ -88,6 +89,7 @@ pub(crate) fn apply_settings(ui: &OrcaWindow, s: Settings) {
     ui.preferences().set_quality_info(s.quality_info);
     ui.preferences()
         .set_lyrics_left_aligned(s.lyrics_left_aligned);
+    ui.preferences().set_soft_lyric_sweep(s.soft_lyric_sweep);
     ui.preferences()
         .set_blur_unfocused_lyrics(s.blur_unfocused_lyrics);
     ui.preferences()

@@ -104,6 +104,7 @@ pub struct Settings {
     pub scale: f32,
     pub quality_info: bool,
     pub lyrics_left_aligned: bool,
+    pub soft_lyric_sweep: bool,
     pub blur_unfocused_lyrics: bool,
     pub lyrics_blur_strength: u8,
     #[serde(alias = "romanize_lyrics")]
@@ -138,6 +139,7 @@ impl Default for Settings {
             scale: 1.0,
             quality_info: true,
             lyrics_left_aligned: false,
+            soft_lyric_sweep: false,
             blur_unfocused_lyrics: false,
             lyrics_blur_strength: 30,
             romanization_mode: Default::default(),
