@@ -2,6 +2,8 @@ use crate::{LyricLine, LyricWord};
 use slint::VecModel;
 use std::rc::Rc;
 
+const FINAL_WORD_FALLBACK_MS: f32 = 500.0;
+
 pub fn timestamp(text: &str) -> Option<u64> {
     let (minutes, rest) = text.split_once(':')?;
     let rest = rest.replace(':', ".");
@@ -17,7 +19,6 @@ pub fn timestamp(text: &str) -> Option<u64> {
             .saturating_add((seconds * 1000.0).round() as u64),
     )
 }
-// Blank rows end the preceding lyric interval even though they are not rendered.
 pub fn parse(text: &str) -> Vec<LyricLine> {
     let original = orca_services::original_lyrics(text);
     let text = original.as_str();
@@ -121,14 +122,13 @@ pub fn parse(text: &str) -> Vec<LyricLine> {
     }
     boundaries.sort_by(f32::total_cmp);
     for (_, _, words) in &mut timed {
-        if let Some(last) = words.last_mut() {
-            if !last.end_time.is_finite() {
-                last.end_time = boundaries
-                    .iter()
-                    .copied()
-                    .find(|at| *at > last.time)
-                    .unwrap_or(last.time + 1000.0);
-            }
+        if let Some(last) = words.last_mut().filter(|word| !word.end_time.is_finite()) {
+            // Let the last word finish before a pause, respecting earlier blank or timed rows.
+            let fallback_end = last.time + FINAL_WORD_FALLBACK_MS;
+            let next = boundaries.partition_point(|at| *at <= last.time);
+            last.end_time = boundaries
+                .get(next)
+                .map_or(fallback_end, |at| at.min(fallback_end));
         }
     }
     timed.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -165,6 +165,7 @@ mod tests {
         assert_eq!(lines[0].words.row_count(), 3);
         assert_eq!(lines[0].words.row_data(0).unwrap().time, 20550.0);
         assert_eq!(lines[0].words.row_data(0).unwrap().end_time, 20870.0);
+        assert_eq!(lines[0].words.row_data(2).unwrap().end_time, 21520.0);
     }
     #[test]
     fn duplicate_line_stamps_and_offsets_are_retained() {
@@ -175,18 +176,18 @@ mod tests {
     #[test]
     fn repeated_lines_shift_word_markers_and_blank_rows_end_last_word() {
         let lines = parse(
-            "[offset:500]\n[00:01.00][00:03.00]Hello <00:02.00>world\n[00:04.00]\n[00:06.00]Next",
+            "[offset:500]\n[00:01.00][00:03.00]Hello <00:02.00>world\n[00:04.25]\n[00:06.00]Next",
         );
         let first = lines[0].words.row_data(1).unwrap();
         let repeated = lines[1].words.row_data(1).unwrap();
-        assert_eq!((first.time, first.end_time), (2500.0, 3500.0));
-        assert_eq!((repeated.time, repeated.end_time), (4500.0, 6500.0));
+        assert_eq!((first.time, first.end_time), (2500.0, 3000.0));
+        assert_eq!((repeated.time, repeated.end_time), (4500.0, 4750.0));
         assert_eq!(lines.len(), 3);
     }
     #[test]
     fn overlapping_enhanced_lines_preserve_their_own_word_end_times() {
-        let lines=parse("[00:57.89]A <00:58.27>lovely <00:58.95>day\n[00:58.83]Lovely <00:59.36>day\n[01:03.71]Next");
+        let lines=parse("[00:57.89]A <00:58.27>lovely <00:58.95>day<01:03.20>\n[00:58.83]Lovely <00:59.36>day\n[01:03.71]Next");
         assert_eq!(lines[0].words.row_data(2).unwrap().time, 58950.0);
-        assert_eq!(lines[0].words.row_data(2).unwrap().end_time, 63710.0);
+        assert_eq!(lines[0].words.row_data(2).unwrap().end_time, 63200.0);
     }
 }
