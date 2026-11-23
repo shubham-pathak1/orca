@@ -170,7 +170,7 @@ export component IconButton inherits Rectangle {
         border-radius: 6px;
         x: floor((parent.width - self.width)/2/1px*AppState.display-dpr+0.5)/AppState.display-dpr*1px;
         y: floor((parent.height - self.height)/2/1px*AppState.display-dpr+0.5)/AppState.display-dpr*1px;
-        background: root.accent.with-alpha(pointer.has-hover ? 0.78 : 0.62);
+        background: pointer.has-hover ? root.accent.with-alpha(0.88) : root.accent;
     }
     Image {
         width: root.icon-size;

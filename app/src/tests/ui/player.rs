@@ -856,7 +856,7 @@ fn active_player_buttons_share_size_and_vertical_center() {
                 window.draw_if_needed(|renderer| {
                     renderer.render(&mut pixels, w);
                 });
-                let green = |p: slint::Rgb8Pixel| p.g > 80 && p.r < 50 && p.b < 80;
+                let green = |p: slint::Rgb8Pixel| p.r == 20 && p.g == 220 && p.b == 80;
                 let mut boxes = Vec::new();
                 let mut start = None;
                 for x in 0..=w {
