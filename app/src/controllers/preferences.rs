@@ -131,8 +131,9 @@ pub(crate) fn apply_settings(ui: &OrcaWindow, s: Settings) {
     ui.preferences().set_dynamic_accent(s.dynamic_accent);
     ui.preferences().set_blurred_background(false);
     let background = match s.full_player_background.as_str() {
-        "artwork" | "gradient" | "color" | "off" => s.full_player_background.as_str(),
-        _ if s.blurred_background => "artwork",
+        "soft-artwork" | "gradient" | "color" | "off" => s.full_player_background.as_str(),
+        "artwork" => "soft-artwork",
+        _ if s.blurred_background => "soft-artwork",
         _ => "off",
     };
     ui.preferences()

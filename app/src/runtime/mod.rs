@@ -135,7 +135,7 @@ pub(crate) fn start(
             ui.preferences().get_blurred_background(),
             ui.preferences().get_dynamic_accent(),
             match ui.preferences().get_full_player_background().as_str() {
-                "artwork" => 1,
+                "soft-artwork" => 1,
                 "gradient" => 2,
                 "color" => 3,
                 _ => 0,

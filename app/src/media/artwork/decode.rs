@@ -56,6 +56,12 @@ pub(super) fn decode_cancellable(key: Key, mut wanted: impl FnMut(&Key) -> bool)
                 *pixel = image::Rgba(rgba);
             }
             image::DynamicImage::ImageRgba8(wash)
+        } else if key.backdrop == Some(BackdropStyle::SoftArtwork) {
+            let small = image.resize(128, 128, FilterType::Triangle);
+            let radius = (small.width().min(small.height()) / 12).max(2) as f32;
+            small
+                .fast_blur((radius * (radius + 1.0)).sqrt())
+                .resize_to_fill(key.edge, key.height, FilterType::Triangle)
         } else if key.backdrop.is_some() {
             image
                 .resize(
@@ -97,6 +103,25 @@ pub(super) fn decode_cancellable(key: Key, mut wanted: impl FnMut(&Key) -> bool)
                         (shaded * opacity / 255 + base as u16 * (255 - opacity) / 255) as u8;
                 }
                 pixel[3] = 255;
+            }
+        }
+        if key.backdrop == Some(BackdropStyle::SoftArtwork) {
+            let last_row = buffer.height().saturating_sub(1).max(1) as f32;
+            for (y, row) in buffer.rows_mut().enumerate() {
+                let position = y as f32 / last_row;
+                let shade = if position <= 0.55 {
+                    0.34 + 0.14 * (position / 0.55)
+                } else {
+                    0.48 + 0.16 * ((position - 0.55) / 0.45)
+                };
+                for pixel in row {
+                    let alpha = f32::from(pixel[3]) / 255.0;
+                    for channel in &mut pixel.0[..3] {
+                        let color = f32::from(*channel) * alpha + 18.0 * (1.0 - alpha);
+                        *channel = (color * (1.0 - shade)).round() as u8;
+                    }
+                    pixel[3] = 255;
+                }
             }
         }
         round_corners(&mut buffer, key.radius);

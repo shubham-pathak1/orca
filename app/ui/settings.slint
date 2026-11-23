@@ -432,13 +432,13 @@ export component SettingsView inherits Rectangle {
                         spacing: 8px;
                         TextButton {
                             text: "Default";
-                            primary: PreferencesState.browse-artwork && PreferencesState.compact-artwork && PreferencesState.full-artwork && !PreferencesState.blurred-background && PreferencesState.full-player-background=="artwork" && PreferencesState.dynamic-accent;
+                            primary: PreferencesState.browse-artwork && PreferencesState.compact-artwork && PreferencesState.full-artwork && !PreferencesState.blurred-background && PreferencesState.full-player-background=="soft-artwork" && PreferencesState.dynamic-accent;
                             clicked=>{
                                 PreferencesState.browse-artwork=true;
                                 PreferencesState.compact-artwork=true;
                                 PreferencesState.full-artwork=true;
                                 PreferencesState.blurred-background=false;
-                                PreferencesState.full-player-background="artwork";
+                                PreferencesState.full-player-background="soft-artwork";
                                 PreferencesState.dynamic-accent=true;
                                 PreferencesState.save-settings();
                             }
@@ -525,15 +525,15 @@ export component SettingsView inherits Rectangle {
                         }
                     }
                 }
-                if (root.tab==2 || LibraryState.search!="") && PreferencesState.setting-matches("Visuals Full player background artwork gradient color off",LibraryState.search): SettingRow {
+                if (root.tab==2 || LibraryState.search!="") && PreferencesState.setting-matches("Visuals Full player background blurred artwork soft blur gradient color off",LibraryState.search): SettingRow {
                     title: "Full player background";
-                    description: "Choose artwork, an artwork gradient, a solid color, or no background";
+                    description: "Choose softly blurred artwork, a gradient, a solid color, or no background";
                     ComboBox {
                         enabled: AppState.focus-layer=="browse";
-                        model: ["Blurred artwork","Gradient","Color","Off"];
+                        model: ["Soft blur","Gradient","Color","Off"];
                         current-index: PreferencesState.full-player-background=="gradient" ? 1 : PreferencesState.full-player-background=="color" ? 2 : PreferencesState.full-player-background=="off" ? 3 : 0;
                         selected(value)=>{
-                            PreferencesState.full-player-background=self.current-index==1 ? "gradient" : self.current-index==2 ? "color" : self.current-index==3 ? "off" : "artwork";
+                            PreferencesState.full-player-background=self.current-index==1 ? "gradient" : self.current-index==2 ? "color" : self.current-index==3 ? "off" : "soft-artwork";
                             PreferencesState.save-settings();
                         }
                     }

@@ -938,7 +938,7 @@ export component FullPlayer inherits Rectangle {
     private property<length> lyric-space: max(0px,root.width - root.lyric-start - 104px);
     private property<length> lyric-column: min(760px,root.lyric-space);
     background: PreferencesState.full-player-dark ? #090a0c : PreferencesState.base;
-    if PreferencesState.full-player-background=="artwork" || PreferencesState.full-player-background=="gradient": AmbientBackground {
+    if PreferencesState.full-player-background=="soft-artwork" || PreferencesState.full-player-background=="gradient": AmbientBackground {
         source: PlayerState.full-backdrop;
         strength: 1;
         subtle: false;

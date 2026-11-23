@@ -18,12 +18,13 @@ use std::{
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum BackdropStyle {
     Artwork,
+    SoftArtwork,
     Gradient,
 }
 impl BackdropStyle {
     pub fn from_setting(value: &str) -> Option<Self> {
         match value {
-            "artwork" => Some(Self::Artwork),
+            "soft-artwork" => Some(Self::SoftArtwork),
             "gradient" => Some(Self::Gradient),
             _ => None,
         }

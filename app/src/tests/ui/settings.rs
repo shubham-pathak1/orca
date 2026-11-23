@@ -256,6 +256,13 @@ pub(super) fn verify(case: &mut UiCase) {
     ui.preferences().invoke_font_action("preset".into());
     ui.library().set_search("".into());
     let current = controllers::preferences::settings_from_ui(ui);
+    let mut old_blur = current.clone();
+    old_blur.full_player_background = "artwork".into();
+    controllers::preferences::apply_settings(ui, old_blur);
+    assert_eq!(
+        ui.preferences().get_full_player_background(),
+        "soft-artwork"
+    );
     let older = serde_json::from_str(r#"{"blurred_background":false}"#).unwrap();
     controllers::preferences::apply_settings(ui, older);
     assert_eq!(ui.preferences().get_full_player_background(), "off");
@@ -347,7 +354,7 @@ pub(super) fn verify(case: &mut UiCase) {
             && ui.preferences().get_compact_artwork()
             && ui.preferences().get_full_artwork()
             && !ui.preferences().get_blurred_background()
-            && ui.preferences().get_full_player_background() == "artwork"
+            && ui.preferences().get_full_player_background() == "soft-artwork"
     );
     ui.library().set_search("Keyboard shortcuts".into());
     click(window, 210.0, 102.0);

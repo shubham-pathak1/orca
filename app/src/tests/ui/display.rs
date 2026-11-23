@@ -84,7 +84,7 @@ pub(super) fn verify(case: &mut UiCase) {
         .unwrap();
     }
     ui.preferences()
-        .set_full_player_background("artwork".into());
+        .set_full_player_background("soft-artwork".into());
     let green: Vec<_> = hidpi
         .iter()
         .enumerate()

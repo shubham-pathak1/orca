@@ -104,7 +104,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             orca_services::import_library(&source, &directory)?;
         }
     }
-    let saved = persistence::read_json(&directory.join("slint-settings.json")).unwrap_or_default();
+    let saved =
+        persistence::read_json(&directory.join("slint-settings.json")).unwrap_or_else(|| {
+            crate::protocol::Settings {
+                full_player_background: "soft-artwork".into(),
+                ..Default::default()
+            }
+        });
     let worker = Rc::new(AppWorker::start(directory.clone(), audio));
     let cache = Rc::new(RefCell::new(artwork::ArtworkCache::new(30 * 1024 * 1024)));
     let ui = OrcaWindow::new()?;

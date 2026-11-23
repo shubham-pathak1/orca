@@ -111,7 +111,7 @@ pub(super) fn verify(case: &mut UiCase) {
     ui.player().set_full_player(true);
     ui.preferences().set_blurred_background(true);
     ui.preferences()
-        .set_full_player_background("artwork".into());
+        .set_full_player_background("soft-artwork".into());
     ui.lyrics().set_lyrics_open(true);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);

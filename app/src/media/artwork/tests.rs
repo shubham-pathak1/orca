@@ -279,6 +279,30 @@ fn full_player_shading_is_opaque_and_continuous_across_the_center() {
         row[512 * 4] > row[0],
         "center ambience should remain more visible than the edges"
     );
+
+    let soft = decode(Key {
+        path: path.to_string_lossy().into_owned(),
+        tiles: vec![],
+        edge: 512,
+        height: 288,
+        radius: 0,
+        backdrop: BackdropStyle::from_setting("soft-artwork"),
+        blend: None,
+        revision: 0,
+    });
+    assert_eq!((soft.width, soft.height), (512, 288));
+    let top = &soft.bytes[..512 * 4];
+    let bottom = &soft.bytes[287 * 512 * 4..];
+    assert!(top
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .all(|p| *p == [132, 92, 66, 255]));
+    assert!(bottom
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .all(|p| *p == [72, 50, 36, 255]));
 }
 #[test]
 fn oversized_decoded_images_do_not_break_the_memory_budget() {
