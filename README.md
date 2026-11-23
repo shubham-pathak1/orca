@@ -19,21 +19,24 @@
 
 ## Features
 
-- **Library** - browse songs, albums, artists, genres and folders.
+- **Library** - browse songs, albums, artists, genres, composers, years and folders.
 - **Playback** - gapless playback, shuffle, repeat, an editable queue and session restore.
 - **Playlists** - create playlists, save liked songs and import or export M3U files.
 - **Lyrics** - synced and word-timed lyrics, click-to-seek, LRC import and optional romanization.
-- **Audio Output** - shared, exclusive and unprocessed WASAPI modes for supported devices and formats.
+- **Audio Output** - shared, exclusive and unprocessed WASAPI modes for supported devices and formats, plus ReplayGain in shared and exclusive modes.
 - **Metadata** - edit song tags, embedded artwork and lyrics; rename albums, artists and genres across their songs.
 - **Themes** - light and dark themes, artwork accents, custom fonts, classic or waveform seekbars, and a full player.
 - **Windows Integration** - media controls, tray controls and keyboard shortcuts.
 
 Playback is local. Optional lyrics, romanization and artwork lookup use online services.
 
+The current source adds a Soft blur background for the full player and a choice
+of Sharp sweep or Soft sweep for word-timed lyrics.
+
 ## Get started
 
-1. Download the Windows x64 installer or portable ZIP from [Releases](https://github.com/shubham-pathak1/orca/releases).
-2. Install Orca, or extract the ZIP and open **Orca.exe**.
+1. Download the Windows x64 installer or standalone portable EXE from [Releases](https://github.com/shubham-pathak1/orca/releases).
+2. Run the installer to install Orca, or open the portable EXE directly.
 3. Add your music folders in **Settings → Library**. Subfolders are included automatically.
 
 Tag and embedded-artwork edits write to your audio files. Playlists and collection
@@ -41,8 +44,8 @@ covers are stored in Orca's profile.
 
 ### Updating
 
-Close Orca, then run the new installer or replace the portable app files with the
-new build.
+Quit Orca completely, including from the system tray if it is running there.
+Then run the new installer or replace your portable EXE with the new one.
 
 ## Screenshots
 
