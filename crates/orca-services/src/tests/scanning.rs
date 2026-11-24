@@ -115,6 +115,13 @@ fn rescanning_the_source_before_the_destination_preserves_moved_song_collections
     db::set_song_liked(&backend.conn, id, true).unwrap();
     let playlist = db::create_playlist(&backend.conn, "Moved tracks", None).unwrap();
     db::add_to_playlist(&backend.conn, playlist, id).unwrap();
+    backend
+        .conn
+        .execute(
+            "UPDATE songs SET modified_at=modified_at/1000000000 WHERE id=?1",
+            [id],
+        )
+        .unwrap();
     fs::rename(&old_path, &new_path).unwrap();
     scan(&mut backend, &source);
     assert_eq!(backend.statistics().unwrap().songs, 0);
@@ -135,4 +142,40 @@ fn rescanning_the_source_before_the_destination_preserves_moved_song_collections
         db::get_song_playlist_ids(&backend.conn, id).unwrap(),
         [playlist]
     );
+}
+
+#[test]
+fn rescan_reads_same_size_tag_edits_within_one_second() {
+    let fixture = Fixture::new();
+    let mut backend = fixture.backend();
+    let folder = fixture.0.join("music");
+    fs::create_dir(&folder).unwrap();
+    let path = folder.join("track.wav");
+    let base = std::time::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+    let write_track = |title: &[u8; 5], milliseconds| {
+        let mut bytes = b"RIFF\0\0\0\0WAVEfmt \x10\0\0\0\x01\0\x01\0".to_vec();
+        bytes.extend_from_slice(&8000u32.to_le_bytes());
+        bytes.extend_from_slice(&16000u32.to_le_bytes());
+        bytes.extend_from_slice(b"\x02\0\x10\0data\x02\0\0\0\0\0LIST\x12\0\0\0INFOINAM\x06\0\0\0");
+        bytes.extend_from_slice(title);
+        bytes.push(0);
+        let length = (bytes.len() - 8) as u32;
+        bytes[4..8].copy_from_slice(&length.to_le_bytes());
+        fs::write(&path, bytes).unwrap();
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_times(
+                fs::FileTimes::new().set_modified(base + Duration::from_millis(milliseconds)),
+            )
+            .unwrap();
+    };
+    write_track(b"First", 100);
+    scan(&mut backend, &folder);
+    assert_eq!(db::get_all_songs(&backend.conn).unwrap()[0].title, "First");
+
+    write_track(b"Later", 600);
+    scan(&mut backend, &folder);
+    assert_eq!(db::get_all_songs(&backend.conn).unwrap()[0].title, "Later");
 }

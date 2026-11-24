@@ -53,10 +53,11 @@ fn adopt_renamed_song(
     song: &LocalSong,
     identity: &str,
 ) -> Result<Option<i64>, String> {
+    // Older rows stored whole seconds. The file identity and size still have to match.
     let previous = conn
         .query_row(
             "SELECT MIN(id), MIN(path) FROM songs
-             WHERE file_identity=?1 AND modified_at=?2 AND file_size=?3
+             WHERE file_identity=?1 AND (modified_at=?2 OR modified_at=?2/1000000000) AND file_size=?3
                AND NOT EXISTS(SELECT 1 FROM songs WHERE path=?4)
              HAVING COUNT(*)=1",
             params![identity, song.modified_at, song.file_size, song.path],

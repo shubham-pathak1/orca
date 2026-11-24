@@ -118,12 +118,7 @@ fn scan_folder(data_dir: &Path, folder: &Path, state: &ScanState) -> Result<(), 
         }
         let path = entry.path().to_string_lossy().to_string();
         let metadata = entry.metadata().map_err(|e| e.to_string())?;
-        let modified = metadata
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|t| t.as_secs() as i64)
-            .unwrap_or(0);
+        let modified = scanner::modification_time(&metadata);
         let existing = existing_song
             .query_row([&path], |row| {
                 Ok((
@@ -140,7 +135,10 @@ fn scan_folder(data_dir: &Path, folder: &Path, state: &ScanState) -> Result<(), 
             seen_ids.insert(id);
         }
         let unchanged = existing.is_some_and(|(_, old_modified, old_size, _, missing)| {
-            !missing && old_modified == Some(modified) && old_size == Some(metadata.len() as i64)
+            !missing
+                && modified.is_some()
+                && old_modified == modified
+                && old_size == Some(metadata.len() as i64)
         });
         if !unchanged {
             match library::scan_music_file(entry.path(), &artwork) {

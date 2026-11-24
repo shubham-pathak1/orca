@@ -74,9 +74,7 @@ where
             let file_size = file_metadata.as_ref().map(|m| m.len());
             let modified_at = file_metadata
                 .as_ref()
-                .and_then(|m| m.modified().ok())
-                .and_then(|t| t.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs() as i64);
+                .and_then(crate::scanner::modification_time);
             let format = path
                 .extension()
                 .map(|e| e.to_string_lossy().to_uppercase().to_string());
@@ -195,9 +193,7 @@ where
     let file_size = file_metadata.as_ref().map(|m| m.len());
     let modified_at = file_metadata
         .as_ref()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs() as i64);
+        .and_then(crate::scanner::modification_time);
 
     let mut song = LocalSong {
         id: None,

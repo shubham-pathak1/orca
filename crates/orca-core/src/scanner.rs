@@ -32,14 +32,9 @@ where
         if let Some((stored_mtime, stored_size, cached_song)) = existing_map.get(&path_str) {
             if let Ok(metadata) = fs::metadata(path) {
                 let current_size = metadata.len();
-                let current_mtime = metadata
-                    .modified()
-                    .ok()
-                    .and_then(|time| time.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
-                    .map(|duration| duration.as_secs() as i64)
-                    .unwrap_or(0);
+                let current_mtime = modification_time(&metadata);
 
-                if current_size == *stored_size && current_mtime == *stored_mtime {
+                if current_size == *stored_size && current_mtime == Some(*stored_mtime) {
                     songs.push(cached_song.clone());
                     on_progress();
                     continue;
@@ -59,6 +54,17 @@ where
     }
 
     Ok(songs)
+}
+
+/// Nanoseconds relative to the Unix epoch, preserving the filesystem's precision.
+pub fn modification_time(metadata: &fs::Metadata) -> Option<i64> {
+    let time = metadata.modified().ok()?;
+    match time.duration_since(std::time::SystemTime::UNIX_EPOCH) {
+        Ok(duration) => i64::try_from(duration.as_nanos()).ok(),
+        Err(error) => i64::try_from(error.duration().as_nanos())
+            .ok()
+            .map(|value| -value),
+    }
 }
 
 pub fn is_supported_audio_file(path: &Path) -> bool {
