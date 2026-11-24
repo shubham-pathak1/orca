@@ -43,5 +43,6 @@ mod songs;
 pub use schema::init_db;
 pub use songs::{
     apply_song_changes, delete_song_by_path, get_all_songs, get_existing_songs_map,
-    migrate_legacy_songs_if_needed, replace_songs_in_db, save_edited_song, save_songs_to_db,
+    migrate_legacy_songs_if_needed, reconcile_missing_song, replace_songs_in_db, save_edited_song,
+    save_scanned_songs, save_songs_to_db,
 };

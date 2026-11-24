@@ -1,7 +1,7 @@
 //! Song persistence and incremental library changes.
 use crate::library::LocalSong;
-use rusqlite::{params, Connection, Transaction, TransactionBehavior};
-use std::path::PathBuf;
+use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
+use std::path::{Path, PathBuf};
 
 pub fn save_songs_to_db(conn: &Connection, songs: &[LocalSong]) -> Result<(), String> {
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)
@@ -12,6 +12,93 @@ pub fn save_songs_to_db(conn: &Connection, songs: &[LocalSong]) -> Result<(), St
     tx.commit().map_err(|e| e.to_string())
 }
 
+/// Save one scan batch and report the IDs retained for renamed files.
+pub fn save_scanned_songs(
+    conn: &Connection,
+    songs: &[(LocalSong, Option<String>)],
+    identities: &[(String, String)],
+) -> Result<Vec<i64>, String> {
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)
+        .map_err(|error| error.to_string())?;
+    tx.pragma_update(None, "defer_foreign_keys", true)
+        .map_err(|error| error.to_string())?;
+    let mut renamed = Vec::new();
+    for (song, identity) in songs {
+        if let Some(identity) = identity {
+            if let Some(id) = adopt_renamed_song(&tx, song, identity)? {
+                renamed.push(id);
+            }
+        }
+        upsert_song(&tx, song)?;
+        tx.execute(
+            "UPDATE songs SET file_identity=?1, scan_missing=0, library_visible=1
+             WHERE path=?2 AND (file_identity IS NOT ?1 OR scan_missing=1)",
+            params![identity, song.path],
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    for (path, identity) in identities {
+        tx.execute(
+            "UPDATE songs SET file_identity=?1 WHERE path=?2 AND file_identity IS NULL",
+            params![identity, path],
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    tx.commit().map_err(|error| error.to_string())?;
+    Ok(renamed)
+}
+
+fn adopt_renamed_song(
+    conn: &Connection,
+    song: &LocalSong,
+    identity: &str,
+) -> Result<Option<i64>, String> {
+    let previous = conn
+        .query_row(
+            "SELECT MIN(id), MIN(path) FROM songs
+             WHERE file_identity=?1 AND modified_at=?2 AND file_size=?3
+               AND NOT EXISTS(SELECT 1 FROM songs WHERE path=?4)
+             HAVING COUNT(*)=1",
+            params![identity, song.modified_at, song.file_size, song.path],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    let Some((id, old_path)) = previous else {
+        return Ok(None);
+    };
+    // On Windows a case-only rename can leave the old spelling resolvable.
+    let old_path_on_disk = Path::new(&old_path);
+    let replaced_path = match old_path_on_disk.try_exists() {
+        Ok(false) => true,
+        Ok(true) if cfg!(windows) && old_path.eq_ignore_ascii_case(&song.path) => old_path_on_disk
+            .canonicalize()
+            .ok()
+            .zip(Path::new(&song.path).canonicalize().ok())
+            .is_some_and(|(old, new)| old.as_os_str() == new.as_os_str()),
+        _ => false,
+    };
+    if !replaced_path {
+        return Ok(None);
+    }
+    conn.execute(
+        "UPDATE songs SET path=?1, library_visible=1 WHERE id=?2",
+        params![song.path, id],
+    )
+    .map_err(|error| error.to_string())?;
+    conn.execute(
+        "UPDATE waveforms SET song_path=?1 WHERE song_path=?2",
+        params![song.path, old_path],
+    )
+    .map_err(|error| error.to_string())?;
+    conn.execute(
+        "UPDATE OR REPLACE lyrics SET song_path=?1 WHERE song_path=?2",
+        params![song.path, old_path],
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(Some(id))
+}
+
 /// A metadata save updates the song, explicit cover removal and lyrics cache together.
 pub fn save_edited_song(
     conn: &Connection,
@@ -20,9 +107,19 @@ pub fn save_edited_song(
     lyrics_removed: bool,
     cover_removed: bool,
 ) -> Result<(), String> {
+    let path = Path::new(&song.path);
+    let identity = path
+        .metadata()
+        .ok()
+        .and_then(|metadata| crate::scanner::file_identity(path, &metadata));
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)
         .map_err(|e| e.to_string())?;
     upsert_song(&tx, song)?;
+    tx.execute(
+        "UPDATE songs SET file_identity=?1 WHERE path=?2 AND file_identity IS NOT ?1",
+        params![identity, song.path],
+    )
+    .map_err(|error| error.to_string())?;
     if cover_removed {
         tx.execute("UPDATE songs SET artwork_url='DELETED',artwork_preview_url='DELETED',artwork_thumb_url='DELETED' WHERE path=?1", [&song.path]).map_err(|e| e.to_string())?;
     }
@@ -277,6 +374,25 @@ pub fn migrate_legacy_songs_if_needed(
 pub fn delete_song_by_path(conn: &Connection, path: &str) -> Result<(), String> {
     conn.execute("DELETE FROM songs WHERE path = ?1", params![path])
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Retain collection links while another library root may still discover the file.
+pub fn reconcile_missing_song(conn: &Connection, id: i64) -> Result<(), String> {
+    let hidden = conn
+        .execute(
+            "UPDATE songs SET scan_missing=1, library_visible=0
+         WHERE id=?1 AND file_identity IS NOT NULL AND (
+             EXISTS(SELECT 1 FROM liked_songs WHERE song_id=?1)
+             OR EXISTS(SELECT 1 FROM playlist_songs WHERE song_id=?1)
+         )",
+            [id],
+        )
+        .map_err(|error| error.to_string())?;
+    if hidden == 0 {
+        conn.execute("DELETE FROM songs WHERE id=?1", [id])
+            .map_err(|error| error.to_string())?;
+    }
     Ok(())
 }
 

@@ -225,7 +225,7 @@ impl Backend {
 
 fn refresh_visibility(conn: &Connection, policy: &FolderPolicy) -> Result<(), String> {
     let mut stmt = conn
-        .prepare("SELECT id,path,library_visible FROM songs")
+        .prepare("SELECT id,path,library_visible FROM songs WHERE scan_missing=0")
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], |row| {

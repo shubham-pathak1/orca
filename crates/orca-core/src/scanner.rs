@@ -71,3 +71,32 @@ pub fn is_supported_audio_file(path: &Path) -> bool {
         "mp3" | "flac" | "m4a" | "wav" | "ogg" | "opus" | "aiff" | "aif"
     )
 }
+
+/// Identify a file across renames on the same volume.
+#[cfg(windows)]
+pub fn file_identity(path: &Path, _: &fs::Metadata) -> Option<String> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+    };
+
+    let file = fs::File::open(path).ok()?;
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    // The open file owns the handle for the lifetime of this call.
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
+        return None;
+    }
+    let index = (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
+    (index != 0).then(|| format!("{}:{index}", info.dwVolumeSerialNumber))
+}
+
+#[cfg(unix)]
+pub fn file_identity(_: &Path, metadata: &fs::Metadata) -> Option<String> {
+    use std::os::unix::fs::MetadataExt;
+    (metadata.ino() != 0).then(|| format!("{}:{}", metadata.dev(), metadata.ino()))
+}
+
+#[cfg(not(any(windows, unix)))]
+pub fn file_identity(_: &Path, _: &fs::Metadata) -> Option<String> {
+    None
+}

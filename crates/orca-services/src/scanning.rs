@@ -82,6 +82,7 @@ fn scan_folder(data_dir: &Path, folder: &Path, state: &ScanState) -> Result<(), 
     // or slow scans promptly. Every committed batch remains transactional.
     const BATCH_SIZE: usize = 256;
     let mut batch = Vec::with_capacity(BATCH_SIZE);
+    let mut identities = Vec::new();
     let mut last_commit = Instant::now();
     // New rows inserted during this scan have IDs above this boundary. That
     // lets deletion reconciliation retain them without storing every new path.
@@ -92,7 +93,9 @@ fn scan_folder(data_dir: &Path, folder: &Path, state: &ScanState) -> Result<(), 
         .map_err(|error| error.to_string())?;
     let mut seen_ids = std::collections::HashSet::<i64>::new();
     let mut existing_song = conn
-        .prepare_cached("SELECT id,modified_at,file_size FROM songs INDEXED BY idx_scan_file_state WHERE path=?1")
+        .prepare_cached(
+            "SELECT id,modified_at,file_size,file_identity IS NOT NULL,scan_missing FROM songs WHERE path=?1",
+        )
         .map_err(|error| error.to_string())?;
     for entry in walkdir::WalkDir::new(folder)
         .follow_links(false)
@@ -127,44 +130,58 @@ fn scan_folder(data_dir: &Path, folder: &Path, state: &ScanState) -> Result<(), 
                     row.get::<_, i64>(0)?,
                     row.get::<_, Option<i64>>(1)?,
                     row.get::<_, Option<i64>>(2)?,
+                    row.get::<_, bool>(3)?,
+                    row.get::<_, bool>(4)?,
                 ))
             })
             .optional()
             .map_err(|e| e.to_string())?;
-        if let Some((id, _, _)) = existing {
+        if let Some((id, _, _, _, _)) = existing {
             seen_ids.insert(id);
         }
-        let unchanged = existing.is_some_and(|(_, old_modified, old_size)| {
-            old_modified == Some(modified) && old_size == Some(metadata.len() as i64)
+        let unchanged = existing.is_some_and(|(_, old_modified, old_size, _, missing)| {
+            !missing && old_modified == Some(modified) && old_size == Some(metadata.len() as i64)
         });
         if !unchanged {
             match library::scan_music_file(entry.path(), &artwork) {
-                Ok(song) => batch.push(song),
+                Ok(song) => batch.push((song, scanner::file_identity(entry.path(), &metadata))),
                 Err(error) => {
                     if let Ok(mut value) = state.error.lock() {
                         *value = format!("Skipped {path}: {error}");
                     }
                 }
             }
+        } else if existing.is_some_and(|(_, _, _, has_identity, _)| !has_identity) {
+            if let Some(identity) = scanner::file_identity(entry.path(), &metadata) {
+                identities.push((path, identity));
+            }
         }
         state.count.fetch_add(1, Ordering::Relaxed);
-        if batch.len() >= BATCH_SIZE
-            || (!batch.is_empty() && last_commit.elapsed() >= Duration::from_millis(500))
+        let pending = batch.len() + identities.len();
+        if pending >= BATCH_SIZE
+            || (pending > 0 && last_commit.elapsed() >= Duration::from_millis(500))
         {
-            db::save_songs_to_db(&conn, &batch)?;
+            let changed = !batch.is_empty();
+            seen_ids.extend(db::save_scanned_songs(&conn, &batch, &identities)?);
             batch.clear();
+            identities.clear();
             last_commit = Instant::now();
-            state.revision.fetch_add(1, Ordering::Relaxed);
+            if changed {
+                state.revision.fetch_add(1, Ordering::Relaxed);
+            }
         }
     }
-    if !batch.is_empty() {
-        db::save_songs_to_db(&conn, &batch)?;
+    if !batch.is_empty() || !identities.is_empty() {
+        seen_ids.extend(db::save_scanned_songs(&conn, &batch, &identities)?);
     }
     if !state.cancel.load(Ordering::Acquire) {
+        if !folder.is_dir() {
+            return Err("Library folder became unavailable during the scan".into());
+        }
         let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
         let missing = {
             let mut statement = tx
-                .prepare("SELECT path,id FROM songs")
+                .prepare("SELECT path,id FROM songs WHERE scan_missing=0")
                 .map_err(|error| error.to_string())?;
             let rows = statement
                 .query_map([], |row| {
@@ -178,16 +195,15 @@ fn scan_folder(data_dir: &Path, folder: &Path, state: &ScanState) -> Result<(), 
                     && !seen_ids.contains(&id)
                     && Path::new(&path).starts_with(folder)
                     && policy.included(Path::new(&path))
+                    && matches!(Path::new(&path).try_exists(), Ok(false))
                 {
-                    missing.push((path, id));
+                    missing.push(id);
                 }
             }
             missing
         };
-        for (path, id) in missing {
-            tx.execute("DELETE FROM playlist_songs WHERE song_id=?1", [id])
-                .map_err(|e| e.to_string())?;
-            db::delete_song_by_path(&tx, &path)?;
+        for id in missing {
+            db::reconcile_missing_song(&tx, id)?;
         }
         tx.commit().map_err(|e| e.to_string())?;
     }

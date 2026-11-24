@@ -259,8 +259,11 @@ fn migrate(conn: &mut Connection) -> rusqlite::Result<()> {
     // Reconciliation reads this narrow index instead of every wide metadata row.
     ensure_column(&tx, "songs", "modified_at", "INTEGER")?;
     ensure_column(&tx, "songs", "file_size", "INTEGER")?;
+    ensure_column(&tx, "songs", "file_identity", "TEXT")?;
+    ensure_column(&tx, "songs", "scan_missing", "INTEGER NOT NULL DEFAULT 0")?;
     tx.execute_batch(
-        "CREATE INDEX IF NOT EXISTS idx_scan_file_state ON songs(path,modified_at,file_size)",
+        "CREATE INDEX IF NOT EXISTS idx_scan_file_state ON songs(path,modified_at,file_size);
+         CREATE INDEX IF NOT EXISTS idx_scan_file_identity ON songs(file_identity) WHERE file_identity IS NOT NULL;",
     )?;
     ensure_column(&tx, "songs", "genre", "TEXT")?;
     tx.execute_batch(
