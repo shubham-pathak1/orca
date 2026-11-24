@@ -134,7 +134,7 @@ export component SettingsView inherits Rectangle {
         for label[index] in root.pages: Rectangle {
             height: 40px;
             border-radius: 6px;
-            background: root.tab==index ? PreferencesState.ink.with-alpha(0.08) : rail-pointer.has-hover ? PreferencesState.ink.with-alpha(0.04) : transparent;
+            background: root.tab==index ? PreferencesState.ink.with-alpha(0.08) : rail-pointer.has-hover ? PreferencesState.ink.with-alpha(0.05) : transparent;
             accessible-role: button;
             accessible-label: label;
             rail-focus:=ActionFocus {
@@ -149,12 +149,13 @@ export component SettingsView inherits Rectangle {
                 width: parent.width - 24px;
                 height: parent.height;
                 text: label;
-                color: root.tab==index ? PreferencesState.ink : PreferencesState.secondary-ink;
+                color: root.tab==index || rail-pointer.has-hover ? PreferencesState.ink : PreferencesState.secondary-ink;
                 font-size: 14px*PreferencesState.scale;
                 font-weight: root.tab==index ? 600 : 500;
                 vertical-alignment: center;
             }
             rail-pointer:=TouchArea {
+                mouse-cursor: MouseCursor.pointer;
                 clicked=>{
                     root.tab=index;
                 }
@@ -758,7 +759,7 @@ export component SettingsView inherits Rectangle {
                     space-after: 0px;
                 }
                 if (root.tab==1 || LibraryState.search!="") && PreferencesState.setting-matches("Keyboard shortcuts",LibraryState.search): Rectangle {
-                    height: 546px;
+                    height: 672px;
                     border-width: 1px;
                     border-color: PreferencesState.ink.with-alpha(0.1020);
                     border-radius: 6px;
@@ -776,6 +777,18 @@ export component SettingsView inherits Rectangle {
                         ShortcutRow {
                             title: "Previous song";
                             keys: ["Alt","P"];
+                        }
+                        ShortcutRow {
+                            title: "Toggle shuffle";
+                            keys: ["Alt","S"];
+                        }
+                        ShortcutRow {
+                            title: "Cycle repeat mode";
+                            keys: ["Alt","R"];
+                        }
+                        ShortcutRow {
+                            title: "Like or unlike current song";
+                            keys: ["Alt","L"];
                         }
                         ShortcutRow {
                             title: "Toggle mute";

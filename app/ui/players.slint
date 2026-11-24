@@ -1102,6 +1102,9 @@ export component FullPlayer inherits Rectangle {
                     color: root.ink.with-alpha(0.8157);
                     font-size: (root.height<720px ? 14px : root.show-lyrics ? 16px : 18px)*PreferencesState.scale;
                     vertical-alignment: center;
+                    if PreferencesState.show-tooltips && PlayerState.now.artist!="": Tooltip {
+                        text: @markdown("\{PlayerState.now.artist}");
+                    }
                     full-artist-hover:=TouchArea {
                         moved=>{
                             PlayerState.player-activity();

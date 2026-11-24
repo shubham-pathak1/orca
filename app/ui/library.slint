@@ -303,7 +303,7 @@ component SongTile inherits Rectangle {
     }
     ArtistLinks {
         x: 0px;
-        y: (PreferencesState.browse-artwork ? root.width : 0px)+28px;
+        y: (PreferencesState.browse-artwork ? root.width : 0px)+26px;
         width: parent.width;
         height: 20px;
         credits: root.song.artist;
@@ -365,7 +365,7 @@ component CatalogTile inherits Rectangle {
     private property<bool> compact: AppState.view=="composers" || AppState.view=="years" || !PreferencesState.browse-artwork || AppState.view=="playlists" || (AppState.view=="folders" && (!PreferencesState.folder-grid || LibraryState.detail-key!=""));
     private property<bool> artist-grid: AppState.view=="artists" && !root.compact;
     private property<length> art-edge: root.artist-grid ? floor(min(root.width,144px)/1px*AppState.display-dpr)/AppState.display-dpr*1px : root.compact ? 44px : root.width;
-    height: root.compact ? 76px : AppState.view=="genres" ? root.width*0.75+16px : root.artist-grid ? root.art-edge+100px : root.width+58px;
+    height: root.compact ? 76px : AppState.view=="genres" ? root.width*0.75+16px : root.artist-grid ? root.art-edge+100px : root.width+(AppState.view=="albums" ? 52px : 58px);
     background: transparent;
     if PreferencesState.browse-artwork && root.group.key!="": Rectangle {
         x: root.compact ? 8px : root.artist-grid ? (root.width - root.art-edge)/2 : 0px;
@@ -394,7 +394,7 @@ component CatalogTile inherits Rectangle {
         }
     }
     catalog-title:=Text {
-        y: root.compact ? 14px : root.artist-grid ? root.art-edge+8px : AppState.view=="genres" ? root.height - 64px : root.width+8px;
+        y: root.compact ? 14px : root.artist-grid ? root.art-edge+8px : AppState.view=="genres" ? root.height - 64px : root.width+6px;
         x: root.compact ? (PreferencesState.browse-artwork ? 64px : 8px) : root.artist-grid ? (root.width - root.art-edge)/2 : AppState.view=="genres" ? 12px : 0px;
         width: root.artist-grid ? root.art-edge : parent.width - self.x - (AppState.view=="genres" ? 56px : root.compact && !PreferencesState.browse-artwork ? 44px : 0px);
         height: root.artist-grid ? min(44px,self.preferred-height) : 24px;
@@ -442,7 +442,7 @@ component CatalogTile inherits Rectangle {
     }
     if AppState.view=="albums" && root.group.key!="": HorizontalLayout {
         x: root.compact ? (PreferencesState.browse-artwork ? 64px : 8px) : 0px;
-        y: root.compact ? 38px : root.width+28px;
+        y: root.compact ? 38px : catalog-title.y+19px;
         width: parent.width - self.x;
         height: 20px;
         spacing: 4px;
@@ -712,7 +712,7 @@ export component CatalogView inherits Rectangle {
     private property<length> gap: AppState.view=="playlists" || AppState.view=="artists" ? 24px : AppState.view=="genres" ? 16px : 12px;
     private property<length> tile-width: floor((list.width - root.gap*(root.columns - 1))/root.columns/1px*AppState.display-dpr)/AppState.display-dpr*1px;
     private property<bool> compact: AppState.view=="composers" || AppState.view=="years" || !PreferencesState.browse-artwork || AppState.view=="playlists" || (AppState.view=="folders" && (!PreferencesState.folder-grid || LibraryState.detail-key!=""));
-    private property<length> row-height: round((root.compact ? 76px : AppState.view=="artists" ? floor(min(root.tile-width,144px)/1px*AppState.display-dpr)/AppState.display-dpr*1px+100px : AppState.view=="genres" ? root.tile-width*0.75+16px : root.tile-width+58px)/1px*AppState.display-dpr)/AppState.display-dpr*1px;
+    private property<length> row-height: round((root.compact ? 76px : AppState.view=="artists" ? floor(min(root.tile-width,144px)/1px*AppState.display-dpr)/AppState.display-dpr*1px+100px : AppState.view=="genres" ? root.tile-width*0.75+16px : root.tile-width+(AppState.view=="albums" ? 52px : 58px))/1px*AppState.display-dpr)/AppState.display-dpr*1px;
     list:=Flickable {
         x: 0px;
         y: 0px;
@@ -1036,7 +1036,7 @@ export component SongsView inherits Rectangle {
                         }
                         if table.detail && PreferencesState.quality-info && song.quality!="": Text {
                             x: table.index-width+(PreferencesState.browse-artwork ? 48px : 0px);
-                            y: 26px;
+                            y: 24px;
                             height: 18px;
                             width: table.title-width - (PreferencesState.browse-artwork ? 68px : 20px);
                             text: song.quality;
@@ -1045,6 +1045,9 @@ export component SongsView inherits Rectangle {
                             font-weight: 500;
                             overflow: elide;
                             vertical-alignment: center;
+                            if PreferencesState.show-tooltips: Tooltip {
+                                text: @markdown("\{song.quality}");
+                            }
                         }
                         if LibraryState.playlist-selection-mode && table.artist-width>0px: Text {
                             x: table.index-width+table.title-width;
@@ -1386,14 +1389,17 @@ export component CatalogDetails inherits Rectangle {
             width: parent.width - self.x - 20px;
             height: parent.height - 108px;
             VerticalLayout {
-                spacing: 8px;
+                spacing: AppState.view=="albums" ? 5px : 8px;
                 alignment: end;
                 Text {
                     text: LibraryState.detail-title;
                     color: PreferencesState.ink;
-                    font-size: (root.width<600px ? 32px : parent.width>650px ? 48px : 38px)*PreferencesState.scale;
-                    font-weight: 900;
+                    font-size: (root.width<600px ? 30px : parent.width>650px ? 44px : 36px)*PreferencesState.scale;
+                    font-weight: 700;
                     overflow: elide;
+                    if PreferencesState.show-tooltips && LibraryState.detail-title!="": Tooltip {
+                        text: @markdown("\{LibraryState.detail-title}");
+                    }
                 }
                 if AppState.view=="albums": ArtistLinks {
                     height: 24px;

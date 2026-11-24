@@ -196,14 +196,28 @@ pub(super) fn apply_operation_result(
                 .set_detail_year(detail.year.unwrap_or_default());
             ui.library().set_detail_summary(
                 format!(
-                    "{}{} songs · {} mins",
+                    "{}{} {} · {} {}",
                     if ui.shell().get_view() == "artists" {
-                        format!("{} albums · ", detail.album_count)
+                        format!(
+                            "{} {} · ",
+                            detail.album_count,
+                            if detail.album_count == 1 {
+                                "album"
+                            } else {
+                                "albums"
+                            }
+                        )
                     } else {
                         String::new()
                     },
                     detail.count,
-                    detail.duration / 60000
+                    if detail.count == 1 { "song" } else { "songs" },
+                    detail.duration / 60000,
+                    if detail.duration / 60000 == 1 {
+                        "min"
+                    } else {
+                        "mins"
+                    }
                 )
                 .into(),
             );

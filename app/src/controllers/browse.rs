@@ -210,8 +210,14 @@ pub(crate) fn install(
                         );
                     }
                     *header_art.borrow_mut() = (group.artwork.clone(), group.artwork);
-                    ui.library()
-                        .set_detail_summary(format!("{} songs", group.count).into());
+                    ui.library().set_detail_summary(
+                        format!(
+                            "{} {}",
+                            group.count,
+                            if group.count == 1 { "song" } else { "songs" }
+                        )
+                        .into(),
+                    );
                 }
             }
         });
