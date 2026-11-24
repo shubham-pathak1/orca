@@ -15,6 +15,11 @@ use std::{
     time::{Duration, Instant},
 };
 use wasapi::{AudioClient, DeviceEnumerator, Direction, SampleType, StreamMode, WaveFormat};
+use windows_sys::Win32::{
+    Foundation::HANDLE,
+    System::Threading::{AvRevertMmThreadCharacteristics, AvSetMmThreadCharacteristicsW},
+};
+
 static DRIVER_UNRESPONSIVE: AtomicBool = AtomicBool::new(false);
 
 // Driver calls cannot be safely interrupted. Bound the engine's wait and stop
@@ -42,6 +47,32 @@ impl Com {
 impl Drop for Com {
     fn drop(&mut self) {
         wasapi::deinitialize();
+    }
+}
+
+struct AudioThreadRegistration(HANDLE);
+
+impl AudioThreadRegistration {
+    fn register() -> Option<Self> {
+        let mut task_index = 0;
+        // SAFETY: The task name is nul-terminated and task_index is writable.
+        let handle =
+            unsafe { AvSetMmThreadCharacteristicsW(windows_sys::w!("Audio"), &mut task_index) };
+        if handle.is_null() {
+            log::debug!(
+                "Could not register the WASAPI output thread with MMCSS: {}",
+                std::io::Error::last_os_error()
+            );
+            return None;
+        }
+        Some(Self(handle))
+    }
+}
+
+impl Drop for AudioThreadRegistration {
+    fn drop(&mut self) {
+        // SAFETY: The guard stays on its registering thread and owns a valid handle.
+        unsafe { AvRevertMmThreadCharacteristics(self.0) };
     }
 }
 
@@ -427,6 +458,7 @@ fn render<T: Copy + Default + Send + 'static>(
     .map_err(|e| e.to_string())?;
     let result = (|| {
         let mut buffer = vec![0u8; frames * format.get_blockalign() as usize];
+        let _registration = AudioThreadRegistration::register();
         let mut active = false;
         let mut timeouts = 0;
         loop {

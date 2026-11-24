@@ -24,4 +24,4 @@ walkdir.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 wasapi = "0.25"
-windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
+windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem", "Win32_System_Threading"] }
