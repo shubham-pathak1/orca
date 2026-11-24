@@ -100,6 +100,9 @@ impl Navigation {
                 return Some(path.clone());
             }
         }
+        if self.order_cleared && !backwards {
+            return None;
+        }
         if self.shuffle {
             if let Some(cursor) = self.cursor {
                 let target = if backwards {
@@ -115,7 +118,7 @@ impl Navigation {
                     return Some(self.history[at].clone());
                 }
             }
-            if backwards || self.order_cleared {
+            if backwards {
                 return None;
             }
             let len = self.order_ids.len();
@@ -564,6 +567,9 @@ impl Navigation {
             }
         }
         self.manual.clear();
+        if let Some(cursor) = self.cursor {
+            self.history.truncate(cursor.saturating_add(1));
+        }
     }
     pub fn reorder(&mut self, current: &str, source: &str, target: &str) {
         if source == current || source == target {
@@ -709,6 +715,34 @@ mod tests {
         assert_eq!(q.next(&next, true, false).as_deref(), Some("a"));
         q.record("a");
         assert_eq!(q.next("a", false, false), Some(next));
+    }
+
+    #[test]
+    fn clearing_a_shuffled_queue_discards_forward_history() {
+        let mut queue = Navigation::default();
+        queue.compact_context(vec![1, 2, 3], Query::default(), 1, "one");
+        queue.shuffle = true;
+        queue.record("two");
+        queue.record("three");
+        let resolve = |id| {
+            ["one", "two", "three"]
+                .get((id - 1) as usize)
+                .map(ToString::to_string)
+        };
+        assert_eq!(
+            queue.next_compact("three", true, false, resolve).as_deref(),
+            Some("two")
+        );
+        queue.clear_compact("two");
+        assert_eq!(
+            queue.upcoming_limited("two", 20, resolve, |_| None),
+            ["two"]
+        );
+        assert!(queue.next_compact("two", false, true, resolve).is_none());
+        assert_eq!(
+            queue.next_compact("two", true, false, resolve).as_deref(),
+            Some("one")
+        );
     }
     #[test]
     fn reorder_preserves_current_and_clear_leaves_only_current() {
