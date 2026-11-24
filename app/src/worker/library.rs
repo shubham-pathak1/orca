@@ -160,7 +160,7 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
             .take()
             .or_else(|| requests.recv_timeout(Duration::from_millis(200)).ok());
         if let Some(request) = next_request {
-            let refresh_queue = matches!(
+            let mut refresh_queue = matches!(
                 &request,
                 Request::Play(..)
                     | Request::Queue(..)
@@ -170,10 +170,27 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
             let result: Result<(), String> = (|| {
                 match request {
                     Request::Browse(at, new_query, kind) => {
+                        let cleared_search = !catalog.query.search.is_empty()
+                            && new_query.search.is_empty()
+                            && catalog.kind == kind
+                            && catalog.query.kind == new_query.kind
+                            && catalog.query.key == new_query.key
+                            && catalog.query.secondary == new_query.secondary;
                         if let Err(error) =
                             catalog.browse(&backend, &events, at, new_query, kind, &query_revision)
                         {
                             let _ = events.send(Event::CatalogError(at, error));
+                        } else if cleared_search
+                            && catalog.generation == at
+                            && at == query_revision.load(Ordering::Relaxed)
+                            && (catalog.kind == "songs" || !catalog.query.kind.is_empty())
+                        {
+                            refresh_queue = playback.expand_cleared_search(
+                                &backend,
+                                audio,
+                                &catalog.query,
+                                &catalog.ids,
+                            )?;
                         }
                     }
                     Request::Page(at, offset) => {

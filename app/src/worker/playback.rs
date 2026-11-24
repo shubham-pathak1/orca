@@ -8,6 +8,34 @@ use orca_services::types::{PlaybackCommand, Query};
 use orca_services::Backend;
 use std::sync::mpsc::Sender;
 impl PlaybackState {
+    pub(super) fn expand_cleared_search(
+        &mut self,
+        backend: &Backend,
+        audio: bool,
+        query: &Query,
+        ids: &[i64],
+    ) -> Result<bool, String> {
+        if ids.is_empty() || !self.navigation.can_expand_search(query) {
+            return Ok(false);
+        }
+        let current = if self.requested.is_empty() {
+            &self.path
+        } else {
+            &self.requested
+        };
+        let current_id = backend.id_for_path(current)?;
+        cancel_preload(&mut self.preloaded, &mut self.planned_navigation, || {
+            if audio {
+                backend.playback_command(PlaybackCommand::ClearQueued)
+            } else {
+                Ok(())
+            }
+        })?;
+        self.navigation
+            .expand_search(query.clone(), ids.to_vec(), current_id);
+        Ok(true)
+    }
+
     pub(super) fn play(
         &mut self,
         backend: &Backend,

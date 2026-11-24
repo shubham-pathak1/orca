@@ -340,22 +340,42 @@ impl Navigation {
         }
         self.manual = queue;
     }
-    pub fn prune_compact(
-        &mut self,
-        ids: Vec<i64>,
-        current_id: Option<i64>,
-        mut exists: impl FnMut(&str) -> bool,
-    ) {
+    pub fn can_expand_search(&self, query: &Query) -> bool {
+        !self.order_cleared
+            && query.search.is_empty()
+            && self.context_query.as_ref().is_some_and(|context| {
+                !context.search.is_empty()
+                    && context.kind == query.kind
+                    && context.key == query.key
+                    && context.secondary == query.secondary
+            })
+    }
+
+    pub fn expand_search(&mut self, query: Query, ids: Vec<i64>, current_id: Option<i64>) {
+        self.replace_compact_order(ids, current_id);
+        self.context_query = Some(query);
+    }
+
+    fn replace_compact_order(&mut self, ids: Vec<i64>, current_id: Option<i64>) {
         let previous_id = self
             .order_cursor
             .and_then(|at| self.order_ids.get(at).copied());
-        let allowed: HashSet<_> = ids.iter().copied().collect();
         self.order_ids = Arc::new(ids);
         self.order_cursor = current_id
             .and_then(|id| self.order_ids.iter().position(|value| *value == id))
             .or_else(|| {
                 previous_id.and_then(|id| self.order_ids.iter().position(|value| *value == id))
             });
+    }
+
+    pub fn prune_compact(
+        &mut self,
+        ids: Vec<i64>,
+        current_id: Option<i64>,
+        mut exists: impl FnMut(&str) -> bool,
+    ) {
+        let allowed: HashSet<_> = ids.iter().copied().collect();
+        self.replace_compact_order(ids, current_id);
         self.removed_ids.retain(|id| allowed.contains(id));
         self.played_ids.retain(|id| allowed.contains(id));
         self.manual.retain(|path| exists(path));
@@ -742,6 +762,46 @@ mod tests {
         assert_eq!(
             queue.next_compact("two", true, false, resolve).as_deref(),
             Some("one")
+        );
+    }
+
+    #[test]
+    fn clearing_search_expands_shuffle_without_resetting_progress_or_manual_tracks() {
+        let query = Query::default();
+        let mut navigation = Navigation::default();
+        navigation.compact_context(
+            vec![1, 2],
+            Query {
+                search: "mind".into(),
+                ..query.clone()
+            },
+            1,
+            "song-1",
+        );
+        navigation.shuffle = true;
+        navigation.record("song-2");
+        navigation.mark_id(2, false);
+        navigation.manual.push("queued".into());
+        assert!(navigation.can_expand_search(&query));
+        navigation.expand_search(query.clone(), vec![1, 2, 3], Some(2));
+        assert!(!navigation.can_expand_search(&query));
+        let resolve = |id| Some(format!("song-{id}"));
+        assert_eq!(
+            navigation.upcoming_limited("song-2", 10, resolve, |_| None),
+            ["song-2", "queued", "song-3"]
+        );
+        assert_eq!(
+            navigation
+                .next_compact("song-2", false, true, resolve)
+                .as_deref(),
+            Some("queued")
+        );
+        navigation.record("queued");
+        assert_eq!(
+            navigation
+                .next_compact("queued", false, true, resolve)
+                .as_deref(),
+            Some("song-3")
         );
     }
     #[test]
