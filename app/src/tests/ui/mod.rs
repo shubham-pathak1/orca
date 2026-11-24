@@ -19,13 +19,12 @@ use crate::controllers::{
     browse::query,
     input::{command_request, install_keyboard, play_request},
 };
-use crate::platform_integration::set_background_playback;
 use crate::presentation::{player_background_tone, reset_empty_player, theme_accent};
 use crate::*;
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
 use slint::platform::{Platform, PlatformError, PointerEventButton, WindowAdapter, WindowEvent};
-use slint::{Model, VecModel};
-use std::cell::Cell;
+use slint::{ComponentHandle, Model, VecModel};
+use std::cell::{Cell, RefCell};
 
 struct OffscreenPlatform(Rc<MinimalSoftwareWindow>);
 #[test]

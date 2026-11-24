@@ -613,36 +613,6 @@ pub(super) fn verify(case: &mut UiCase) {
         "unprocessed output must not apply software volume"
     );
     ui.player().set_output_unprocessed(false);
-    ui.shell().set_tray_available(false);
-    set_background_playback(ui, true);
-    assert!(
-        !ui.shell().get_window_hidden(),
-        "hiding is unavailable without a recovery tray"
-    );
-    ui.shell().set_tray_available(true);
-    let was_full = ui.player().get_full_player();
-    set_background_playback(ui, true);
-    assert!(ui.shell().get_window_hidden());
-    assert_eq!(
-        ui.player().get_full_player(),
-        was_full,
-        "Phantom must preserve the current page"
-    );
-    let (tray_tx, tray_rx) = std::sync::mpsc::channel();
-    for action in ["toggle", "previous", "next"] {
-        dispatch_tray_action(ui, &tray_tx, action);
-        assert!(
-            matches!(tray_rx.try_recv().unwrap(),Request::Command(actual) if actual==crate::protocol::PlayerAction::parse(action).unwrap())
-        );
-    }
-    dispatch_tray_action(ui, &tray_tx, "restore");
-    assert!(!ui.shell().get_window_hidden());
-    assert_eq!(ui.player().get_full_player(), was_full);
-    toggle_background_playback(ui);
-    assert!(ui.shell().get_window_hidden());
-    toggle_background_playback(ui);
-    assert!(!ui.shell().get_window_hidden());
-    assert_eq!(ui.player().get_full_player(), was_full);
     ui.player().set_now(Song {
         title: "Stale song".into(),
         artist: "Stale artist".into(),

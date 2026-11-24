@@ -1,9 +1,9 @@
-//! Windows media controls are owned by the UI lifetime; callbacks send service requests.
+//! Windows media controls remain available when the desktop window is unloaded.
 #[cfg(windows)]
 mod windows_session {
-    use crate::{protocol::Request, OrcaWindow};
-    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    use slint::{ComponentHandle, Timer, TimerMode};
+    use crate::protocol::Request;
+    use orca_services::types::Track;
+    use slint::{Timer, TimerMode};
     use std::{
         ffi::OsString,
         os::windows::ffi::{OsStrExt, OsStringExt},
@@ -207,7 +207,48 @@ mod windows_session {
         controls: SystemMediaTransportControls,
         token: i64,
         timer: Timer,
+        _window: MediaWindow,
         _apartment: Apartment,
+    }
+
+    struct MediaWindow(windows_sys::Win32::Foundation::HWND);
+    impl MediaWindow {
+        fn new() -> windows::core::Result<Self> {
+            use std::ptr::{null, null_mut};
+            use windows_sys::Win32::UI::WindowsAndMessaging::{
+                CreateWindowExW, WS_EX_TOOLWINDOW, WS_POPUP,
+            };
+            // SMTC needs a native window. An invisible tool window keeps it
+            // independent of Slint and out of the taskbar.
+            let handle = unsafe {
+                CreateWindowExW(
+                    WS_EX_TOOLWINDOW,
+                    w!("STATIC").as_ptr(),
+                    w!("Orca").as_ptr(),
+                    WS_POPUP,
+                    0,
+                    0,
+                    0,
+                    0,
+                    null_mut(),
+                    null_mut(),
+                    null_mut(),
+                    null(),
+                )
+            };
+            if handle.is_null() {
+                Err(windows::core::Error::from_win32())
+            } else {
+                Ok(Self(handle))
+            }
+        }
+    }
+    impl Drop for MediaWindow {
+        fn drop(&mut self) {
+            unsafe {
+                windows_sys::Win32::UI::WindowsAndMessaging::DestroyWindow(self.0);
+            }
+        }
     }
     impl Session {
         pub(crate) fn diagnose(&self) -> windows::core::Result<()> {
@@ -225,24 +266,20 @@ mod windows_session {
             Ok(())
         }
         pub(crate) fn new(
-            ui: &OrcaWindow,
             tx: Sender<Request>,
-            track: std::rc::Rc<std::cell::RefCell<orca_services::types::Track>>,
+            playback: impl Fn() -> Option<(Track, bool)> + 'static,
         ) -> Result<Self, Box<dyn std::error::Error>> {
             unsafe {
                 RoInitialize(RO_INIT_SINGLETHREADED)?;
             }
             let apartment = Apartment;
-            let provider = ui.window().window_handle();
-            let RawWindowHandle::Win32(handle) = provider.window_handle()?.as_raw() else {
-                return Err("Windows media controls require a native window".into());
-            };
+            let window = MediaWindow::new()?;
             let interop: ISystemMediaTransportControlsInterop = windows::core::factory::<
                 SystemMediaTransportControls,
                 ISystemMediaTransportControlsInterop,
             >()?;
             let controls: SystemMediaTransportControls =
-                unsafe { interop.GetForWindow(HWND(handle.hwnd.get() as *mut _))? };
+                unsafe { interop.GetForWindow(HWND(window.0))? };
             controls.SetIsEnabled(true)?;
             controls.SetIsPlayEnabled(true)?;
             controls.SetIsPauseEnabled(true)?;
@@ -272,17 +309,15 @@ mod windows_session {
                 },
             ))?;
             let timer = Timer::default();
-            let weak = ui.as_weak();
             let polling = controls.clone();
             let mut last: Option<(String, String, String, String, String, bool)> = None;
             let covers = super::super::media_cover::CoverWorker::new();
             let mut cover_generation = 0u64;
             timer.start(TimerMode::Repeated, Duration::from_millis(250), move || {
-                let Some(ui) = weak.upgrade() else {
+                let Some((song, playing)) = playback() else {
                     return;
                 };
 
-                let song = track.borrow();
                 let cover = [&song.artwork, &song.artwork_original, &song.artwork_thumb]
                     .into_iter()
                     .find(|path| !path.is_empty())
@@ -294,7 +329,7 @@ mod windows_session {
                     song.artist.clone(),
                     song.album.clone(),
                     cover.to_string(),
-                    ui.player().get_playing(),
+                    playing,
                 );
                 if last.as_ref() == Some(&current) {
                     publish_cover(&covers, &polling, cover_generation);
@@ -320,7 +355,7 @@ mod windows_session {
                     polling.SetIsEnabled(!song.path.is_empty())?;
                     polling.SetPlaybackStatus(if song.path.is_empty() {
                         MediaPlaybackStatus::Stopped
-                    } else if ui.player().get_playing() {
+                    } else if playing {
                         MediaPlaybackStatus::Playing
                     } else {
                         MediaPlaybackStatus::Paused
@@ -350,6 +385,7 @@ mod windows_session {
                 controls,
                 token,
                 timer,
+                _window: window,
                 _apartment: apartment,
             })
         }

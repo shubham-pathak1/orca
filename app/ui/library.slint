@@ -795,7 +795,7 @@ export component SongsView inherits Rectangle {
         clip: true;
         Timer {
             interval: 16ms;
-            running: LibraryState.library-view-restore && !PlayerState.full-player;
+            running: LibraryState.library-view-restore && !PlayerState.full-player && !LibraryState.catalog-loading;
             triggered=>{
                 if root.full-return-pending && LibraryState.columns!=max(1,floor((root.width - 28px)/148px)) {
                     return;
@@ -882,9 +882,9 @@ export component SongsView inherits Rectangle {
             private property<length> title-width: self.duration-x - self.index-width - self.artist-width - self.album-width;
             Timer {
                 interval: 16ms;
-                running: LibraryState.library-view-restore && !PlayerState.full-player && LibraryState.detail-key=="";
+                running: LibraryState.library-view-restore && !PlayerState.full-player && !LibraryState.catalog-loading;
                 triggered=>{
-                    song-list.content-y=-max(0,(LibraryState.library-scroll-index+LibraryState.library-scroll-fraction)*48px);
+                    song-list.content-y=LibraryState.detail-key!="" ? LibraryState.detail-scroll-target*1px : -max(0,(LibraryState.library-scroll-index+LibraryState.library-scroll-fraction)*48px);
                     root.full-return-pending=false;
                     LibraryState.library-view-restore=false;
                 }

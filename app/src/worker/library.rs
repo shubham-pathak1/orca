@@ -152,6 +152,7 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
     );
     let mut reconcile = true;
     let mut source_mutation = false;
+    let mut window_open = true;
     let mut deferred_request = None;
     let _ = events.send(Event::Ready);
     while !worker_stop.load(Ordering::Relaxed) {
@@ -166,6 +167,7 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
                     | Request::Queue(..)
                     | Request::Collection(..)
                     | Request::ArtworkRefresh(..)
+                    | Request::RestoreWindow
             ) || matches!(&request,Request::Command(action) if action.refresh_queue());
             let result: Result<(), String> = (|| {
                 match request {
@@ -363,6 +365,32 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
                             }
                         }
                     }
+                    Request::SuspendWindow => {
+                        window_open = false;
+                        revision.fetch_add(1, Ordering::Relaxed);
+                    }
+                    Request::RestoreWindow => {
+                        window_open = true;
+                        let _ = events.send(Event::Statistics(backend.statistics()?));
+                        let _ = events.send(Event::Modes(
+                            playback.navigation.shuffle,
+                            playback.navigation.repeat,
+                        ));
+                        collection_path.clear();
+                        collection_query = None;
+                        if !playback.path.is_empty() {
+                            let track = backend.track(&playback.path).unwrap_or_else(|_| Track {
+                                path: playback.path.clone(),
+                                ..Default::default()
+                            });
+                            let _ = events.send(Event::Now(track));
+                            let at = revision.fetch_add(1, Ordering::Relaxed) + 1;
+                            analysis_jobs.submit((at, playback.path.clone(), false));
+                            if audio {
+                                lyrics_jobs.submit((at, playback.path.clone(), false));
+                            }
+                        }
+                    }
                     Request::RefreshLyrics if !playback.path.is_empty() => {
                         lyrics_jobs.submit((
                             revision.load(Ordering::Relaxed),
@@ -512,7 +540,7 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
             if shutdown {
                 break;
             }
-            if refresh_queue {
+            if refresh_queue && window_open {
                 let tracks = playback
                     .navigation
                     .upcoming_limited(
@@ -697,31 +725,33 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
                         if let Ok(track) = backend.track(&playback.path) {
                             let _ = events.send(Event::Now(track));
                         }
-                        analysis_jobs.submit((at, playback.path.clone(), false));
-                        if audio {
-                            lyrics_jobs.submit((at, playback.path.clone(), false));
+                        if window_open {
+                            analysis_jobs.submit((at, playback.path.clone(), false));
+                            if audio {
+                                lyrics_jobs.submit((at, playback.path.clone(), false));
+                            }
+                            let tracks = playback
+                                .navigation
+                                .upcoming_limited(
+                                    &playback.path,
+                                    20,
+                                    |id| backend.path_for_id(id).ok().flatten(),
+                                    |path| backend.id_for_path(path).ok().flatten(),
+                                )
+                                .into_iter()
+                                .filter_map(|p| backend.track(&p).ok())
+                                .collect();
+                            let _ = events.send(Event::Queue(tracks));
+                            let neighbors = playback
+                                .navigation
+                                .neighbors_compact(&playback.path, |id| {
+                                    backend.path_for_id(id).ok().flatten()
+                                })
+                                .into_iter()
+                                .filter_map(|p| backend.track(&p).ok())
+                                .collect();
+                            let _ = events.send(Event::Neighbors(playback.path.clone(), neighbors));
                         }
-                        let tracks = playback
-                            .navigation
-                            .upcoming_limited(
-                                &playback.path,
-                                20,
-                                |id| backend.path_for_id(id).ok().flatten(),
-                                |path| backend.id_for_path(path).ok().flatten(),
-                            )
-                            .into_iter()
-                            .filter_map(|p| backend.track(&p).ok())
-                            .collect();
-                        let _ = events.send(Event::Queue(tracks));
-                        let neighbors = playback
-                            .navigation
-                            .neighbors_compact(&playback.path, |id| {
-                                backend.path_for_id(id).ok().flatten()
-                            })
-                            .into_iter()
-                            .filter_map(|p| backend.track(&p).ok())
-                            .collect();
-                        let _ = events.send(Event::Neighbors(playback.path.clone(), neighbors));
                     } else {
                         revision.fetch_add(1, Ordering::Relaxed);
                         let _ = events.send(Event::Now(Track::default()));

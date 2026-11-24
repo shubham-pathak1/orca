@@ -28,6 +28,8 @@ pub enum Request {
         mode: String,
     },
     Refresh,
+    SuspendWindow,
+    RestoreWindow,
     RefreshLyrics,
     Reconcile,
     ArtworkRefresh(u64, Vec<u32>),
