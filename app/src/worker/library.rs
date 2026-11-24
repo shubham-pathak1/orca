@@ -88,6 +88,8 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
         }
     }
     let mut session_writer = SessionWriter::default();
+    let mut startup_restore =
+        (!session.path.is_empty()).then(|| (session.path.clone(), session.position));
     let mut playback = PlaybackState {
         navigation: std::mem::take(&mut session.navigation),
         ..Default::default()
@@ -208,7 +210,11 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
                         let _ = events.send(Event::Jump(catalog.generation, index));
                     }
                     Request::Command(action) => {
-                        playback.command(&backend, &events, audio, action)?
+                        let stop = action == PlayerAction::Stop;
+                        playback.command(&backend, &events, audio, action)?;
+                        if stop {
+                            startup_restore = None;
+                        }
                     }
                     Request::Seek(value) if audio => {
                         if !value.is_finite() {
@@ -616,6 +622,9 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
         }
         match backend.snapshot() {
             Ok(mut snapshot) => {
+                if !snapshot.path.is_empty() {
+                    startup_restore = None;
+                }
                 if snapshot.output_revision != playback.output_revision {
                     playback.output_revision = snapshot.output_revision;
                     playback.preloaded.clear();
@@ -778,10 +787,15 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
                 was_scanning = snapshot.scanning;
                 if saved.elapsed() >= Duration::from_secs(2) {
                     if audio {
+                        // An unavailable track or output may leave the startup snapshot empty.
+                        let (path, position) = startup_restore.as_ref().map_or(
+                            (playback.path.as_str(), snapshot.position_ms),
+                            |(path, position)| (path.as_str(), *position),
+                        );
                         match session_writer.save(
                             &directory.join("slint-session.json"),
-                            &playback.path,
-                            snapshot.position_ms,
+                            path,
+                            position,
                             snapshot.volume,
                             &playback.navigation,
                         ) {
@@ -830,9 +844,14 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
     if audio {
         session.volume = volume;
         if let Ok(snapshot) = backend.snapshot() {
+            let (path, position) = if snapshot.path.is_empty() {
+                startup_restore.unwrap_or((snapshot.path, snapshot.position_ms))
+            } else {
+                (snapshot.path, snapshot.position_ms)
+            };
             session = Session {
-                path: snapshot.path,
-                position: snapshot.position_ms,
+                path,
+                position,
                 volume: session.volume,
                 navigation: playback.navigation,
             };
