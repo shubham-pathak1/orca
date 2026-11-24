@@ -227,7 +227,6 @@ pub(super) fn verify(case: &mut UiCase) {
     window.set_size(slint::PhysicalSize::new(1920, 1080));
 }
 
-// A short title in the wrapping full-player layout must keep its badge nearby.
 pub(super) fn verify_explicit_badge(case: &mut UiCase) {
     let saved_now = case.ui.player().get_now();
     let saved_art = case.ui.preferences().get_full_artwork();
@@ -279,6 +278,36 @@ pub(super) fn verify_explicit_badge(case: &mut UiCase) {
     assert!(
         badge_edges.iter().all(|x| *x < 840),
         "short-title badge must not float at the far edge: {badge_edges:?}"
+    );
+
+    let mut song = Song {
+        title: "An intentionally long title that cannot fit on a single line in the full player\nFinale".into(),
+        ..Default::default()
+    };
+    case.ui.player().set_now(song.clone());
+    case.window.draw_if_needed(|renderer| {
+        renderer.render(&mut case.pixels, 1280);
+    });
+    let before = case.pixels.clone();
+    song.explicit = true;
+    case.ui.player().set_now(song);
+    case.window.draw_if_needed(|renderer| {
+        renderer.render(&mut case.pixels, 1280);
+    });
+    assert!(
+        (200..600).any(|y| {
+            (660..710).any(|left| {
+                (left..left + 14).all(|x| {
+                    let index = y * 1280 + x;
+                    let pixel = case.pixels[index];
+                    pixel != before[index]
+                        && (35..=70).contains(&pixel.r)
+                        && pixel.r.abs_diff(pixel.g) <= 4
+                        && pixel.g.abs_diff(pixel.b) <= 4
+                })
+            })
+        }),
+        "wrapped title must show the badge next to its last word"
     );
     case.ui.player().set_now(saved_now);
     case.ui.preferences().set_full_artwork(saved_art);

@@ -2,6 +2,10 @@ export struct Song {
     id: int, path: string, title: string, artist: string, album: string, album-artist: string, duration: string, quality: string, cover: image, cover-missing: bool, explicit: bool, liked: bool, bit-depth: int, index: int,
 }
 
+export struct TitleLines {
+    first: string, last: string,
+}
+
 export struct CatalogGroup {
     key: string, secondary: string, title: string, subtitle: string, count: int, cover: image, cover-missing: bool, accent: color, year: int,
 }
@@ -167,6 +171,7 @@ export global PlayerState {
     in-out property <image> original-cover;
     in-out property <bool> original-cover-missing;
     pure callback compact-quality(string)->string;
+    pure callback split-title(string, string, float, float, float)->TitleLines;
     compact-quality(quality)=>{
         return quality;
     }

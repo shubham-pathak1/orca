@@ -11,6 +11,7 @@ use std::{rc::Rc, sync::mpsc::Sender, time::Instant};
 pub(crate) fn install(ui: &OrcaWindow, tx: Sender<Request>, player: Rc<PlayerModels>) {
     ui.player()
         .on_compact_quality(|quality| models::quality_label(&quality).into());
+    ui.player().on_split_title(crate::presentation::split_title);
     {
         let tx = tx.clone();
         let weak = ui.as_weak();

@@ -115,6 +115,7 @@ fn software_rendering_and_full_player_input_isolation() {
     models::install_grid_window(&ui);
     ui.player()
         .on_compact_quality(|quality| models::quality_label(&quality).into());
+    ui.player().on_split_title(presentation::split_title);
     crate::runtime::tests::verify_completions(&ui);
     window.set_size(slint::PhysicalSize::new(1280, 820));
 

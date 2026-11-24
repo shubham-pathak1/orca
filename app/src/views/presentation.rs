@@ -78,3 +78,55 @@ pub(crate) fn reset_empty_player(ui: &OrcaWindow) {
     ui.player().set_elapsed("0:00".into());
     ui.player().set_total("0:00".into());
 }
+
+pub(crate) fn split_title(
+    title: slint::SharedString,
+    family: slint::SharedString,
+    size: f32,
+    width: f32,
+    badge_line_width: f32,
+) -> crate::TitleLines {
+    use parley::{FontContext, FontWeight, LayoutContext, OverflowWrap, StyleProperty};
+
+    let title = title.trim();
+    if title.is_empty() || width <= 0.0 {
+        return crate::TitleLines::default();
+    }
+    let mut fonts = FontContext {
+        collection: slint::fontique_011::shared_collection(),
+        source_cache: Default::default(),
+    };
+    let mut context = LayoutContext::<()>::new();
+    let mut builder = context.ranged_builder(&mut fonts, title, 1.0, true);
+    builder.push_default(StyleProperty::FontFamily(family.as_str().into()));
+    builder.push_default(StyleProperty::FontSize(size));
+    builder.push_default(StyleProperty::FontWeight(FontWeight::new(700.0)));
+    builder.push_default(StyleProperty::OverflowWrap(OverflowWrap::BreakWord));
+    let mut layout = builder.build(title);
+    let mut breaker = layout.break_lines();
+    breaker.state_mut().set_layout_max_advance(width);
+    breaker.state_mut().set_line_max_advance(width);
+    breaker.break_next();
+    breaker.break_remaining(badge_line_width);
+    let Some(first) = layout.get(0) else {
+        return crate::TitleLines::default();
+    };
+    let first_end = first.text_range().end;
+    if layout.len() > 2 {
+        let last = layout.lines().last().unwrap().text_range();
+        return crate::TitleLines {
+            first: format!("{}…", title[..first_end].trim_end()).into(),
+            last: title[last].trim().into(),
+        };
+    }
+    let mut split = first_end;
+    if title[split..].trim().is_empty() {
+        // The title fits on one line by itself. Move the last word with its badge.
+        split = title.rfind(char::is_whitespace).unwrap_or_default();
+    }
+    let (first, last) = title.split_at(split);
+    crate::TitleLines {
+        first: first.trim_end().into(),
+        last: last.trim_start().into(),
+    }
+}

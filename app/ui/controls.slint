@@ -1,4 +1,4 @@
-import { AppState, PlayerState, PreferencesState } from "state.slint";
+import { AppState, PlayerState, PreferencesState, TitleLines } from "state.slint";
 import { Icons } from "icons.slint";
 import { FallbackCovers } from "fallback-covers.slint";
 // Common activation semantics for custom controls and virtualized rows.
@@ -931,34 +931,52 @@ export component TrackTitle inherits Rectangle {
     in property<bool> centered: false;
     in property<bool> interactive: false;
     callback activated();
-    preferred-height: root.multiline ? min(measure.preferred-height,root.text-size*2.8) : measure.preferred-height;
-    preferred-width: measure.preferred-width+(root.explicit ? 24px : 0px);
-    private property<length> content-width: min(root.width,root.preferred-width);
+    preferred-height: root.has-lead ? lead.preferred-height+title.preferred-height : root.multiline && !root.explicit ? min(measure.preferred-height,root.text-size*2.8) : measure.preferred-height;
+    preferred-width: measure.preferred-width+root.badge-space;
+    private property<length> badge-space: root.explicit ? 24px : 0px;
+    private property<bool> wrap-title: root.multiline && !root.explicit;
+    private property<TitleLines> lines: root.multiline && root.explicit && root.width>0px && root.preferred-width>root.width
+        ? PlayerState.split-title(root.text,PreferencesState.font-family,root.text-size/1px,root.width/1px,max(1px,root.width - root.badge-space)/1px) : {first: "",last: ""};
+    private property<bool> has-lead: root.lines.first!="" && root.lines.last!="";
+    private property<length> content-width: min(root.width,root.has-lead ? title.preferred-width+root.badge-space : root.preferred-width);
     measure:=Text {
         visible: false;
-        width: root.multiline ? max(1px,root.width - (root.explicit ? 24px : 0px)) : 100000px;
-        wrap: root.multiline ? word-wrap : no-wrap;
+        width: root.wrap-title ? max(1px,root.width) : 100000px;
+        wrap: root.wrap-title ? word-wrap : no-wrap;
         text: root.text;
         font-size: root.text-size;
         font-weight: root.weight;
     }
-    title:=Text {
-        x: root.centered ? (root.width - root.content-width)/2 : 0px;
+    lead:=Text {
+        visible: root.has-lead;
+        x: 0px;
         y: 0px;
-        width: max(0px,root.content-width - (root.explicit ? 24px : 0px));
-        height: parent.height;
-        text: root.text;
+        width: root.width;
+        height: self.preferred-height;
+        text: root.lines.first;
         font-size: root.text-size;
         font-weight: root.weight;
         color: root.ink;
         overflow: elide;
-        wrap: root.multiline ? word-wrap : no-wrap;
+        horizontal-alignment: root.centered ? center : left;
+    }
+    title:=Text {
+        x: root.centered ? (root.width - root.content-width)/2 : 0px;
+        y: root.has-lead ? lead.height : 0px;
+        width: max(0px,root.content-width - root.badge-space);
+        height: max(0px,parent.height - self.y);
+        text: root.has-lead ? root.lines.last : root.text;
+        font-size: root.text-size;
+        font-weight: root.weight;
+        color: root.ink;
+        overflow: elide;
+        wrap: root.wrap-title ? word-wrap : no-wrap;
         horizontal-alignment: root.centered ? center : left;
         vertical-alignment: center;
     }
     if root.explicit: Rectangle {
         x: title.x+title.width+6px;
-        y: (parent.height - 16px)/2;
+        y: title.y+(title.height - 16px)/2;
         width: 16px;
         height: 16px;
         border-radius: 2px;
