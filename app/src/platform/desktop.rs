@@ -8,6 +8,8 @@ use crate::{
     AppWorker, OrcaTray, OrcaWindow,
 };
 use orca_services::types::Track;
+#[cfg(windows)]
+use slint::winit_030::WinitWindowAccessor;
 use slint::{ComponentHandle, PhysicalPosition, PhysicalSize, SharedString, Timer, TimerMode};
 use std::{
     cell::{Cell, RefCell},
@@ -113,7 +115,9 @@ impl SavedView {
         if !self.maximized && !self.fullscreen {
             ui.window().set_size(self.size);
         }
-        ui.window().set_maximized(self.maximized);
+        if self.fullscreen || !cfg!(windows) {
+            ui.window().set_maximized(self.maximized);
+        }
         ui.window().set_fullscreen(self.fullscreen);
     }
 
@@ -258,10 +262,24 @@ impl Desktop {
 
         if let Some(saved) = saved_view.as_ref() {
             saved.restore(&ui);
-        } else if cfg!(windows) {
-            ui.window().set_maximized(true);
         }
         ui.show()?;
+        #[cfg(windows)]
+        if saved_view
+            .as_ref()
+            .is_none_or(|view| view.maximized && !view.fullscreen)
+        {
+            // Slint applies its preferred size on first show, which can resize an
+            // already maximized Windows window. Maximize after that size is applied.
+            let weak = ui.as_weak();
+            let _ = slint::spawn_local(async move {
+                if let Some(ui) = weak.upgrade() {
+                    if ui.window().winit_window().await.is_ok() {
+                        ui.window().set_maximized(true);
+                    }
+                }
+            });
+        }
 
         let runtime = runtime::start(
             &ui,
