@@ -385,6 +385,10 @@ pub(super) fn verify(case: &mut UiCase) {
                 ),
             ),
             height: height as f32,
+            ink_top: 10.0,
+            ink_bottom: height as f32 - 10.0,
+            ink_left: 50.0,
+            ink_right: 300.0,
             ..Default::default()
         }
     });
@@ -475,6 +479,8 @@ pub(super) fn verify(case: &mut UiCase) {
     let seek = Rc::new(Cell::new(-1.0));
     let observed = seek.clone();
     ui.player().on_seek(move |position| observed.set(position));
+    click(window, 1120.0, (manual_top + 20) as f32);
+    assert_eq!(seek.get(), -1.0, "clicking beside a lyric must not seek");
     click(window, 700.0, (manual_top + 20) as f32);
     window.draw_if_needed(|renderer| {
         renderer.render(pixels, 1280);

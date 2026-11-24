@@ -647,11 +647,15 @@ component LyricsViewport inherits Rectangle {
                 }
             }
             PlayerDragArea {
+                private property<bool> over-timed-lyric: line.time>=0 && rendered.ink-right>rendered.ink-left && rendered.ink-bottom>rendered.ink-top
+                    && self.mouse-x>=rendered.ink-left*1px - 8px && self.mouse-x<=rendered.ink-right*1px+8px
+                    && self.mouse-y>=rendered.ink-top*1px - 8px && self.mouse-y<=rendered.ink-bottom*1px+8px;
+                mouse-cursor: self.over-timed-lyric ? MouseCursor.pointer : MouseCursor.default;
                 activity=>{
                     root.activity();
                 }
                 tapped => {
-                    if line.time>=0 {
+                    if self.over-timed-lyric {
                         lyrics.follow=true;
                         resume-follow.stop();
                         PlayerState.seek(line.time);

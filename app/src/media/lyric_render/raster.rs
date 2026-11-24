@@ -2,6 +2,8 @@ use parley::Layout;
 
 pub(super) struct Rasterized {
     pub bytes: Vec<u8>,
+    pub ink_left: u32,
+    pub ink_right: u32,
     pub ink_top: u32,
     pub ink_bottom: u32,
 }
@@ -26,6 +28,8 @@ pub(super) fn raster_padded(
     let canvas_width = width + padding * 2;
     let canvas_height = height + padding * 2;
     let mut bytes = vec![0; canvas_width as usize * canvas_height as usize * 4];
+    let mut ink_left = canvas_width;
+    let mut ink_right = 0;
     let mut ink_top = canvas_height;
     let mut ink_bottom = 0;
     let vertical_padding = (height as f32 - layout.height()) / 2.0;
@@ -55,6 +59,11 @@ pub(super) fn raster_padded(
                     {
                         let left = gx.floor() as i32 + mask.placement.left;
                         let top = gy.floor() as i32 - mask.placement.top;
+                        if mask.placement.width > 0 && mask.placement.height > 0 {
+                            ink_left = ink_left.min(left.clamp(0, canvas_width as i32) as u32);
+                            let right = left + mask.placement.width as i32;
+                            ink_right = ink_right.max(right.clamp(0, canvas_width as i32) as u32);
+                        }
                         for my in 0..mask.placement.height {
                             for mx in 0..mask.placement.width {
                                 let px = left + mx as i32;
@@ -86,6 +95,8 @@ pub(super) fn raster_padded(
     }
     Rasterized {
         bytes,
+        ink_left,
+        ink_right,
         ink_top,
         ink_bottom,
     }
