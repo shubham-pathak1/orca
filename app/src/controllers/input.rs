@@ -287,6 +287,18 @@ pub(crate) fn install_keyboard(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<Requ
             "p" if alt => {
                 let _ = tx.send(Request::Command(PlayerAction::Previous));
             }
+            "s" if alt => {
+                let _ = tx.send(Request::Command(PlayerAction::Shuffle));
+            }
+            "r" if alt => {
+                let _ = tx.send(Request::Command(PlayerAction::Repeat));
+            }
+            "l" if alt
+                && ui.preferences().get_show_liked_songs()
+                && ui.player().get_now().id > 0 =>
+            {
+                ui.player().invoke_toggle_like();
+            }
             "m" if !alt && !ui.player().get_output_unprocessed() => {
                 let volume = ui.player().get_volume();
                 if volume > 0.0 {

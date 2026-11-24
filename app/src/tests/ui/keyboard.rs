@@ -1,5 +1,47 @@
 use super::*;
 
+#[test]
+fn playback_shortcuts_route_shuffle_repeat_and_like() {
+    let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
+    slint::platform::set_platform(Box::new(OffscreenPlatform(window.clone()))).unwrap();
+    let ui = OrcaWindow::new().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    install_keyboard(&ui, tx.clone());
+    controllers::playlists::install(&ui, tx);
+    ui.preferences().set_show_liked_songs(true);
+    ui.player().set_now(Song {
+        id: 42,
+        path: "fixture.flac".into(),
+        ..Default::default()
+    });
+    ui.show().unwrap();
+    ui.invoke_focus_shell();
+
+    for key in ["s", "r", "l"] {
+        window.dispatch_event(WindowEvent::KeyPressed {
+            text: slint::platform::Key::Alt.into(),
+        });
+        window.dispatch_event(WindowEvent::KeyPressed { text: key.into() });
+        window.dispatch_event(WindowEvent::KeyReleased { text: key.into() });
+        window.dispatch_event(WindowEvent::KeyReleased {
+            text: slint::platform::Key::Alt.into(),
+        });
+    }
+    assert!(matches!(
+        rx.try_recv().unwrap(),
+        Request::Command(crate::protocol::PlayerAction::Shuffle)
+    ));
+    assert!(matches!(
+        rx.try_recv().unwrap(),
+        Request::Command(crate::protocol::PlayerAction::Repeat)
+    ));
+    assert!(matches!(rx.try_recv().unwrap(), Request::ToggleLiked(42)));
+    assert!(!ui.lyrics().get_lyrics_open());
+    assert!(ui.shell().invoke_keyboard("l".into(), false));
+    assert!(ui.lyrics().get_lyrics_open());
+    assert!(rx.try_recv().is_err());
+}
+
 pub(super) fn verify(case: &mut UiCase) {
     let ui = &case.ui;
     let window = &case.window;
