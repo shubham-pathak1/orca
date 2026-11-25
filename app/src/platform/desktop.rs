@@ -29,6 +29,7 @@ pub(crate) struct Desktop {
     #[cfg(windows)]
     frame_pacing: Option<super::frame_pacing::FramePacing>,
     window: RefCell<Option<DesktopWindow>>,
+    fullscreen_origin: Cell<Option<WindowPlacement>>,
     settings: RefCell<Settings>,
     saved_view: RefCell<Option<SavedView>>,
     global_hotkey: Cell<bool>,
@@ -68,14 +69,36 @@ struct SavedView {
     full_player: bool,
     lyrics_open: bool,
     queue_open: bool,
-    position: PhysicalPosition,
-    size: PhysicalSize,
-    maximized: bool,
+    placement: WindowPlacement,
     fullscreen: bool,
 }
 
+#[derive(Clone, Copy)]
+struct WindowPlacement {
+    position: PhysicalPosition,
+    size: PhysicalSize,
+    maximized: bool,
+}
+
+impl WindowPlacement {
+    fn capture(window: &slint::Window) -> Self {
+        Self {
+            position: window.position(),
+            size: window.size(),
+            maximized: window.is_maximized(),
+        }
+    }
+
+    fn restore_bounds(self, window: &slint::Window) {
+        window.set_position(self.position);
+        if !self.maximized && self.size.width > 0 && self.size.height > 0 {
+            window.set_size(self.size);
+        }
+    }
+}
+
 impl SavedView {
-    fn capture(ui: &OrcaWindow) -> Self {
+    fn capture(ui: &OrcaWindow, fullscreen_origin: Option<WindowPlacement>) -> Self {
         let library = ui.library();
         let window = ui.window();
         Self {
@@ -94,9 +117,9 @@ impl SavedView {
             full_player: ui.player().get_full_player(),
             lyrics_open: ui.lyrics().get_lyrics_open(),
             queue_open: ui.player().get_queue_open(),
-            position: window.position(),
-            size: window.size(),
-            maximized: window.is_maximized(),
+            placement: fullscreen_origin
+                .filter(|_| window.is_fullscreen())
+                .unwrap_or_else(|| WindowPlacement::capture(window)),
             fullscreen: window.is_fullscreen(),
         }
     }
@@ -114,12 +137,9 @@ impl SavedView {
         ui.player().set_full_player(self.full_player);
         ui.lyrics().set_lyrics_open(self.lyrics_open);
         ui.player().set_queue_open(self.queue_open);
-        ui.window().set_position(self.position);
-        if !self.maximized && !self.fullscreen {
-            ui.window().set_size(self.size);
-        }
-        if self.fullscreen || !cfg!(windows) {
-            ui.window().set_maximized(self.maximized);
+        self.placement.restore_bounds(ui.window());
+        if !self.fullscreen && !cfg!(windows) {
+            ui.window().set_maximized(self.placement.maximized);
         }
         ui.window().set_fullscreen(self.fullscreen);
     }
@@ -143,6 +163,19 @@ impl SavedView {
 }
 
 impl Desktop {
+    fn toggle_fullscreen(&self, window: &slint::Window) {
+        if window.is_fullscreen() {
+            window.set_fullscreen(false);
+            if let Some(origin) = self.fullscreen_origin.take() {
+                window.set_maximized(origin.maximized);
+            }
+        } else {
+            self.fullscreen_origin
+                .set(Some(WindowPlacement::capture(window)));
+            window.set_fullscreen(true);
+        }
+    }
+
     pub(crate) fn new(
         worker: Rc<AppWorker>,
         settings: Settings,
@@ -162,6 +195,7 @@ impl Desktop {
             #[cfg(windows)]
             frame_pacing,
             window: RefCell::new(None),
+            fullscreen_origin: Cell::new(None),
             settings: RefCell::new(settings),
             saved_view: RefCell::new(None),
             global_hotkey: Cell::new(false),
@@ -221,6 +255,13 @@ impl Desktop {
         }
         super::input_modality::install(&ui);
         let weak = Rc::downgrade(self);
+        let window = ui.as_weak();
+        ui.shell().on_toggle_fullscreen(move || {
+            if let (Some(desktop), Some(ui)) = (weak.upgrade(), window.upgrade()) {
+                desktop.toggle_fullscreen(ui.window());
+            }
+        });
+        let weak = Rc::downgrade(self);
         ui.shell().on_phantom(move || {
             let weak = weak.clone();
             Timer::single_shot(Duration::ZERO, move || {
@@ -270,7 +311,7 @@ impl Desktop {
         #[cfg(windows)]
         if saved_view
             .as_ref()
-            .is_none_or(|view| view.maximized && !view.fullscreen)
+            .is_none_or(|view| view.placement.maximized && !view.fullscreen)
         {
             // Slint applies its preferred size on first show, which can resize an
             // already maximized Windows window. Maximize after that size is applied.
@@ -332,7 +373,7 @@ impl Desktop {
                 .set_error("Close the open dialog before entering Phantom mode.".into());
             return;
         }
-        let view = SavedView::capture(&window.ui);
+        let view = SavedView::capture(&window.ui, self.fullscreen_origin.get());
         if let Err(error) = window.ui.hide() {
             window.ui.shell().set_error(error.to_string().into());
             return;
@@ -458,6 +499,7 @@ mod tests {
             None,
         );
         desktop.open().unwrap();
+        let windowed_size = PhysicalSize::new(1040, 720);
         let original = {
             let slot = desktop.window.borrow();
             let ui = &slot.as_ref().unwrap().ui;
@@ -467,7 +509,9 @@ mod tests {
             ui.library().set_search("test album".into());
             ui.player().set_full_player(true);
             ui.lyrics().set_lyrics_open(true);
-            ui.window().set_fullscreen(true);
+            ui.window().set_size(windowed_size);
+            ui.shell().invoke_toggle_fullscreen();
+            ui.window().set_size(PhysicalSize::new(1920, 1080));
             ui.as_weak()
         };
         desktop.enter_phantom();
@@ -510,5 +554,6 @@ mod tests {
             .shell()
             .invoke_keyboard(slint::platform::Key::F11.into(), false));
         assert!(!ui.window().is_fullscreen());
+        assert_eq!(ui.window().size(), windowed_size);
     }
 }

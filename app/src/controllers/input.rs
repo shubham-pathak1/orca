@@ -272,8 +272,7 @@ pub(crate) fn install_keyboard(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<Requ
             return false;
         }
         if key == f11 {
-            let window = ui.window();
-            window.set_fullscreen(!window.is_fullscreen());
+            ui.shell().invoke_toggle_fullscreen();
             return true;
         }
         match key.to_lowercase().as_str() {
