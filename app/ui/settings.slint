@@ -120,7 +120,7 @@ component ShortcutRow inherits Rectangle {
 }
 
 export component SettingsView inherits Rectangle {
-    private property <int> tab;
+    private property<int> tab <=> AppState.settings-tab;
     private property<string> romanization-search;
     private property<bool> category-rail: root.width>=900px && LibraryState.search=="";
     private property<[string]> pages: ["Appearance","Interface","Player","Lyrics","Library","Audio","About"];

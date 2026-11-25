@@ -218,7 +218,6 @@ fn new_swipe_after_inertia_tail_does_not_wait_for_full_cooldown() {
 
 pub(crate) fn install_keyboard(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<Request>) {
     let weak = ui.as_weak();
-    let fullscreen = Cell::new(false);
     let last_volume = Cell::new(1.0f32);
     ui.shell().on_keyboard(move |key, alt| {
         let Some(ui) = weak.upgrade() else {
@@ -273,8 +272,8 @@ pub(crate) fn install_keyboard(ui: &OrcaWindow, tx: std::sync::mpsc::Sender<Requ
             return false;
         }
         if key == f11 {
-            fullscreen.set(!fullscreen.get());
-            ui.window().set_fullscreen(fullscreen.get());
+            let window = ui.window();
+            window.set_fullscreen(!window.is_fullscreen());
             return true;
         }
         match key.to_lowercase().as_str() {

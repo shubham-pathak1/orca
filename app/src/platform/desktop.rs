@@ -54,6 +54,7 @@ impl Drop for DesktopWindow {
 
 struct SavedView {
     view: SharedString,
+    settings_tab: i32,
     search: SharedString,
     sort: SharedString,
     detail_key: SharedString,
@@ -79,6 +80,7 @@ impl SavedView {
         let window = ui.window();
         Self {
             view: ui.shell().get_view(),
+            settings_tab: ui.shell().get_settings_tab(),
             search: library.get_search(),
             sort: library.get_sort(),
             detail_key: library.get_detail_key(),
@@ -102,6 +104,7 @@ impl SavedView {
     fn restore(&self, ui: &OrcaWindow) {
         let library = ui.library();
         ui.shell().set_view(self.view.clone());
+        ui.shell().set_settings_tab(self.settings_tab);
         library.set_search(self.search.clone());
         library.set_sort(self.sort.clone());
         library.set_detail_key(self.detail_key.clone());
@@ -460,9 +463,11 @@ mod tests {
             let ui = &slot.as_ref().unwrap().ui;
             ui.shell().set_tray_available(false);
             ui.shell().set_view("albums".into());
+            ui.shell().set_settings_tab(5);
             ui.library().set_search("test album".into());
             ui.player().set_full_player(true);
             ui.lyrics().set_lyrics_open(true);
+            ui.window().set_fullscreen(true);
             ui.as_weak()
         };
         desktop.enter_phantom();
@@ -496,8 +501,14 @@ mod tests {
         let slot = desktop.window.borrow();
         let ui = &slot.as_ref().unwrap().ui;
         assert_eq!(ui.shell().get_view(), "albums");
+        assert_eq!(ui.shell().get_settings_tab(), 5);
         assert_eq!(ui.library().get_search(), "test album");
         assert!(ui.player().get_full_player());
         assert!(ui.lyrics().get_lyrics_open());
+        assert!(ui.window().is_fullscreen());
+        assert!(ui
+            .shell()
+            .invoke_keyboard(slint::platform::Key::F11.into(), false));
+        assert!(!ui.window().is_fullscreen());
     }
 }
