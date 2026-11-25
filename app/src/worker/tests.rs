@@ -190,6 +190,77 @@ fn audio_errors_report_once_per_attempt_and_reappear_after_recovery() {
     assert_eq!(reporter.collect(&snapshot), ["output:no device"]);
 }
 #[test]
+fn repeated_output_error_reanchors_navigation_to_the_playing_track() {
+    let mut playback = state::PlaybackState::default();
+    playback
+        .navigation
+        .compact_context(vec![1, 2, 3], Query::default(), 2, "current");
+    for revision in 1..=2 {
+        playback.requested = "rejected".into();
+        playback.navigation.record("rejected");
+        playback.navigation.mark_id(3, false);
+        let mut snapshot = Snapshot {
+            path: "current".into(),
+            playback_error_revision: revision,
+            playback_error: "playback:play:unsupported-source-format: 32-bit PCM".into(),
+            ..Default::default()
+        };
+        snapshot.output.error = "unsupported-source-format: 32-bit PCM".into();
+        assert_eq!(
+            playback
+                .collect_errors(&snapshot, |path| (path == "current").then_some(2))
+                .len(),
+            if revision == 1 { 2 } else { 1 },
+        );
+        assert!(playback.requested.is_empty());
+        assert_eq!(playback.navigation.order_cursor, Some(1));
+        assert_eq!(playback.navigation.cursor, Some(0));
+    }
+}
+
+#[test]
+fn latest_sorted_catalog_expands_filtered_playback_after_a_superseded_clear() {
+    let directory = std::env::temp_dir().join(format!(
+        "orca-search-clear-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let backend = new_backend(&directory.to_string_lossy(), false).unwrap();
+    let mut playback = state::PlaybackState::default();
+    let filtered = Query {
+        search: "mind".into(),
+        ..Default::default()
+    };
+    playback
+        .navigation
+        .compact_context(vec![1], filtered.clone(), 1, "current");
+    let mut catalog = state::CatalogState {
+        query: Query::default(),
+        generation: 2,
+        ids: vec![1, 2],
+        ..Default::default()
+    };
+    assert!(!playback
+        .expand_cleared_search(&backend, false, &catalog, 3)
+        .unwrap());
+    assert_eq!(playback.navigation.context_query, Some(filtered));
+
+    catalog.generation = 3;
+    catalog.query.sort = "title".into();
+    catalog.ids = vec![2, 1];
+    assert!(playback
+        .expand_cleared_search(&backend, false, &catalog, 3)
+        .unwrap());
+    assert_eq!(playback.navigation.context_query, Some(catalog.query));
+    assert_eq!(playback.navigation.order_ids.as_ref(), &[2, 1]);
+    assert_eq!(playback.navigation.order_cursor, Some(1));
+}
+
+#[test]
 fn rejected_play_preserves_context_history_and_pending_target() {
     let mut navigation = Navigation::default();
     navigation.context(vec!["a".into(), "b".into()], "a");

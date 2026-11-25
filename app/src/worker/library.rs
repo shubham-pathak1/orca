@@ -172,26 +172,16 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
             let result: Result<(), String> = (|| {
                 match request {
                     Request::Browse(at, new_query, kind) => {
-                        let cleared_search = !catalog.query.search.is_empty()
-                            && new_query.search.is_empty()
-                            && catalog.kind == kind
-                            && catalog.query.kind == new_query.kind
-                            && catalog.query.key == new_query.key
-                            && catalog.query.secondary == new_query.secondary;
                         if let Err(error) =
                             catalog.browse(&backend, &events, at, new_query, kind, &query_revision)
                         {
                             let _ = events.send(Event::CatalogError(at, error));
-                        } else if cleared_search
-                            && catalog.generation == at
-                            && at == query_revision.load(Ordering::Relaxed)
-                            && (catalog.kind == "songs" || !catalog.query.kind.is_empty())
-                        {
+                        } else if catalog.generation == at {
                             refresh_queue = playback.expand_cleared_search(
                                 &backend,
                                 audio,
-                                &catalog.query,
-                                &catalog.ids,
+                                &catalog,
+                                query_revision.load(Ordering::Relaxed),
                             )?;
                         }
                     }
@@ -541,30 +531,12 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
                 break;
             }
             if refresh_queue && window_open {
-                let tracks = playback
-                    .navigation
-                    .upcoming_limited(
-                        &playback.path,
-                        20,
-                        |id| backend.path_for_id(id).ok().flatten(),
-                        |path| backend.id_for_path(path).ok().flatten(),
-                    )
-                    .into_iter()
-                    .filter_map(|p| backend.track(&p).ok())
-                    .collect();
-                let _ = events.send(Event::Queue(tracks));
                 let current = if playback.requested.is_empty() {
                     &playback.path
                 } else {
                     &playback.requested
                 };
-                let neighbors = playback
-                    .navigation
-                    .neighbors_compact(current, |id| backend.path_for_id(id).ok().flatten())
-                    .into_iter()
-                    .filter_map(|p| backend.track(&p).ok())
-                    .collect();
-                let _ = events.send(Event::Neighbors(current.clone(), neighbors));
+                playback.publish_queue(&backend, &events, current);
             }
         }
         if let Some(watcher) = watcher.as_mut() {
@@ -691,14 +663,18 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
                         playback.stopping_removed.clear();
                     }
                 }
-                for error in playback.errors.collect(&snapshot) {
-                    if error.starts_with("playback:play:")
-                        || error.starts_with("playback:restore:")
-                        || error.starts_with("output:")
-                    {
-                        playback.requested.clear();
-                    }
+                let had_pending_track = !playback.requested.is_empty();
+                for error in playback
+                    .collect_errors(&snapshot, |path| backend.id_for_path(path).ok().flatten())
+                {
                     let _ = events.send(Event::Error(error));
+                }
+                if had_pending_track
+                    && playback.requested.is_empty()
+                    && window_open
+                    && snapshot.path == playback.path
+                {
+                    playback.publish_queue(&backend, &events, &playback.path);
                 }
                 if snapshot.path == playback.requested {
                     playback.requested.clear();
@@ -730,27 +706,7 @@ pub(super) fn run_library_loop(worker: LibraryWorker) {
                             if audio {
                                 lyrics_jobs.submit((at, playback.path.clone(), false));
                             }
-                            let tracks = playback
-                                .navigation
-                                .upcoming_limited(
-                                    &playback.path,
-                                    20,
-                                    |id| backend.path_for_id(id).ok().flatten(),
-                                    |path| backend.id_for_path(path).ok().flatten(),
-                                )
-                                .into_iter()
-                                .filter_map(|p| backend.track(&p).ok())
-                                .collect();
-                            let _ = events.send(Event::Queue(tracks));
-                            let neighbors = playback
-                                .navigation
-                                .neighbors_compact(&playback.path, |id| {
-                                    backend.path_for_id(id).ok().flatten()
-                                })
-                                .into_iter()
-                                .filter_map(|p| backend.track(&p).ok())
-                                .collect();
-                            let _ = events.send(Event::Neighbors(playback.path.clone(), neighbors));
+                            playback.publish_queue(&backend, &events, &playback.path);
                         }
                     } else {
                         revision.fetch_add(1, Ordering::Relaxed);

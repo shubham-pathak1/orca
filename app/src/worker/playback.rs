@@ -1,21 +1,70 @@
 //! Playback mutation policy lives with navigation and pending gapless plans.
-use super::state::PlaybackState;
+use super::state::{CatalogState, PlaybackState};
 use crate::{
     playback_flow::{cancel_preload, submit_play},
     protocol::{CollectionAction, Event, PlayerAction, QueueAction},
 };
-use orca_services::types::{PlaybackCommand, Query};
+use orca_services::types::{PlaybackCommand, Query, Snapshot};
 use orca_services::Backend;
 use std::sync::mpsc::Sender;
 impl PlaybackState {
+    pub(super) fn publish_queue(&self, backend: &Backend, events: &Sender<Event>, current: &str) {
+        let tracks = self
+            .navigation
+            .upcoming_limited(
+                &self.path,
+                20,
+                |id| backend.path_for_id(id).ok().flatten(),
+                |path| backend.id_for_path(path).ok().flatten(),
+            )
+            .into_iter()
+            .filter_map(|path| backend.track(&path).ok())
+            .collect();
+        let _ = events.send(Event::Queue(tracks));
+        let neighbors = self
+            .navigation
+            .neighbors_compact(current, |id| backend.path_for_id(id).ok().flatten())
+            .into_iter()
+            .filter_map(|path| backend.track(&path).ok())
+            .collect();
+        let _ = events.send(Event::Neighbors(current.into(), neighbors));
+    }
+
+    pub(super) fn collect_errors(
+        &mut self,
+        snapshot: &Snapshot,
+        id_for_path: impl FnOnce(&str) -> Option<i64>,
+    ) -> Vec<String> {
+        let errors = self.errors.collect(snapshot);
+        if !self.requested.is_empty()
+            && snapshot.path != self.requested
+            && errors.iter().any(|error| {
+                error.starts_with("playback:play:")
+                    || error.starts_with("playback:restore:")
+                    || error.starts_with("output:")
+            })
+        {
+            self.requested.clear();
+            if !snapshot.path.is_empty() {
+                self.navigation
+                    .reanchor(&snapshot.path, id_for_path(&snapshot.path));
+            }
+        }
+        errors
+    }
+
     pub(super) fn expand_cleared_search(
         &mut self,
         backend: &Backend,
         audio: bool,
-        query: &Query,
-        ids: &[i64],
+        catalog: &CatalogState,
+        latest_generation: u64,
     ) -> Result<bool, String> {
-        if ids.is_empty() || !self.navigation.can_expand_search(query) {
+        if catalog.generation != latest_generation
+            || catalog.ids.is_empty()
+            || (catalog.kind != "songs" && catalog.query.kind.is_empty())
+            || !self.navigation.can_expand_search(&catalog.query)
+        {
             return Ok(false);
         }
         let current = if self.requested.is_empty() {
@@ -32,7 +81,7 @@ impl PlaybackState {
             }
         })?;
         self.navigation
-            .expand_search(query.clone(), ids.to_vec(), current_id);
+            .expand_search(catalog.query.clone(), catalog.ids.clone(), current_id);
         Ok(true)
     }
 

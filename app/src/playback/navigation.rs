@@ -356,6 +356,14 @@ impl Navigation {
         self.context_query = Some(query);
     }
 
+    pub fn reanchor(&mut self, current: &str, current_id: Option<i64>) {
+        self.cursor = self.history.iter().rposition(|path| path == current);
+        if let Some(index) = current_id.and_then(|id| self.order_ids.iter().position(|v| *v == id))
+        {
+            self.order_cursor = Some(index);
+        }
+    }
+
     fn replace_compact_order(&mut self, ids: Vec<i64>, current_id: Option<i64>) {
         let previous_id = self
             .order_cursor

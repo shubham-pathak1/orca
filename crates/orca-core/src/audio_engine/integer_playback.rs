@@ -170,6 +170,11 @@ pub(super) fn run<F: Fn(&str, u64)>(
             }
         });
         if let Some(command) = command {
+            let error_action = match &command {
+                AudioCommand::Play(_) | AudioCommand::PlayCrossfade(..) => "play",
+                AudioCommand::LoadPaused(..) => "restore",
+                _ => "unprocessed",
+            };
             let result = match command {
                 AudioCommand::Shutdown => return None,
                 AudioCommand::SetOutput(config) if !config.unprocessed => {
@@ -282,7 +287,7 @@ pub(super) fn run<F: Fn(&str, u64)>(
             };
             if let Err(error) = result {
                 state.lock().unwrap().output.error = error.clone();
-                report_playback_error(state, "unprocessed", &error, !player.playing);
+                report_playback_error(state, error_action, &error, !player.playing);
             }
         }
         if let Some(events) = &player.events {
@@ -362,5 +367,34 @@ pub(super) fn run<F: Fn(&str, u64)>(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repeated_integer_source_failures_report_each_play_attempt() {
+        let (tx, rx) = mpsc::channel();
+        for _ in 0..2 {
+            tx.send(AudioCommand::Play(String::new())).unwrap();
+        }
+        tx.send(AudioCommand::Shutdown).unwrap();
+        let state = Arc::new(Mutex::new(PlaybackState::default()));
+        run::<fn(&str, u64)>(
+            &rx,
+            &state,
+            None,
+            OutputConfig::default(),
+            None,
+            &Arc::new(AtomicBool::new(false)),
+            &mut false,
+            &mut [0.0; 5],
+            &mut 1.0,
+        );
+        let state = state.lock().unwrap();
+        assert_eq!(state.error_revision, 2);
+        assert!(state.error.starts_with("playback:play:"));
     }
 }
